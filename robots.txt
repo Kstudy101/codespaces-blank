@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+
+# AdSense のクローラー
+User-agent: Mediapartners-Google
+Allow: /

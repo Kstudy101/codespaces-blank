@@ -1,0 +1,146 @@
+/* 名前で学ぶ韓国語 — 文書ページ（プライバシーポリシー / お問い合わせ）共通スタイル
+   index.html はシングルファイルのまま保つため、このCSSは文書ページ2枚だけが読み込む。
+   カラートークンは index.html と揃えてある。 */
+
+:root{
+  --bg:#fdf8f6; --surface:#ffffff; --surface-2:#fbf1ec;
+  --text:#2b2124; --text-dim:#6f6165; --line:#efe0d9;
+  --accent:#e0526b; --accent-soft:#fdeef1;
+  --blue:#3f7f96; --blue-soft:#eaf3f6;
+  --shadow:0 1px 2px rgba(43,33,36,.04), 0 8px 24px -12px rgba(43,33,36,.12);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#171316; --surface:#211b1f; --surface-2:#2a2227;
+    --text:#f2e9ec; --text-dim:#a9999f; --line:#3a2f35;
+    --accent:#ff7c90; --accent-soft:#3a222a;
+    --blue:#7fbdd1; --blue-soft:#1e2c33;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#171316; --surface:#211b1f; --surface-2:#2a2227;
+  --text:#f2e9ec; --text-dim:#a9999f; --line:#3a2f35;
+  --accent:#ff7c90; --accent-soft:#3a222a;
+  --blue:#7fbdd1; --blue-soft:#1e2c33;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.6);
+}
+:root[data-theme="light"]{
+  --bg:#fdf8f6; --surface:#ffffff; --surface-2:#fbf1ec;
+  --text:#2b2124; --text-dim:#6f6165; --line:#efe0d9;
+  --accent:#e0526b; --accent-soft:#fdeef1;
+  --blue:#3f7f96; --blue-soft:#eaf3f6;
+  --shadow:0 1px 2px rgba(43,33,36,.04), 0 8px 24px -12px rgba(43,33,36,.12);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP","Yu Gothic",Meiryo,
+    "Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  line-height:1.85; -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:720px; margin:0 auto; padding:0 20px 80px}
+
+/* ---- ヘッダー ---- */
+.site-head{
+  border-bottom:1px solid var(--line); margin-bottom:40px;
+  padding:20px 0; text-align:center;
+}
+.site-head a{
+  color:var(--accent); text-decoration:none; font-weight:700; font-size:.92rem;
+}
+.site-head a:hover{text-decoration:underline}
+
+.page-title{
+  font-size:clamp(1.5rem,5vw,2rem); margin:0 0 8px; letter-spacing:-.01em;
+  text-wrap:balance;
+}
+.updated{color:var(--text-dim); font-size:.82rem; margin:0 0 36px}
+
+/* ---- 本文 ---- */
+h2{
+  font-size:1.08rem; margin:38px 0 12px; padding-top:20px;
+  border-top:1px solid var(--line); letter-spacing:-.01em; text-wrap:balance;
+}
+h2:first-of-type{border-top:0; padding-top:0; margin-top:0}
+h3{font-size:.95rem; margin:22px 0 8px; color:var(--accent)}
+p{margin:0 0 14px; font-size:.93rem}
+ul,ol{margin:0 0 14px; padding-left:1.4em; font-size:.93rem}
+li{margin-bottom:6px}
+a{color:var(--accent)}
+a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{
+  outline:2px solid var(--accent); outline-offset:2px;
+}
+.lead{
+  background:var(--surface-2); border-radius:12px; padding:18px 20px;
+  font-size:.9rem; margin:0 0 32px;
+}
+.note{
+  background:var(--blue-soft); border-left:3px solid var(--blue);
+  padding:14px 18px; border-radius:8px; font-size:.87rem; margin:0 0 20px;
+}
+dl{margin:0 0 14px; font-size:.93rem}
+dt{font-weight:700; margin-top:14px}
+dd{margin:2px 0 0 1.2em; color:var(--text-dim)}
+.tbl{width:100%; overflow-x:auto; margin:0 0 18px}
+table{border-collapse:collapse; width:100%; font-size:.88rem; min-width:420px}
+th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top}
+th{background:var(--surface-2); font-weight:700; white-space:nowrap}
+
+/* ---- フォーム ---- */
+.form-card{
+  background:var(--surface); border:1px solid var(--line); border-radius:16px;
+  padding:24px; box-shadow:var(--shadow); margin-bottom:24px;
+}
+.field{margin-bottom:18px}
+label{display:block; font-size:.82rem; font-weight:700; margin-bottom:6px; color:var(--text-dim)}
+label .req{color:var(--accent); font-weight:400}
+input[type=text],input[type=email],textarea{
+  width:100%; padding:12px 14px; font-size:1rem; font-family:inherit;
+  color:var(--text); background:var(--bg); line-height:1.6;
+  border:1.5px solid var(--line); border-radius:10px; transition:border-color .15s;
+}
+input:focus,textarea:focus{outline:none; border-color:var(--accent)}
+textarea{min-height:170px; resize:vertical}
+.hp{position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden}
+button[type=submit]{
+  width:100%; padding:15px; font-size:1.02rem; font-weight:700; font-family:inherit;
+  color:#fff; background:var(--accent); border:0; border-radius:10px; cursor:pointer;
+  transition:opacity .15s;
+}
+button[type=submit]:hover{opacity:.88}
+button[type=submit]:disabled{opacity:.5; cursor:not-allowed}
+.formmsg{
+  border-radius:10px; padding:16px 18px; font-size:.9rem; margin:0 0 20px; display:none;
+}
+.formmsg.on{display:block}
+.formmsg.ok{background:var(--accent-soft); color:var(--text); border:1px solid var(--accent)}
+.formmsg.ng{background:var(--surface-2); color:var(--text); border:1px solid var(--line)}
+.formnote{font-size:.78rem; color:var(--text-dim); margin:16px 0 0;
+  padding-top:14px; border-top:1px dashed var(--line)}
+
+/* ---- 下部ボタン ---- */
+.pagenav{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-top:40px}
+.pagenav a{
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  padding:14px 16px; font-size:.92rem; font-weight:700; text-decoration:none;
+  color:var(--text); background:var(--surface);
+  border:1.5px solid var(--line); border-radius:11px; transition:border-color .15s, background .15s;
+}
+.pagenav a:hover{border-color:var(--accent); background:var(--surface-2)}
+.pagenav a.primary{border-color:var(--accent); color:var(--accent)}
+
+footer{
+  text-align:center; padding:32px 20px 0; color:var(--text-dim); font-size:.8rem;
+  border-top:1px solid var(--line); margin-top:48px;
+}
+footer a{color:var(--accent); text-decoration:none; font-weight:700}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition:none !important}
+}
+@media (max-width:480px){
+  .form-card{padding:20px 18px}
+  table{min-width:340px}
+}

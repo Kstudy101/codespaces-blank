@@ -64,6 +64,23 @@ h1{
 }
 h1 .ko{color:var(--accent)}
 .lede{color:var(--text-dim); font-size:.97rem; margin:0}
+.lede-sub{font-size:.9rem; margin:12px 0 0}
+.lede-sub b{color:var(--accent)}
+
+/* ---------- 名前は何でもOK ---------- */
+.okbox{
+  background:var(--surface-2); border:1px dashed var(--line);
+  border-radius:12px; padding:16px 18px; margin:0 0 22px;
+}
+.okbox-ttl{font-size:.86rem; font-weight:700; margin-bottom:10px}
+.oklist{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:9px}
+.oklist li{font-size:.84rem; display:flex; flex-direction:column}
+.oklist b{color:var(--accent); font-size:.9rem}
+.oklist span{color:var(--text-dim)}
+.okfoot{
+  font-size:.8rem; color:var(--text-dim); margin:12px 0 0;
+  padding-top:10px; border-top:1px dashed var(--line);
+}
 
 /* ---------- card ---------- */
 .card{
@@ -232,6 +249,60 @@ h2{font-size:1.18rem; margin:0 0 18px; letter-spacing:-.01em}
   padding:14px; background:var(--surface-2); border-radius:10px;
 }
 
+/* ---------- share ---------- */
+.cardwrap{
+  border-radius:12px; overflow:hidden; background:var(--surface-2);
+  border:1px solid var(--line); margin-bottom:18px;
+}
+.cardwrap canvas{display:block; width:100%; height:auto}
+.nocanvas{font-size:.84rem; color:var(--text-dim); padding:18px; margin:0; text-align:center}
+.sns{display:grid; grid-template-columns:repeat(2,1fr); gap:10px}
+.sns-btn{
+  width:100%; display:flex; align-items:center; gap:10px; text-align:left;
+  padding:13px 14px; font-size:.92rem; font-weight:700; font-family:inherit;
+  color:var(--text); background:var(--surface); cursor:pointer;
+  border:1.5px solid var(--line); border-radius:11px;
+  transition:border-color .15s, background .15s, transform .1s;
+}
+.sns-btn small{
+  display:block; font-size:.7rem; font-weight:400; color:var(--text-dim);
+  letter-spacing:0; margin-top:1px;
+}
+.sns-btn .ic{
+  flex:none; width:30px; height:30px; border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:1rem; font-weight:700; color:#fff; background:var(--text-dim);
+}
+.sns-btn:hover{opacity:1; border-color:currentColor; background:var(--surface-2)}
+.sns-btn:active{transform:scale(.985)}
+.sns-btn:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.sns-btn.native{grid-column:1/-1; border-color:var(--accent); color:var(--accent)}
+.sns-btn.native .ic{background:var(--accent)}
+.sns-btn.x  .ic{background:#000}
+.sns-btn.th .ic{background:#000}
+.sns-btn.ln .ic{background:#06c755}
+.sns-btn.ig .ic{background:linear-gradient(135deg,#f9ce34,#ee2a7b 55%,#6228d7)}
+.sns-btn.dl .ic{background:var(--blue)}
+.sns-btn.cp .ic{background:var(--gold)}
+.sns-btn.cp{grid-column:1/-1}
+.ignote{
+  font-size:.78rem; color:var(--text-dim); margin:16px 0 0;
+  padding-top:14px; border-top:1px dashed var(--line);
+}
+.toast{
+  position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(8px);
+  background:var(--text); color:var(--bg); font-size:.88rem; font-weight:700;
+  padding:13px 22px; border-radius:999px; box-shadow:var(--shadow);
+  opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; z-index:50;
+  max-width:calc(100vw - 40px); text-align:center;
+}
+.toast.on{opacity:1; transform:translateX(-50%) translateY(0)}
+@media (prefers-reduced-motion:reduce){
+  .toast{transition:none}
+  .sns-btn{transition:none}
+  .sns-btn:active{transform:none}
+}
+
 footer{
   text-align:center; padding:32px 20px; color:var(--text-dim); font-size:.8rem;
   border-top:1px solid var(--line);
@@ -255,6 +326,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
   <div class="badge">🇰🇷 名前で学ぶ韓国語</div>
   <h1>あなたの名前が、<br>最初の<span class="ko">韓国語</span>教材です</h1>
   <p class="lede">お名前を入力するだけ。ハングルの読み方から、<br>名前の漢字で学ぶ韓国語まで。</p>
+  <p class="lede-sub"><b>本名でも、ニックネームでもOK。</b>好きな名前でどうぞ。</p>
 </header>
 
 <!-- ============ STAGE 1 : INPUT ============ -->
@@ -264,6 +336,16 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     名前の「音」と「漢字」、それぞれから韓国語を学べます。音からはハングルの読み方、
     漢字からは韓国語の単語と意味を知ることができます。
   </p>
+
+  <div class="okbox">
+    <div class="okbox-ttl">どんな名前でも診断できます</div>
+    <ul class="oklist">
+      <li><b>本名</b><span>漢字も入れると、漢字から韓国語の単語まで学べます（おすすめ）</span></li>
+      <li><b>ニックネーム・あだ名</b><span>「みう」「ゆき」など、ふりがなだけでOK</span></li>
+      <li><b>ハンドルネーム・推しの名前</b><span>カタカナでもそのまま診断できます</span></li>
+    </ul>
+    <p class="okfoot">本名を入れたくない方は、ニックネームだけでも全部の STEP を試せます。</p>
+  </div>
 
   <div class="row">
     <div>
@@ -287,7 +369,8 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     </div>
   </div>
   <p class="hint">
-    ひらがな・カタカナで入力してください。ニックネームでもOKです（名だけでも診断できます）。
+    ひらがな・カタカナで入力してください。<b>「名」だけでも診断できます</b>——
+    ニックネームで試すときは「名（ふりがな）」に入れてください。
   </p>
 
   <p class="err" id="err"></p>
@@ -417,6 +500,55 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     </div>
   </div>
 
+  <!-- SHARE -->
+  <div class="card">
+    <div class="step-no">🌸 シェア</div>
+    <h2>友だちの名前は、韓国語でどう読む？</h2>
+    <p class="hint" style="margin:-8px 0 18px">
+      下のカードを保存して、そのままシェアできます。
+      家族や友だちの名前で試してもらうと盛り上がります。
+    </p>
+
+    <div class="cardwrap">
+      <canvas id="shot" width="1080" height="1350" role="img"
+              aria-label="シェア用の結果カード"></canvas>
+      <p class="nocanvas" id="nocanvas" hidden>
+        この環境では画像を作成できませんでした。テキストでのシェアはご利用いただけます。
+      </p>
+    </div>
+
+    <div class="sns" id="sns">
+      <button class="sns-btn native" id="sh-native" hidden>
+        <span class="ic">↗</span>シェア<small>アプリを選ぶ</small>
+      </button>
+      <button class="sns-btn x" id="sh-x">
+        <span class="ic">𝕏</span>X<small>ポスト</small>
+      </button>
+      <button class="sns-btn th" id="sh-th">
+        <span class="ic">@</span>Threads<small>投稿</small>
+      </button>
+      <button class="sns-btn ln" id="sh-ln">
+        <span class="ic">◗</span>LINE<small>送る</small>
+      </button>
+      <button class="sns-btn ig" id="sh-ig">
+        <span class="ic">◻</span>Instagram<small>画像＋文をコピー</small>
+      </button>
+      <button class="sns-btn dl" id="sh-dl">
+        <span class="ic">↓</span>画像を保存<small>PNG</small>
+      </button>
+      <button class="sns-btn cp" id="sh-cp">
+        <span class="ic">⧉</span>テキストをコピー<small>貼り付け用</small>
+      </button>
+    </div>
+
+    <p class="ignote">
+      <b>Instagram について</b> — Instagram は外部サイトから投稿文を渡すことができません。
+      ボタンを押すと<b>画像の保存</b>と<b>文章のコピー</b>を行うので、
+      あとは Instagram アプリで貼り付けてください。
+      スマートフォンの場合は「シェア」ボタンからアプリを直接選べます。
+    </p>
+  </div>
+
   <p class="tagline">私の名前から始める韓国語。</p>
 
   <div style="margin-bottom:20px">
@@ -432,6 +564,8 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 </footer>
 
 </div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 "use strict";
@@ -904,11 +1038,15 @@ function run(){
 
   const kanjiChars = (seiK + meiK).split('').filter(c => /[一-鿿㐀-䶿]/.test(c));
   const known = kanjiChars.filter(c => HANJA[c]);
+  let hanjaEum = '';
   if (known.length){
     const seiE = seiK.split('').map(c => HANJA[c] ? HANJA[c].k : '?').join('');
     const meiE = meiK.split('').map(c => HANJA[c] ? HANJA[c].k : '?').join('');
-    $('d-hanjaeum').textContent = [seiE, meiE].filter(Boolean).join(' ');
+    const eum  = [seiE, meiE].filter(Boolean).join(' ');
+    $('d-hanjaeum').textContent = eum;
     $('d-hanja-row').style.display = '';
+    /* 未登録漢字が混ざると「?」が出るので、その場合はシェア画像には載せない */
+    if (!eum.includes('?')) hanjaEum = eum;
   } else {
     $('d-hanja-row').style.display = 'none';
   }
@@ -996,7 +1134,10 @@ function run(){
        「${esc(seiStr)}${esc(meiStr)} 씨」（フルネーム + 씨）が自然です。`
     : `<b>ポイント</b> — 「씨」は名前またはフルネームにつけます。日本語の「さん」とほぼ同じ感覚で使えます。`;
 
-  state = {seiK, meiK, seiF, meiF, seiStr, meiStr, fullH, given, allSyl, known};
+  state = {seiK, meiK, seiF, meiF, seiStr, meiStr, fullH, given, allSyl, known,
+           hanjaEum, zodiac:null, ohaengKo:null};
+
+  buildCard();
 
   $('result').classList.add('on');
   $('stage2').classList.remove('on');
@@ -1109,16 +1250,332 @@ function run2(){
       次は「誕生日」「好きな食べ物」「趣味」——<b>あなた自身</b>を材料に、韓国語を増やしていきましょう。
     </div>`;
 
+  state.zodiac   = z.ko;
+  state.ohaengKo = o.ko;
+  buildCard();
+
   $('gate').style.display = 'none';
   $('stage2').classList.add('on');
   $('stage2').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 /* ==================================================================
-   7. イベント
+   7. シェア（カード画像 + SNS）
+   ================================================================== */
+/* GitHub Pages 等に置いたときは実際のURLを使う。ローカル(file://)では既定値。 */
+const SITE_URL = 'https://kstudy101.github.io/kstudy_1/';
+function shareUrl(){
+  return /^https?:$/.test(location.protocol)
+    ? location.origin + location.pathname
+    : SITE_URL;
+}
+
+/* シェア画像はテーマに依存させない（誰が見ても同じ絵になるよう固定色） */
+const CARD = {
+  bg:'#fdf8f6', panel:'#ffffff', line:'#efe0d9',
+  text:'#2b2124', dim:'#8b7b80', accent:'#e0526b', gold:'#b3862f', blue:'#3f7f96'
+};
+const CF = '"Hiragino Sans","Noto Sans JP","Yu Gothic",Meiryo,' +
+           '"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif';
+
+function setFont(g, weight, px){ g.font = `${weight} ${px}px ${CF}`; }
+/* 収まるまで縮める */
+function fitFont(g, text, maxW, startPx, weight){
+  let px = startPx;
+  setFont(g, weight, px);
+  while (g.measureText(text).width > maxW && px > 20){
+    px -= 4; setFont(g, weight, px);
+  }
+  return px;
+}
+function roundRect(g, x, y, w, h, r){
+  if (g.roundRect){ g.beginPath(); g.roundRect(x, y, w, h, r); return; }
+  g.beginPath();
+  g.moveTo(x+r, y);            g.lineTo(x+w-r, y);
+  g.quadraticCurveTo(x+w, y, x+w, y+r);       g.lineTo(x+w, y+h-r);
+  g.quadraticCurveTo(x+w, y+h, x+w-r, y+h);   g.lineTo(x+r, y+h);
+  g.quadraticCurveTo(x, y+h, x, y+h-r);       g.lineTo(x, y+r);
+  g.quadraticCurveTo(x, y, x+r, y);
+}
+
+let cardReady = false;
+
+function buildCard(){
+  const cv = $('shot');
+  if (!cv || !state) return;
+  let g;
+  try { g = cv.getContext('2d'); } catch(e){ g = null; }
+  if (!g){
+    cardReady = false;
+    $('nocanvas').hidden = false;
+    cv.style.display = 'none';
+    return;
+  }
+
+  const W = cv.width, H = cv.height, PAD = 84;
+  const CX = W / 2, INNER = W - PAD*2;
+  const TOP = 174, BOT = H - 152;   /* 上下の区切り線 */
+
+  g.fillStyle = CARD.bg; g.fillRect(0, 0, W, H);
+  /* 上部のアクセント帯 */
+  g.fillStyle = CARD.accent; g.fillRect(0, 0, W, 14);
+  g.textAlign = 'center';
+
+  /* eyebrow と区切り線 */
+  g.textBaseline = 'top';
+  setFont(g, 700, 34); g.fillStyle = CARD.accent;
+  g.fillText('名前で学ぶ韓国語', CX, 100);
+  g.strokeStyle = CARD.line; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(PAD, TOP); g.lineTo(W-PAD, TOP); g.stroke();
+  g.beginPath(); g.moveTo(PAD, BOT); g.lineTo(W-PAD, BOT); g.stroke();
+
+  /* ---- 内容を先に決める ---- */
+  const kanjiLine = [state.seiK, state.meiK].filter(Boolean).join(' ');
+  const kanaLine  = [state.seiF, state.meiF].filter(Boolean).join(' ');
+  const metaText  = kanjiLine ? `${kanjiLine}（${kanaLine}）` : kanaLine;
+
+  /* 字母ボックスは 8 個まで。超えたら最後を「…」にして、隠さず示す */
+  const MAXB = 8;
+  const over = state.allSyl.length > MAXB;
+  const items = (over ? state.allSyl.slice(0, MAXB-1) : state.allSyl).map(s => ({syl:s}));
+  if (over) items.push({ell:true});
+
+  const hasHanja = !!state.hanjaEum, hasPills = !!state.zodiac;
+
+  /* ---- ブロックの高さを積んで、上下中央に置く ---- */
+  const H_META=44,  G1=20,  H_LABEL=38, G2=28,  H_NAME=156, G3=22;
+  const H_HANJA = hasHanja ? 38 : 0, G4 = hasHanja ? 38 : 12;
+  const H_JAMO=176, G5=56,  H_PHRASE=168;
+  const G6 = hasPills ? 52 : 0, H_PILLS = hasPills ? 62 : 0;
+  const total = H_META+G1+H_LABEL+G2+H_NAME+G3+H_HANJA+G4
+              + H_JAMO+G5+H_PHRASE+G6+H_PILLS;
+  let y = TOP + Math.max(28, (BOT - TOP - total) / 2);
+
+  /* 漢字（かな） */
+  g.textBaseline = 'top';
+  fitFont(g, metaText, INNER, 36, 400); g.fillStyle = CARD.dim;
+  g.fillText(metaText, CX, y);
+  y += H_META + G1;
+
+  /* 韓国語では */
+  setFont(g, 400, 32); g.fillStyle = CARD.dim;
+  g.fillText('韓国語では', CX, y);
+  y += H_LABEL + G2;
+
+  /* ハングル名（主役） */
+  fitFont(g, state.fullH, INNER, 140, 700);
+  g.fillStyle = CARD.accent;
+  g.textBaseline = 'middle';
+  g.fillText(state.fullH, CX, y + H_NAME/2);
+  y += H_NAME + G3;
+
+  /* 韓国漢字音 */
+  if (hasHanja){
+    g.textBaseline = 'top';
+    const t = `漢字をそのまま韓国語で読むと  ${state.hanjaEum}`;
+    fitFont(g, t, INNER, 31, 400); g.fillStyle = CARD.dim;
+    g.fillText(t, CX, y);
+    y += H_HANJA;
+  }
+  y += G4;
+
+  /* 字母の組み立て（この企画のいちばんの見せ場） */
+  g.textBaseline = 'middle';
+  const gap = 16;
+  const bw = Math.min(150, Math.floor((INNER - (items.length-1)*gap) / items.length));
+  const rowW = items.length*bw + (items.length-1)*gap;
+  let bx = CX - rowW/2;
+  items.forEach(it => {
+    roundRect(g, bx, y, bw, H_JAMO, 20);
+    g.fillStyle = CARD.panel; g.fill();
+    g.strokeStyle = CARD.line; g.lineWidth = 2; g.stroke();
+
+    if (it.ell){
+      setFont(g, 700, 54); g.fillStyle = CARD.dim;
+      g.fillText('…', bx + bw/2, y + H_JAMO/2);
+    } else {
+      const d = decomp(it.syl);
+      fitFont(g, it.syl, bw - 20, 62, 700); g.fillStyle = CARD.accent;
+      g.fillText(it.syl, bx + bw/2, y + 56);
+      setFont(g, 400, 22); g.fillStyle = CARD.dim;
+      g.fillText('▼', bx + bw/2, y + 100);
+      const parts = [d.cho, d.jung].concat(d.jong ? [d.jong] : []).join('+');
+      fitFont(g, parts, bw - 16, 34, 700); g.fillStyle = CARD.text;
+      g.fillText(parts, bx + bw/2, y + 142);
+    }
+    bx += bw + gap;
+  });
+  y += H_JAMO + G5;
+
+  /* 覚えたフレーズ */
+  roundRect(g, PAD, y, INNER, H_PHRASE, 22);
+  g.fillStyle = '#fdeef1'; g.fill();
+  const phrase = `저는 ${state.given}입니다.`;
+  fitFont(g, phrase, INNER - 60, 60, 700); g.fillStyle = CARD.accent;
+  g.fillText(phrase, CX, y + 66);
+  const trans = `わたしは${state.meiF || state.seiF}です。`;
+  fitFont(g, trans, INNER - 60, 30, 400); g.fillStyle = CARD.dim;
+  g.fillText(trans, CX, y + 124);
+  y += H_PHRASE + G6;
+
+  /* 干支・五行（STEP 6 まで進んだ場合のみ） */
+  if (hasPills){
+    const pills = [`${state.zodiac}띠`, `五行 ${state.ohaengKo}`];
+    setFont(g, 700, 32);
+    const wds = pills.map(t => g.measureText(t).width + 52);
+    let tx = CX - (wds.reduce((a,b)=>a+b,0) + 16)/2;
+    pills.forEach((t, i) => {
+      roundRect(g, tx, y, wds[i], H_PILLS, H_PILLS/2);
+      g.fillStyle = i ? '#fbf3e2' : '#eaf3f6'; g.fill();
+      setFont(g, 700, 32); g.fillStyle = i ? CARD.gold : CARD.blue;
+      g.fillText(t, tx + wds[i]/2, y + H_PILLS/2);
+      tx += wds[i] + 16;
+    });
+  }
+
+  /* フッター */
+  g.textBaseline = 'top';
+  setFont(g, 700, 32); g.fillStyle = CARD.text;
+  g.fillText('あなたの名前は、韓国語でどう読む？', CX, BOT + 40);
+  setFont(g, 400, 27); g.fillStyle = CARD.dim;
+  g.fillText('#名前で学ぶ韓国語', CX, BOT + 92);
+
+  cardReady = true;
+  $('nocanvas').hidden = true;
+  cv.style.display = '';
+}
+
+function shareText(){
+  const L = [];
+  L.push(`私の名前、韓国語では「${state.fullH}」でした🇰🇷`);
+  L.push('');
+  if (state.hanjaEum) L.push(`漢字をそのまま韓国語で読むと「${state.hanjaEum}」。`);
+  L.push(`「저는 ${state.given}입니다」— 自分の名前で韓国語を覚えました。`);
+  if (state.zodiac) L.push(`干支は ${state.zodiac}띠、五行は ${state.ohaengKo}。`);
+  L.push('');
+  L.push('あなたの名前は、韓国語でどう読む？');
+  L.push('#名前で学ぶ韓国語 #韓国語勉強');
+  return L.join('\n');
+}
+
+let toastTimer = null;
+function toast(msg){
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('on'), 2600);
+}
+
+async function copyText(s){
+  try {
+    if (navigator.clipboard && w1(navigator.clipboard.writeText)){
+      await navigator.clipboard.writeText(s); return true;
+    }
+  } catch(e){ /* 権限なし等 → 下のフォールバックへ */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = s;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch(e){ return false; }
+}
+function w1(f){ return typeof f === 'function'; }
+
+function cardBlob(){
+  return new Promise(res => {
+    const cv = $('shot');
+    if (!cardReady || !cv.toBlob) return res(null);
+    try { cv.toBlob(b => res(b), 'image/png'); } catch(e){ res(null); }
+  });
+}
+
+async function saveCard(){
+  const b = await cardBlob();
+  if (!b){ toast('この環境では画像を保存できません'); return false; }
+  const url = URL.createObjectURL(b);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `namae-kankokugo-${state.fullH.replace(/\s+/g,'')}.png`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return true;
+}
+
+function openShare(url){
+  const win = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!win) toast('ポップアップがブロックされました。設定をご確認ください');
+}
+
+/* ---- 各SNS ---- */
+function shareX(){
+  openShare('https://twitter.com/intent/tweet?text='
+    + encodeURIComponent(shareText()) + '&url=' + encodeURIComponent(shareUrl()));
+}
+function shareThreads(){
+  openShare('https://www.threads.net/intent/post?text='
+    + encodeURIComponent(shareText() + '\n' + shareUrl()));
+}
+function shareLine(){
+  openShare('https://social-plugins.line.me/lineit/share?url='
+    + encodeURIComponent(shareUrl()) + '&text=' + encodeURIComponent(shareText()));
+}
+/* Instagram は外部から投稿文を渡せる仕組みがないため、画像保存＋文コピーで代替 */
+async function shareInstagram(){
+  const saved  = await saveCard();
+  const copied = await copyText(shareText() + '\n' + shareUrl());
+  toast(saved && copied ? '画像を保存し、文章をコピーしました。Instagramで貼り付けてください'
+      : copied          ? '文章をコピーしました。Instagramで貼り付けてください'
+                        : 'コピーできませんでした');
+}
+/* スマホのネイティブ共有シート（Instagram / Threads などを直接選べる） */
+async function shareNative(){
+  const text = shareText() + '\n' + shareUrl();
+  const b = await cardBlob();
+  try {
+    if (b && navigator.canShare){
+      const file = new File([b], 'namae-kankokugo.png', {type:'image/png'});
+      if (navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], text});
+        return;
+      }
+    }
+    await navigator.share({text, url: shareUrl()});
+  } catch(e){
+    if (e && e.name === 'AbortError') return;   // ユーザーが閉じただけ
+    toast('シェアを開けませんでした');
+  }
+}
+
+/* ==================================================================
+   8. イベント
    ================================================================== */
 $('go').addEventListener('click', run);
 $('go2').addEventListener('click', run2);
+
+/* シェア */
+$('sh-x').addEventListener('click', shareX);
+$('sh-th').addEventListener('click', shareThreads);
+$('sh-ln').addEventListener('click', shareLine);
+$('sh-ig').addEventListener('click', shareInstagram);
+$('sh-dl').addEventListener('click', async () => {
+  if (await saveCard()) toast('画像を保存しました');
+});
+$('sh-cp').addEventListener('click', async () => {
+  toast(await copyText(shareText() + '\n' + shareUrl())
+    ? 'テキストをコピーしました' : 'コピーできませんでした');
+});
+/* ネイティブ共有シートが使える端末（主にスマホ）だけ表示 */
+if (typeof navigator !== 'undefined' && w1(navigator.share)){
+  const nb = $('sh-native');
+  nb.hidden = false;
+  nb.addEventListener('click', shareNative);
+}
 $('again').addEventListener('click', () => {
   ['sei-k','mei-k','sei-f','mei-f','y','m','d'].forEach(id => { $(id).value = ''; });
   $('result').classList.remove('on');

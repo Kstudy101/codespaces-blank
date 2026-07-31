@@ -309,12 +309,15 @@ jobs:
             else echo "  ✓ $p → $code"; fi
           done
 
+          # curl | grep -q は使わない。grep -q は一致した時点でパイプを閉じるため
+          # curl が SIGPIPE で 141 終了し、pipefail がそれを拾って
+          # 「一致したのに失敗」になる。本文を変数に取ってから調べる。
           echo "ads.txt の中身（200 だけ見ても中身が欠けていれば広告は止まる）"
-          if curl -s --max-time 20 "$BASE/ads.txt" | grep -q 'pub-1754834273377558'; then
-            echo "  ✓ パブリッシャーIDを確認"
-          else
-            echo "  ✗ ads.txt にパブリッシャーIDがありません"; fail=1
-          fi
+          body=$(curl -s --max-time 20 "$BASE/ads.txt" || true)
+          case "$body" in
+            *pub-1754834273377558*) echo "  ✓ パブリッシャーIDを確認" ;;
+            *) echo "  ✗ ads.txt にパブリッシャーIDがありません"; fail=1 ;;
+          esac
 
           echo "www の向き（ここがループすると全ページ落ちる）"
           apex=${SITE_HOST#www.}
@@ -335,10 +338,14 @@ jobs:
           fi
 
           echo "内容の反映"
-          if curl -s --max-time 20 "$BASE/" | grep -q "$SITE_HOST"; then
-            echo "  ✓ canonical 反映済み"
-          else
-            echo "  ✗ canonical が古いままです"; fail=1
-          fi
+          home=$(curl -s --max-time 20 "$BASE/" || true)
+          case "$home" in
+            *"rel=\"canonical\" href=\"https://$SITE_HOST/\""*)
+              echo "  ✓ canonical 反映済み" ;;
+            *)
+              echo "  ✗ canonical が想定と違います"
+              echo "$home" | grep -o '<link rel="canonical"[^>]*>' | sed 's/^/    /'
+              fail=1 ;;
+          esac
 
           exit $fail

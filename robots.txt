@@ -4,3 +4,5 @@ Allow: /
 # AdSense のクローラー
 User-agent: Mediapartners-Google
 Allow: /
+
+Sitemap: https://kstudy-1.pages.dev/sitemap.xml

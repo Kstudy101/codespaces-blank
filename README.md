@@ -16,8 +16,10 @@
 | `privacy.html` | プライバシーポリシー (AdSense 필수) |
 | `contact.html` | お問い合わせ. Formspree 연동 + FAQ |
 | `page.css` | 문서 페이지 2장이 공유하는 스타일 |
-| `ads.txt` | AdSense 판매자 선언 (배치 제약은 아래 참고) |
-| `robots.txt` | 크롤러 허용 |
+| `ads.txt` | AdSense 판매자 선언. 루트에서 서빙 확인 완료 |
+| `robots.txt` | 크롤러 허용 + sitemap 선언 |
+| `sitemap.xml` | 3페이지, 절대 URL |
+| `ogp.png` | 1200×630 OGP 이미지 (node-canvas 로 생성) |
 
 `index.html`만 자체 완결을 유지했습니다. 앱 본체는 파일 하나로 어디든 던져놓으면 동작해야
 하지만, 문서 페이지 2장은 서로 스타일이 같아야 하므로 공유 CSS가 낫다고 판단했습니다.
@@ -186,10 +188,14 @@ GDPR·CCPA 항목을 정확히 기재하는 것까지이고, 그건 `privacy.htm
 | プライバシーポリシー 페이지 | `privacy.html` — 광고·Cookie·제3자 배포·GDPR·CCPA·면책·저작권 |
 | お問い合わせ 페이지 | `contact.html` — Formspree + FAQ |
 | 사이트 내 네비게이션 | 전 페이지 하단 버튼으로 상호 연결 |
-| `ads.txt` | 생성 완료 (배치 제약은 아래) |
-| `robots.txt` | `Mediapartners-Google` 명시 허용 |
-| `<title>` / `meta description` / `canonical` | 전 페이지 |
+| `ads.txt` | 루트 서빙 확인 완료 (`/ads.txt` → 200) |
+| `robots.txt` | `Mediapartners-Google` 명시 허용 + sitemap 선언 |
+| `sitemap.xml` | 3페이지, 절대 URL, clean URL |
+| `<title>` / `meta description` | 전 페이지 |
+| `canonical` | 전 페이지, **절대 URL + clean URL** (308 회피) |
+| OGP / Twitter 카드 | 전 페이지 + `ogp.png` 1200×630 |
 | favicon | data URI (외부 요청 없음) |
+| 정적 콘텐츠 | `#about` 7섹션, JS 없이 약 4,800자 |
 | 면책 표시 | 성명학·운세가 엔터테인먼트임을 앱과 폴리시 양쪽에 명시 |
 
 ### 대시보드에서 해야 하는 일 (코드로 불가)
@@ -198,28 +204,39 @@ GDPR·CCPA 항목을 정확히 기재하는 것까지이고, 그건 `privacy.htm
 2. 사이트 등록 후 **소유권 확인**
 3. 자동 광고를 쓸지, `<ins class="adsbygoogle">`로 위치를 직접 지정할지 결정
 
-### 통과를 막을 수 있는 실제 리스크 2가지
+### 배포: Cloudflare Pages
 
-**1. `ads.txt` 를 도메인 루트에 둘 수 없음**
+<https://kstudy-1.pages.dev/> 에 배포되어 있습니다. GitHub Pages 대신 여기를 쓰면서
+얻은 것:
 
-크롤러는 `kstudy101.github.io/ads.txt` 를 봅니다. 하지만 프로젝트 페이지는
-`kstudy101.github.io/<저장소명>/ads.txt` 로 서빙되므로 **인식되지 않습니다.**
-루트는 `Kstudy101.github.io` 라는 이름의 별도 저장소가 차지합니다.
+- **`ads.txt` 가 도메인 루트에서 서빙됩니다** — GitHub Pages 프로젝트 페이지에서는
+  불가능했던 부분. `https://kstudy-1.pages.dev/ads.txt` 로 200 확인 완료
+- `sitemap.xml` 을 절대 URL로 생성 가능
+- OGP 이미지에 절대 URL 부여 가능
 
-→ **독자 도메인을 붙이는 것이 정공법입니다.** `ads.txt` 문제가 사라지고, 심사 통과율도
-올라갑니다(무료 서브도메인은 반려 사례가 많음). 도메인이 생기면 저장소 Settings → Pages →
-Custom domain 설정 후 `ads.txt` 가 루트에서 서빙됩니다.
+**주의: Cloudflare Pages 는 `.html` 을 확장자 없는 URL로 308 리다이렉트합니다.**
+`/privacy.html` → `/privacy`. 그래서 내부 링크와 canonical 을 전부 clean URL 로 바꿨습니다.
+canonical 이 리다이렉트되는 URL 을 가리키면 크롤링에 불리합니다.
 
-**2. 크롤러가 보는 콘텐츠가 얇음**
+### 크롤러가 보는 콘텐츠 (해결됨)
 
-이 앱은 결과를 **사용자 입력 후 JS로 생성**합니다. 즉 심사자·크롤러가 `index.html` 을
-그대로 받으면 입력 폼과 **빈 결과 컨테이너**만 보입니다. AdSense의 대표적 반려 사유가
-"価値の低い広告枠 / コンテンツが不十分" 이라, 이게 가장 큰 리스크입니다.
+이 앱은 결과를 **사용자 입력 후 JS로 생성**하므로, 예전에는 크롤러가 `index.html` 을
+받으면 입력 폼과 **빈 결과 컨테이너**만 봤습니다. AdSense 최다 반려 사유가
+「価値の低い広告枠 / コンテンツが存在しない」이라 가장 큰 리스크였습니다.
 
-→ 완화책: 정적 HTML에 읽을거리를 넣는 것. `contact.html` 의 FAQ가 일부 역할을 하지만
-부족합니다. **`index.html` 에 입력 전에도 보이는 해설**(한글 자모 구조, 한국 한자음이란
-무엇인가, 「씨」와 「さん」의 차이, 예시 결과 등)을 추가하는 것이 효과적입니다.
-아직 하지 않았습니다 — TODO 참고.
+`#about` 섹션에 **JS 없이도 읽히는 본문 7개**를 추가해 해결했습니다:
+
+1. 「名前で学ぶ韓国語」とは — 무엇을 하는 사이트인가
+2. 例：「田中 愛」さんの場合 — **정적 HTML 로 렌더한 샘플 결과**
+3. ハングルは「組み立て」でできている — 자모 구조
+4. 日本語の名前をハングルで書くときのルール — 변환 규칙표
+5. 「田中」が「전중」になる理由 — 한국 한자음 대응
+6. 韓国では「〜さん」をどう言う？ — 호칭 문화
+7. よくある質問
+
+JS 미실행 상태의 본문량: **약 4,800자** (이전에는 폼 문구뿐).
+2번이 특히 중요합니다 — 크롤러와 심사자에게 이 도구가 실제로 무엇을 만드는지
+보여주면서, 동시에 사용자가 입력 전에 결과를 가늠할 수 있게 합니다.
 
 ---
 
@@ -277,9 +294,8 @@ python3 -m http.server 8000
 
 ## TODO
 
-- [ ] **정적 콘텐츠 보강 (심사 최우선)** — 크롤러가 빈 결과 영역만 보는 문제.
-      `index.html` 에 입력 전에도 읽히는 해설을 추가할 것
-- [ ] **독자 도메인** — `ads.txt` 루트 배치 문제 해결 + 심사 통과율
+- [ ] **독자 도메인** — `pages.dev` 서브도메인도 심사는 가능하지만, 독자 도메인이 유리.
+      도입 시 `canonical`·`og:url`·`sitemap.xml`·`SITE_URL` 상수를 **모두** 갱신할 것
 - [ ] **광고 유닛 배치** — 지금은 로더만. 위치를 직접 정하려면 `<ins class="adsbygoogle">`.
       STEP 사이보다 결과 하단·공유 섹션 위가 학습 흐름을 덜 끊음
 - [ ] **Formspree 첫 송신 확인** — 무료 플랜은 최초 1회 송신 시 확인 메일이 오고,

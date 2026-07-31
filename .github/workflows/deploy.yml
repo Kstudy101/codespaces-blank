@@ -264,6 +264,13 @@ jobs:
             else echo "  ✓ $p → $code"; fi
           done
 
+          echo "ads.txt の中身（200 だけ見ても中身が欠けていれば広告は止まる）"
+          if curl -s --max-time 20 "$BASE/ads.txt" | grep -q 'pub-1754834273377558'; then
+            echo "  ✓ パブリッシャーIDを確認"
+          else
+            echo "  ✗ ads.txt にパブリッシャーIDがありません"; fail=1
+          fi
+
           echo "www の向き（ここがループすると全ページ落ちる）"
           apex=${SITE_HOST#www.}
           hops=$(curl -s -o /dev/null -L --max-redirs 5 -w '%{num_redirects}' \

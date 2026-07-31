@@ -6,7 +6,7 @@
 "운세"가 입구가 되고 **한국어 교육이 본 서비스**가 되는 구조입니다.
 
 진단 로직은 전부 브라우저 안에서 끝납니다. 서버·빌드·API 키가 필요 없습니다.
-(외부 요청은 Google AdSense 스크립트 하나뿐입니다 — 아래 [개인정보와 광고](#개인정보와-광고) 참고.)
+(외부 요청은 Google AdSense·애널리틱스뿐입니다 — 아래 [개인정보와 광고](#개인정보와-광고) 참고.)
 
 ## 파일 구성
 
@@ -24,6 +24,11 @@
 | `kanji.json` | 상용한자 2,136자 참조 데이터 (지연 로딩) |
 | `data/kanji_platform.db` | 원본 SQLite. 런타임에는 쓰이지 않음 |
 | `tools/build-kanji-json.py` | `.db` → `kanji.json` 재생성 |
+| `.htaccess` | **Apache 설정.** 확장자 없는 URL·리다이렉트·캐시·보안헤더 |
+| `404.html` | Cloudflare 가 대신해 주던 것. Apache 는 실제 파일이 필요 |
+| `tools/build-site.sh` | 공개 파일만 `dist/` 로 모음 |
+| `tools/set-site-url.py` | 절대 URL 일괄 교체 (도메인 이전용) |
+| `.github/workflows/deploy.yml` | push → Xserver rsync 배포 |
 
 `index.html`만 자체 완결을 유지했습니다. 앱 본체는 파일 하나로 어디든 던져놓으면 동작해야
 하지만, 문서 페이지 3장은 서로 스타일이 같아야 하므로 공유 CSS가 낫다고 판단했습니다.
@@ -277,19 +282,71 @@ GDPR·CCPA 항목을 정확히 기재하는 것까지이고, 그건 `privacy.htm
 2. 사이트 등록 후 **소유권 확인**
 3. 자동 광고를 쓸지, `<ins class="adsbygoogle">`로 위치를 직접 지정할지 결정
 
-### 배포: Cloudflare Pages
+### 배포: Xserver (kstudy101.jp)
 
-<https://kstudy-1.pages.dev/> 에 배포되어 있습니다. GitHub Pages 대신 여기를 쓰면서
-얻은 것:
+<https://kstudy101.jp/> 로 배포합니다. `main` 에 push 하면
+`.github/workflows/deploy.yml` 이 rsync 로 동기화합니다.
 
-- **`ads.txt` 가 도메인 루트에서 서빙됩니다** — GitHub Pages 프로젝트 페이지에서는
-  불가능했던 부분. `https://kstudy-1.pages.dev/ads.txt` 로 200 확인 완료
-- `sitemap.xml` 을 절대 URL로 생성 가능
-- OGP 이미지에 절대 URL 부여 가능
+**빌드 도구는 없습니다.** `package.json` 도 `dist`/`build` 도 원래 존재하지 않습니다.
+그래도 `tools/build-site.sh` 가 `dist/` 를 만드는 이유는, 저장소에는 있지만
+**공개하면 안 되는 것**을 떨어내기 위해서입니다 — `data/kanji_platform.db`(808KB,
+런타임에 불필요), `tools/`, `README.md`.
 
-**주의: Cloudflare Pages 는 `.html` 을 확장자 없는 URL로 308 리다이렉트합니다.**
-`/privacy.html` → `/privacy`. 그래서 내부 링크와 canonical 을 전부 clean URL 로 바꿨습니다.
-canonical 이 리다이렉트되는 URL 을 가리키면 크롤링에 불리합니다.
+#### Cloudflare → Apache 로 옮길 때의 진짜 위험
+
+**이 사이트는 SPA 가 아닙니다.** 독립 HTML 4장이므로 "전부 index.html 로 보내는"
+SPA 폴백을 넣으면 안 됩니다. 넣으면 없는 URL 까지 200 을 반환해 404 가 죽습니다.
+
+필요한 것은 그 반대입니다. 사이트 내부 링크 18곳이 `/privacy` 같은 **확장자 없는 URL**
+인데, Cloudflare Pages 는 이것을 자동으로 해결해 주지만 **Apache 는 아무것도 하지
+않습니다.** 그대로 옮기면 사이트 내 링크가 전부 404 가 됩니다.
+
+→ `.htaccess` 에서 내부 재작성으로 해결합니다:
+
+```apache
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME}.html -f
+RewriteRule ^(.+?)/?$ $1.html [L]
+```
+
+실제 Apache 2.4 를 띄워 검증했습니다:
+
+| 경로 | 결과 |
+|---|---|
+| `/` `/privacy` `/contact` `/tips` | 200 |
+| `/kanji.json` `/ogp.png` `/ads.txt` | 200 |
+| `/no-such-page` | **404** (SPA 폴백이 아님을 확인) |
+| `/privacy.html` | 301 → `/privacy` (중복 URL 정규화) |
+| `/data/kanji_platform.db` `/README.md` | 403 |
+
+#### 필요한 GitHub Secrets / Variables
+
+| 이름 | 종류 | 값 |
+|---|---|---|
+| `XSERVER_HOST` | secret | `svXXXX.xserver.jp` |
+| `XSERVER_USER` | secret | 서버 ID |
+| `XSERVER_SSH_KEY` | secret | 비밀키 전문 (`-----BEGIN`~`END-----`) |
+| `XSERVER_PATH` | secret | `/home/<ID>/kstudy101.jp/public_html` |
+| `XSERVER_PORT` | secret | `10022` (미설정 시 기본값) |
+| `SITE_HOST` | variable | `kstudy101.jp` |
+
+Xserver 는 SSH 가 기본 OFF 입니다. 서버패널 → SSH설정 → ON, 공개키 등록 후
+포트 **10022** 로 접속합니다.
+
+#### 도메인 교체
+
+절대 URL(canonical / og / sitemap / robots / `SITE_URL` 상수)은 한 번에 바꿉니다:
+
+```bash
+python3 tools/set-site-url.py https://kstudy101.jp
+```
+
+> **주의 — 실제로 한 번 사고를 냈습니다.** 초판은 "제외 목록에 없는 호스트를 전부
+> 치환"하는 방식이었는데, 제외 목록에 `googlesyndication.com` 만 넣고 실제 호스트인
+> `pagead2.googlesyndication.com` 을 놓쳐서 **AdSense 와 GA 의 script src 까지
+> 바꿔버렸습니다.** 지금은 `index.html` 의 canonical 에서 자기 호스트를 특정하고
+> **그 호스트만** 치환합니다. 워크플로의 Verify 단계에서도 매번 확인합니다.
 
 ### 크롤러가 보는 콘텐츠 (해결됨)
 

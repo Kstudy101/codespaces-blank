@@ -1,1 +1,159 @@
+name: Deploy to Xserver
 
+# main に push すると Xserver へ同期する。
+# 手動実行（workflow_dispatch）では dry_run を選べるので、
+# 初回や設定変更後は必ずそちらで内容を確認してから本番へ流すこと。
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'data/**'
+      - 'tools/**'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '転送せず、送る予定のファイルだけ表示する'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-xserver
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------
+      # 公開ファイルを dist/ に集める。
+      # このプロジェクトにビルドツールは無い（package.json も無い）。
+      # それでも dist を作るのは、リポジトリにはあるが公開しては
+      # いけないもの（data/kanji_platform.db、tools/、README.md）を
+      # 落とすため。
+      # ---------------------------------------------------------------
+      - name: Build dist
+        run: bash tools/build-site.sh
+
+      # ---------------------------------------------------------------
+      # 検証。壊れたものを本番へ送らないための関門。
+      # ---------------------------------------------------------------
+      - name: Verify
+        env:
+          SITE_HOST: ${{ vars.SITE_HOST || 'kstudy101.jp' }}
+        run: |
+          set -uo pipefail
+          fail=0
+
+          host=$(grep -o 'rel="canonical" href="https://[^/"]*' dist/index.html | sed 's|.*https://||')
+          echo "公開ホスト: $host（期待: $SITE_HOST）"
+          [ "$host" = "$SITE_HOST" ] || { echo "✗ canonical のホストが想定と違います"; fail=1; }
+
+          # 外部サービスのURLが壊れていないか。
+          # 一括置換でここを壊したことがあるので、毎回確かめる。
+          for f in dist/index.html dist/privacy.html dist/contact.html dist/tips.html; do
+            grep -q 'pagead2\.googlesyndication\.com/pagead/js/adsbygoogle\.js' "$f" \
+              || { echo "✗ $f: AdSense の src が壊れています"; fail=1; }
+            grep -q 'www\.googletagmanager\.com/gtag/js' "$f" \
+              || { echo "✗ $f: GA の src が壊れています"; fail=1; }
+          done
+
+          # 拡張子なしURLの受け皿。これが無いと /privacy 等が全部 404 になる。
+          grep -q 'REQUEST_FILENAME}.html -f' dist/.htaccess \
+            || { echo "✗ .htaccess に拡張子なしURLの書き換えがありません"; fail=1; }
+
+          if find dist \( -name '*.db' -o -name '*.py' -o -name '*.sh' \) | grep -q .; then
+            echo "✗ 非公開ファイルが dist にあります"; fail=1
+          fi
+
+          exit $fail
+
+      - name: Show planned upload (dry run)
+        if: ${{ inputs.dry_run }}
+        run: |
+          echo "転送予定:"
+          find dist -type f | sed 's|^dist/|  |' | sort
+          echo
+          echo "合計 $(find dist -type f | wc -l) ファイル / $(du -sh dist | cut -f1)"
+
+      # ---------------------------------------------------------------
+      # SSH 鍵。Xserver の SSH はポート 10022。
+      # サーバーパネルで SSH 設定を ON にし、公開鍵を登録しておくこと。
+      # ---------------------------------------------------------------
+      - name: Set up SSH
+        if: ${{ !inputs.dry_run }}
+        env:
+          KEY:  ${{ secrets.XSERVER_SSH_KEY }}
+          HOST: ${{ secrets.XSERVER_HOST }}
+          PORT: ${{ secrets.XSERVER_PORT }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "${PORT:-10022}" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          chmod 600 ~/.ssh/known_hosts
+
+      # ---------------------------------------------------------------
+      # 同期。--delete でサーバー側の余分なファイルも消える。
+      # .htaccess も転送対象（rsync はドット始まりも送る）。
+      # ---------------------------------------------------------------
+      - name: Deploy (rsync over SSH)
+        if: ${{ !inputs.dry_run }}
+        env:
+          HOST: ${{ secrets.XSERVER_HOST }}
+          USER: ${{ secrets.XSERVER_USER }}
+          PORT: ${{ secrets.XSERVER_PORT }}
+          DEST: ${{ secrets.XSERVER_PATH }}
+        run: |
+          rsync -rlvz --delete --checksum \
+            -e "ssh -p ${PORT:-10022} -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes" \
+            dist/ "$USER@$HOST:$DEST/"
+
+      # ---------------------------------------------------------------
+      # 公開後の実地確認。本番の設定ミスを拾う最後の網。
+      # ---------------------------------------------------------------
+      - name: Smoke test
+        if: ${{ !inputs.dry_run }}
+        env:
+          SITE_HOST: ${{ vars.SITE_HOST || 'kstudy101.jp' }}
+        run: |
+          set -uo pipefail
+          BASE="https://$SITE_HOST"
+          sleep 5
+          fail=0
+
+          check () {
+            code=$(curl -s -o /dev/null -w '%{http_code}' -L --max-time 20 "$BASE$1" || echo 000)
+            if [ "$code" = "$2" ]; then echo "  ✓ $1 → $code"
+            else echo "  ✗ $1 → $code（期待 $2）"; fail=1; fi
+          }
+
+          echo "拡張子なしURL（Apache は既定で解決しない。移行の要）"
+          for p in / /privacy /contact /tips; do check "$p" 200; done
+
+          echo "実ファイル"
+          for p in /kanji.json /ogp.png /ads.txt /sitemap.xml /robots.txt; do check "$p" 200; done
+
+          echo "存在しないURLは 404（SPA フォールバックを入れていない確認）"
+          check /no-such-page 404
+
+          echo "非公開ファイルが見えていないこと"
+          for p in /kanji_platform.db /data/kanji_platform.db /tools/build-site.sh /README.md; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$BASE$p" || echo 000)
+            if [ "$code" = "200" ]; then echo "  ✗ $p が公開されています"; fail=1
+            else echo "  ✓ $p → $code"; fi
+          done
+
+          echo "内容の反映"
+          if curl -s --max-time 20 "$BASE/" | grep -q "$SITE_HOST"; then
+            echo "  ✓ canonical 反映済み"
+          else
+            echo "  ✗ canonical が古いままです"; fail=1
+          fi
+
+          exit $fail

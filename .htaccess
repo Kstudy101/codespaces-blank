@@ -1,0 +1,122 @@
+# 名前で学ぶ韓国語 — Xserver（Apache）用設定
+#
+# このサイトは SPA ではなく、独立した HTML が並ぶ静的サイト。
+# したがって「全部 index.html に流す」SPA フォールバックは入れない。
+# それを入れると存在しないURLまで 200 を返し、404 が機能しなくなる。
+#
+# 本当に必要なのは逆で、拡張子なしURL（/privacy）を privacy.html に
+# 内部で結びつけること。Cloudflare Pages はこれを自動でやっていたが
+# Apache は何もしないため、移行するとサイト内リンクがすべて 404 になる。
+
+AddDefaultCharset UTF-8
+DirectoryIndex index.html
+Options -Indexes -MultiViews
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+
+# ------------------------------------------------------------------
+# 1) HTTPS へ寄せる
+#    Xserver は SSL 終端がフロントにあるため HTTPS 変数が立たない構成が
+#    ありうる。X-Forwarded-Proto も見て二重リダイレクトを防ぐ。
+# ------------------------------------------------------------------
+RewriteCond %{HTTPS} !=on
+RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+# ------------------------------------------------------------------
+# 2) www なしに寄せる（canonical と揃える）
+# ------------------------------------------------------------------
+RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+RewriteRule ^ https://%1%{REQUEST_URI} [R=301,L]
+
+# ------------------------------------------------------------------
+# 3) 重複URLを1つに寄せる
+#    /index.html と / 、/privacy.html と /privacy が両方 200 を返すと
+#    同じ内容が2つのURLに存在することになる。canonical は正しく出るが、
+#    クロール上の無駄なので 301 でまとめる。
+#    ※ THE_REQUEST を見ているので、下の内部書き換え（4）とは衝突しない。
+# ------------------------------------------------------------------
+RewriteCond %{THE_REQUEST} \s/+index\.html[\s?] [NC]
+RewriteRule ^ / [R=301,L]
+
+RewriteCond %{THE_REQUEST} \s/+([^?\s]+)\.html[\s?] [NC]
+RewriteRule ^ /%1 [R=301,L]
+
+# ------------------------------------------------------------------
+# 4) 拡張子なしURL → .html（内部書き換え。URLは変わらない）
+#    /privacy → privacy.html
+#    実ファイル・実ディレクトリが優先されるので、
+#    /kanji.json や /ogp.png はそのまま配信される。
+# ------------------------------------------------------------------
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME}.html -f
+RewriteRule ^(.+?)/?$ $1.html [L]
+</IfModule>
+
+# ------------------------------------------------------------------
+# 404
+# ------------------------------------------------------------------
+ErrorDocument 404 /404.html
+
+# ------------------------------------------------------------------
+# MIME / 文字コード
+# ------------------------------------------------------------------
+<IfModule mod_mime.c>
+  AddType application/json .json
+  AddType image/svg+xml .svg
+  AddCharset UTF-8 .html .css .js .json .xml .txt
+</IfModule>
+
+# ------------------------------------------------------------------
+# 圧縮
+# ------------------------------------------------------------------
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/plain text/xml
+  AddOutputFilterByType DEFLATE application/json application/javascript
+  AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+# ------------------------------------------------------------------
+# キャッシュ
+#   HTML は毎回確認させる（内容を差し替えたらすぐ反映したいため）。
+#   kanji.json は差し替え頻度が低いので1日。
+# ------------------------------------------------------------------
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresDefault                      "access plus 1 week"
+  ExpiresByType text/html             "access plus 0 seconds"
+  ExpiresByType text/css              "access plus 1 week"
+  ExpiresByType application/json      "access plus 1 day"
+  ExpiresByType image/png             "access plus 1 month"
+  ExpiresByType image/svg+xml         "access plus 1 month"
+</IfModule>
+<IfModule mod_headers.c>
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>
+
+# ------------------------------------------------------------------
+# セキュリティヘッダ
+#   広告（AdSense）は当サイト内に iframe を挿す側なので、
+#   SAMEORIGIN を入れても配信には影響しない。
+# ------------------------------------------------------------------
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-Frame-Options "SAMEORIGIN"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+  Header set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+</IfModule>
+
+# ------------------------------------------------------------------
+# 公開しないもの
+#   デプロイ側でも除外しているが、取りこぼした場合の保険。
+# ------------------------------------------------------------------
+<FilesMatch "\.(db|sqlite3?|py|sh|md|yml|yaml)$">
+  Require all denied
+</FilesMatch>
+<IfModule mod_rewrite.c>
+  RewriteRule ^(data|tools|\.github)/ - [F,L]
+</IfModule>

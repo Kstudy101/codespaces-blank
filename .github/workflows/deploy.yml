@@ -264,6 +264,24 @@ jobs:
             else echo "  ✓ $p → $code"; fi
           done
 
+          echo "www の向き（ここがループすると全ページ落ちる）"
+          apex=${SITE_HOST#www.}
+          hops=$(curl -s -o /dev/null -L --max-redirs 5 -w '%{num_redirects}' \
+                   --max-time 20 "https://$apex/tips" || echo 99)
+          if [ "$hops" -le 1 ]; then
+            echo "  ✓ apex → www は $hops 回で収束"
+          else
+            echo "  ✗ apex から $hops 回リダイレクト。サーバー設定と .htaccess が"
+            echo "    逆向きを向いている可能性があります"; fail=1
+          fi
+          hops2=$(curl -s -o /dev/null -L --max-redirs 5 -w '%{num_redirects}' \
+                    --max-time 20 "$BASE/tips" || echo 99)
+          if [ "$hops2" -eq 0 ]; then
+            echo "  ✓ www は転送なしで応答"
+          else
+            echo "  ✗ www からさらに $hops2 回転送されています"; fail=1
+          fi
+
           echo "内容の反映"
           if curl -s --max-time 20 "$BASE/" | grep -q "$SITE_HOST"; then
             echo "  ✓ canonical 反映済み"

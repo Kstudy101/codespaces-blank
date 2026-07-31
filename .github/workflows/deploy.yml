@@ -10,7 +10,8 @@ on:
     paths-ignore:
       - 'README.md'
       - 'data/**'
-      - 'tools/**'
+      # tools/ は除外しない。build-site.sh が dist の中身を決めるので、
+      # ここを直したのにデプロイされない、という食い違いが起きる。
   workflow_dispatch:
     inputs:
       dry_run:

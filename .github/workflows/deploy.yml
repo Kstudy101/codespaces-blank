@@ -45,7 +45,7 @@ jobs:
       # ---------------------------------------------------------------
       - name: Verify
         env:
-          SITE_HOST: ${{ vars.SITE_HOST || 'kstudy101.jp' }}
+          SITE_HOST: ${{ vars.SITE_HOST || 'www.kstudy101.jp' }}
         run: |
           set -uo pipefail
           fail=0
@@ -101,9 +101,9 @@ jobs:
       # ---------------------------------------------------------------
       # 転送先の安全確認。
       #
-      # このドメインの apex（kstudy101.jp）には別の WordPress サイトが
-      # 動いている。そこへ --delete 付きで同期すると、そのサイトを
-      # まるごと消してしまう。転送前に必ず中身を見て、他人の家なら止める。
+      # 以前このドメインには WordPress サイトが入っていた（現在は撤去済み）。
+      # --delete を伴う同期を別サイトの上へ流すと、そのサイトを丸ごと消す。
+      # 一度その構成のまま実行しかけたので、転送先を毎回確かめてから送る。
       # ---------------------------------------------------------------
       - name: Guard destination
         if: ${{ !inputs.dry_run }}
@@ -162,7 +162,7 @@ jobs:
       - name: Smoke test
         if: ${{ !inputs.dry_run }}
         env:
-          SITE_HOST: ${{ vars.SITE_HOST || 'kstudy101.jp' }}
+          SITE_HOST: ${{ vars.SITE_HOST || 'www.kstudy101.jp' }}
         run: |
           set -uo pipefail
           BASE="https://$SITE_HOST"

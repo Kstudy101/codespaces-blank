@@ -198,6 +198,13 @@ jobs:
             echo "--- ssh の出力 ---"
             echo "$out" | sed 's/^/  /'
             echo "------------------"
+            # 「Connection closed by」は鍵の拒否（Permission denied）とは別物で、
+            # 認証まで進む前に切られている。どこで切れたかは -vvv でしか分からない。
+            echo "--- 詳細ログ（どの段階で切れたか）---"
+            ssh -vvv deploy 'echo ok' 2>&1 \
+              | grep -E 'Connecting|Remote protocol|kex|host key|Authentications that can continue|Offering|Trying private key|Server accepts key|Authenticated|closed|banner|debug1: (Next|No more)' \
+              | head -30 | sed 's/^/  /'
+            echo "------------------------------------"
             echo "確認する点:"
             echo "  ・公開鍵（.pub）がサーバーパネルに登録されているか"
             echo "  ・その公開鍵が XSERVER_SSH_KEY の秘密鍵と対になっているか"

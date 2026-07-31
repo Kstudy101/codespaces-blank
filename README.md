@@ -15,18 +15,38 @@
 | `index.html` | 진단 앱 본체. CSS·JS 인라인으로 **자체 완결** |
 | `privacy.html` | プライバシーポリシー (AdSense 필수) |
 | `contact.html` | お問い合わせ. Formspree 연동 + FAQ |
-| `page.css` | 문서 페이지 2장이 공유하는 스타일 |
+| `tips.html` | 韓国語の豆知識（깨알 지식）. 항목 5개 |
+| `page.css` | 문서 페이지 3장이 공유하는 스타일 + `.tip` 컴포넌트 |
 | `ads.txt` | AdSense 판매자 선언. 루트에서 서빙 확인 완료 |
 | `robots.txt` | 크롤러 허용 + sitemap 선언 |
-| `sitemap.xml` | 3페이지, 절대 URL |
+| `sitemap.xml` | 4페이지, 절대 URL |
 | `ogp.png` | 1200×630 OGP 이미지 (node-canvas 로 생성) |
 | `kanji.json` | 상용한자 2,136자 참조 데이터 (지연 로딩) |
 | `data/kanji_platform.db` | 원본 SQLite. 런타임에는 쓰이지 않음 |
 | `tools/build-kanji-json.py` | `.db` → `kanji.json` 재생성 |
 
 `index.html`만 자체 완결을 유지했습니다. 앱 본체는 파일 하나로 어디든 던져놓으면 동작해야
-하지만, 문서 페이지 2장은 서로 스타일이 같아야 하므로 공유 CSS가 낫다고 판단했습니다.
+하지만, 문서 페이지 3장은 서로 스타일이 같아야 하므로 공유 CSS가 낫다고 판단했습니다.
 대신 `page.css`의 컬러 토큰은 `index.html`과 수동으로 맞춰야 합니다.
+
+### 깨알 지식(豆知識) 늘리는 법
+
+`tips.html` 에 `<article class="tip">` 을 복사해 추가하면 끝입니다.
+스타일은 `page.css` 의 `.tip` 컴포넌트가 담당하므로 CSS 수정이 필요 없습니다.
+
+```html
+<article class="tip">
+  <div class="tip-badge">
+    <span class="tip-ja">豆知識<small>まめちしき</small></span>
+    <span class="tip-ko">깨알 지식 ⑥</span>
+  </div>
+  <h2>제목</h2>
+  <p>본문</p>
+</article>
+```
+
+**index.html 에는 본문을 복사하지 말 것.** 같은 글이 두 URL 에 있으면 AdSense 의
+「コンテンツが複製されている」 반려 사유가 됩니다. 최상단 `.tipbar` 는 링크만 겁니다.
 
 ---
 
@@ -193,12 +213,12 @@ GDPR·CCPA 항목을 정확히 기재하는 것까지이고, 그건 `privacy.htm
 | 사이트 내 네비게이션 | 전 페이지 하단 버튼으로 상호 연결 |
 | `ads.txt` | 루트 서빙 확인 완료 (`/ads.txt` → 200) |
 | `robots.txt` | `Mediapartners-Google` 명시 허용 + sitemap 선언 |
-| `sitemap.xml` | 3페이지, 절대 URL, clean URL |
+| `sitemap.xml` | 4페이지, 절대 URL, clean URL |
 | `<title>` / `meta description` | 전 페이지 |
 | `canonical` | 전 페이지, **절대 URL + clean URL** (308 회피) |
 | OGP / Twitter 카드 | 전 페이지 + `ogp.png` 1200×630 |
 | favicon | data URI (외부 요청 없음) |
-| 정적 콘텐츠 | `#about` 7섹션, JS 없이 약 4,800자 |
+| 정적 콘텐츠 | `index` `#about` 6섹션 약 4,800자 + `tips` 5항목 약 2,350자 |
 | 면책 표시 | 성명학·운세가 엔터테인먼트임을 앱과 폴리시 양쪽에 명시 |
 
 ### 대시보드에서 해야 하는 일 (코드로 불가)

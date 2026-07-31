@@ -120,6 +120,32 @@ button[type=submit]:disabled{opacity:.5; cursor:not-allowed}
 .formnote{font-size:.78rem; color:var(--text-dim); margin:16px 0 0;
   padding-top:14px; border-top:1px dashed var(--line)}
 
+/* ---- 豆知識カード（増やせるよう部品化） ---- */
+.tip{
+  background:var(--gold-soft, #fbf3e2);
+  border:1px solid var(--gold, #b3862f);
+  border-left:4px solid var(--gold, #b3862f);
+  border-radius:16px; padding:24px; margin:0 0 24px;
+}
+.tip-badge{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:12px}
+.tip-ja{
+  font-size:.9rem; font-weight:700; color:var(--gold, #b3862f);
+  display:inline-flex; align-items:baseline; gap:6px;
+}
+.tip-ja small{font-size:.68rem; font-weight:400; opacity:.8}
+.tip-ko{
+  font-size:.8rem; font-weight:700; color:var(--accent);
+  background:var(--surface); border-radius:999px; padding:3px 12px;
+}
+.tip h2{
+  border-top:0; padding-top:0; margin-top:0; margin-bottom:14px;
+  padding-bottom:12px; border-bottom:1px solid var(--gold, #b3862f);
+}
+.tip h3{margin-top:22px}
+.tip .tbl th{background:var(--surface)}
+.tip .note{background:var(--surface); border-left-color:var(--gold, #b3862f)}
+.tip > p:last-child{margin-bottom:0}
+
 /* ---- 下部ボタン ---- */
 .pagenav{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-top:40px}
 .pagenav a{

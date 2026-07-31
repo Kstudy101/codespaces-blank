@@ -209,6 +209,11 @@ h2{font-size:1.18rem; margin:0 0 18px; letter-spacing:-.01em}
 .hanja .rd{font-size:1.05rem; font-weight:700}
 .hanja .rd b{color:var(--accent); font-size:1.2rem}
 .hanja .mean{font-size:.84rem; color:var(--text-dim)}
+.hanja .hun{
+  font-size:.84rem; color:var(--text-dim); margin-top:6px;
+  padding-top:6px; border-top:1px dashed var(--line);
+}
+.hanja .hun b{color:var(--blue); font-size:1.05rem; margin-left:2px}
 .word{
   background:var(--accent-soft); border-radius:10px;
   padding:10px 13px; margin-top:10px; font-size:.9rem;
@@ -1273,6 +1278,52 @@ const HANJA = {
 };
 
 /* ==================================================================
+   3b. 常用漢字データベース（外部 kanji.json・2136字）
+   ------------------------------------------------------------------
+   上の HANJA は手書きの学習コンテンツ（意味・単語・例文）。
+   こちらは網羅用の参照データで、韓国漢字音と訓音（例：「밭 전」）を持つ。
+   件数が多いので本体には埋め込まず、読み込み後に併用する。
+   取得に失敗しても HANJA だけで動作する。
+   ================================================================== */
+let KDB = null;              /* {char:[韓国音, 訓音]} */
+let KYU = null;              /* 旧字体 → 新字体 */
+const kdbReady = (typeof fetch === 'function'
+  ? fetch('kanji.json').then(r => r.ok ? r.json() : null)
+  : Promise.resolve(null))
+  .then(d => { if (d && d.k){ KDB = d.k; KYU = d.kyu || {}; } })
+  .catch(() => { /* オフライン等。HANJA のみで続行する */ });
+
+/* 旧字体で書かれていれば新字体に寄せる（齋→斎、櫻→桜 など） */
+function normKanji(c){
+  return (KYU && KYU[c]) ? KYU[c] : c;
+}
+/* 踊り字を開く。「佐々木」は「佐佐木」として読む（々 は直前の字の繰り返し）。
+   コードポイント単位で扱う。文字列末尾を slice すると
+   基本多言語面外の漢字（𠮟 など）でサロゲートペアが割れてしまうため。 */
+function expandRep(s){
+  const out = [];
+  for (const c of s) out.push((c === '々' || c === '〻') ? (out[out.length-1] || '') : c);
+  return out.join('');
+}
+/* 1文字の情報を引く。手書きデータを優先し、無ければ DB を見る。
+   手書き側は名前で使う読みを選んであるので、多音字（楽=락/악）はこちらが勝つ。 */
+function lookup(c){
+  const n = normKanji(c);
+  const cur = HANJA[c] || HANJA[n];
+  const db  = KDB ? (KDB[c] || KDB[n]) : null;
+  if (!cur && !db) return null;
+  return {
+    k:   cur ? cur.k  : db[0],          /* 韓国漢字音 */
+    m:   cur ? cur.m  : '',             /* 日本語での意味 */
+    hun: db  ? db[1]  : '',             /* 韓国式の訓音「밭 전」 */
+    w:   cur ? cur.w  : null,           /* 対応する韓国語の固有語 */
+    wj:  cur ? cur.wj : null,
+    ex:  cur ? cur.ex : null,
+    old: n !== c ? n : null             /* 旧字体で入力された場合の新字体 */
+  };
+}
+
+/* ==================================================================
    4. 五行（子音五行）
    ================================================================== */
 const OHAENG = {
@@ -1384,13 +1435,14 @@ function run(){
   $('d-kana').textContent  = [seiF, meiF].filter(Boolean).join(' ');
   $('d-hangul').textContent = fullH;
 
-  const kanjiChars = (seiK + meiK).split('').filter(c => /[一-鿿㐀-䶿]/.test(c));
-  const known = kanjiChars.filter(c => HANJA[c]);
+  const seiX = expandRep(seiK), meiX = expandRep(meiK);
+  const kanjiChars = (seiX + meiX).split('').filter(c => /[一-鿿㐀-䶿]/.test(c));
+  /* 「佐々木」のように同じ字が並ぶことがあるので、解説カードは重複を除く */
+  const known = [...new Set(kanjiChars)].filter(c => lookup(c));
   let hanjaEum = '';
   if (known.length){
-    const seiE = seiK.split('').map(c => HANJA[c] ? HANJA[c].k : '?').join('');
-    const meiE = meiK.split('').map(c => HANJA[c] ? HANJA[c].k : '?').join('');
-    const eum  = [seiE, meiE].filter(Boolean).join(' ');
+    const eumOf = s => s.split('').map(c => { const e = lookup(c); return e ? e.k : '?'; }).join('');
+    const eum = [eumOf(seiX), eumOf(meiX)].filter(Boolean).join(' ');
     $('d-hanjaeum').textContent = eum;
     $('d-hanja-row').style.display = '';
     /* 未登録漢字が混ざると「?」が出るので、その場合はシェア画像には載せない */
@@ -1409,7 +1461,7 @@ function run(){
   if (known.length){
     $('step3').style.display = '';
     $('d-hanja').innerHTML = known.map(c => {
-      const h = HANJA[c];
+      const h = lookup(c);
       let wordHtml = '';
       if (h.w){
         wordHtml = `<div class="word">
@@ -1419,11 +1471,19 @@ function run(){
             `<li><b>${esc(e[0])}</b><br><span>${esc(e[1])}</span></li>`).join('')}</ul>` : ''}
         </div>`;
       }
+      /* 韓国では漢字を「意味＋音」で呼ぶ（例：田＝「밭 전」＝はたけ・チョン）。
+         これ自体が覚える手がかりになるので、あれば必ず出す。 */
+      const hunHtml = h.hun
+        ? `<div class="hun">韓国での漢字の呼び方 <b>${esc(h.hun)}</b></div>` : '';
+      const oldHtml = h.old
+        ? `<div class="mean">新字体では「${esc(h.old)}」</div>` : '';
       return `<div class="hanja">
         <div class="ch">${esc(c)}</div>
         <div class="body">
           <div class="rd">韓国漢字音 <b>${esc(h.k)}</b></div>
-          <div class="mean">${esc(h.m)}</div>
+          ${h.m ? `<div class="mean">${esc(h.m)}</div>` : ''}
+          ${oldHtml}
+          ${hunHtml}
           ${wordHtml}
         </div>
       </div>`;
@@ -1903,7 +1963,11 @@ async function shareNative(){
 /* ==================================================================
    8. イベント
    ================================================================== */
-$('go').addEventListener('click', run);
+/* 漢字DBの読み込みを待ってから診断する。ふつうは入力中に読み終わっているので
+   待ち時間は発生しない。読み込みに失敗していても resolve するので固まらない。 */
+function go(){ kdbReady.then(run); }
+
+$('go').addEventListener('click', go);
 $('go2').addEventListener('click', run2);
 
 /* シェア */
@@ -1933,7 +1997,7 @@ $('again').addEventListener('click', () => {
   $('sei-f').focus();
 });
 ['sei-k','mei-k','sei-f','mei-f'].forEach(id => {
-  $(id).addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+  $(id).addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
 });
 ['y','m','d'].forEach(id => {
   $(id).addEventListener('keydown', e => { if (e.key === 'Enter') run2(); });

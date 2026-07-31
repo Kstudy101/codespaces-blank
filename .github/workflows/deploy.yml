@@ -169,10 +169,12 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
           echo "✓ ホスト鍵取得"
 
-          # RSA 鍵の場合の互換設定。
-          # OpenSSH 8.8 以降（GitHub ランナーはこれ）は ssh-rsa（SHA-1 署名）を
-          # 既定で無効にしている。Xserver 側がそれしか受け付けないと、
-          # 鍵は正しいのに「認証できない」で終わる。明示的に許可しておく。
+          # 接続設定を1か所にまとめ、guard と rsync から共用する。
+          #
+          # ssh-rsa（SHA-1）の明示許可は入れていない。詳細ログで確認したところ
+          # サーバーは rsa-sha2-512 を提示しており、既定のまま鍵交換も認証も
+          # 通っている。不要な互換オプションは、将来の OpenSSH で
+          # 「Bad configuration option」になって別の障害を生むだけ。
           cat > ~/.ssh/config <<CONF
           Host deploy
             HostName $HOST
@@ -183,9 +185,6 @@ jobs:
             StrictHostKeyChecking yes
             BatchMode yes
             ConnectTimeout 20
-            PubkeyAcceptedKeyTypes +ssh-rsa
-            PubkeyAcceptedAlgorithms +ssh-rsa
-            HostKeyAlgorithms +ssh-rsa
           CONF
           sed -i 's/^          //' ~/.ssh/config
           chmod 600 ~/.ssh/config

@@ -99,23 +99,36 @@ jobs:
           # 何が足りないのかを最初にはっきり出す。
           # 未設定のまま進むと ssh-keyscan や chmod が謎のエラーで落ち、
           # 原因の切り分けに時間を取られる。
+          # 変数名と Secret 名は一致していないので、対応表で出す。
+          # ここを取り違えると「登録したのに未設定と言われる」ことになる。
           miss=0
-          for v in HOST USER DEST KEY; do
-            if [ -z "${!v:-}" ]; then
-              echo "✗ Secret XSERVER_$v が未設定です"
+          check_secret () {   # $1=環境変数名 $2=Secret名
+            local val="${!1:-}"
+            if [ -z "$val" ]; then
+              echo "✗ $2 が空です"
               miss=1
             else
-              echo "✓ XSERVER_$v 設定あり"
+              echo "✓ $2 設定あり（${#val} 文字）"
             fi
-          done
+          }
+          check_secret HOST XSERVER_HOST
+          check_secret USER XSERVER_USER
+          check_secret DEST XSERVER_PATH
+          check_secret KEY  XSERVER_SSH_KEY
+
           if [ "$miss" -ne 0 ]; then
             echo
-            echo "GitHub → Settings → Secrets and variables → Actions で登録してください:"
+            echo "登録先を間違えていないか確認してください。"
+            echo "  このワークフローが動いているリポジトリ: ${{ github.repository }}"
+            echo "  → そのリポジトリの Settings → Secrets and variables → Actions"
+            echo "    → 「Secrets」タブ（Variables タブではありません）"
+            echo
+            echo "必要な Secret 名（完全一致・大文字）:"
             echo "  XSERVER_HOST     例) svXXXX.xserver.jp"
             echo "  XSERVER_USER     サーバーID"
             echo "  XSERVER_PATH     例) /home/<ID>/kstudy101.jp/public_html"
             echo "  XSERVER_SSH_KEY  秘密鍵の全文（-----BEGIN ... END----- を含む）"
-            echo "  XSERVER_PORT     10022（省略時の既定値）"
+            echo "  XSERVER_PORT     10022（省略可）"
             exit 1
           fi
 

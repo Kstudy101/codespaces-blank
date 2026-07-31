@@ -358,6 +358,28 @@ h2{font-size:1.18rem; margin:0 0 18px; letter-spacing:-.01em}
 #about .jamo-grid{margin-bottom:8px}
 #about .hanja{padding-top:0}
 
+/* ---------- 豆知識（今後も増やせるよう部品にしておく） ---------- */
+.tip{
+  background:var(--gold-soft);
+  border:1px solid var(--gold);
+  border-left:4px solid var(--gold);
+}
+.tip-badge{
+  display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:12px;
+}
+.tip-ja{
+  font-size:.9rem; font-weight:700; color:var(--gold);
+  display:inline-flex; align-items:baseline; gap:6px;
+}
+.tip-ja small{font-size:.68rem; font-weight:400; opacity:.8}
+.tip-ko{
+  font-size:.8rem; font-weight:700; color:var(--accent);
+  background:var(--surface); border-radius:999px; padding:3px 12px;
+}
+.tip h2{border-bottom-color:var(--gold)}
+.tip .tbl th{background:var(--surface)}
+.tip .warnbox{background:var(--surface); border-left-color:var(--gold)}
+
 /* ---------- 下部のページリンク ---------- */
 .pagenav{
   display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
@@ -834,6 +856,64 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
       後者を知っておくと漢字語の入り口になります。
     </p>
   </div>
+
+  <!-- 豆知識 -->
+  <aside class="card tip">
+    <div class="tip-badge">
+      <span class="tip-ja">豆知識<small>まめちしき</small></span>
+      <span class="tip-ko">깨알 지식</span>
+    </div>
+    <h2>日本の名字は、世界でも指折りの多さ</h2>
+
+    <p class="body-p">
+      韓国の名字は、実は驚くほど少なく <strong>およそ300〜500</strong> ほどしかありません
+      （本貫＝一族の発祥地で分けない場合）。しかも <b>金・李・朴</b> の上位3つだけで
+      人口のおよそ4割を占めます。韓国ドラマで同じ名字ばかり出てくるのは、気のせいではありません。
+    </p>
+    <p class="body-p">
+      いっぽう日本は、諸説ありますが <strong>13万〜30万以上</strong>。
+      世界でもっとも名字の種類が多い国のひとつです。「田中」「山本」「川上」のように
+      <strong>土地のかたちや場所から生まれた名字</strong>が多く、土地の数だけ名字が生まれました。
+    </p>
+
+    <div class="tbl">
+      <table>
+        <tr><th></th><th>韓国</th><th>日本</th></tr>
+        <tr>
+          <th>名字の数</th>
+          <td>約300〜500</td>
+          <td>約13万〜30万以上</td>
+        </tr>
+        <tr>
+          <th>特徴</th>
+          <td>上位いくつかの名字に人口が集中</td>
+          <td>地名・地形に由来するものが多く、地域ごとに膨大</td>
+        </tr>
+      </table>
+    </div>
+
+    <h3 class="sub-h">韓国で多い名字トップ5</h3>
+    <div class="tbl">
+      <table>
+        <tr><th>ハングル</th><th>漢字</th><th>日本での読み</th></tr>
+        <tr><td><b>김</b></td><td>金</td><td>キム</td></tr>
+        <tr><td><b>이</b></td><td>李</td><td>イ</td></tr>
+        <tr><td><b>박</b></td><td>朴</td><td>パク</td></tr>
+        <tr><td><b>최</b></td><td>崔</td><td>チェ</td></tr>
+        <tr><td><b>정</b></td><td>鄭</td><td>チョン</td></tr>
+      </table>
+    </div>
+    <p class="body-p">
+      この5つを覚えるだけで、韓国の名字のかなりの割合をカバーできてしまいます。
+      名字の数がこれほど違うので、当サイトは日本のほとんどの名字を漢字から変換できます。
+    </p>
+
+    <div class="warnbox">
+      <b>「깨알 지식」って？</b> — 豆知識のことを、韓国語では
+      <b>깨알 지식</b>（ケアル チシク）と言います。「깨알」は<u>ゴマ粒</u>のこと。
+      小さいけれど面白い知識、という意味です。日本語の「豆知識」と発想がそっくりですね。
+    </div>
+  </aside>
 
   <!-- 呼び方 -->
   <div class="card">

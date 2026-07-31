@@ -163,12 +163,39 @@ STEP 4 안에 `<details>` 로 접어 두고 「簡単な会話を見てみよう
 
 | 경로 | 방식 | 비고 |
 |---|---|---|
-| 네이티브 공유 | `navigator.share({files,text})` | **모바일의 주 경로.** OS 공유 시트에 Instagram·Threads가 그대로 뜸 |
-| X | `twitter.com/intent/tweet` | 웹 인텐트 |
-| Threads | `threads.net/intent/post` | 웹 인텐트 |
-| LINE | `social-plugins.line.me/lineit/share` | 일본에서 가장 중요 |
+| 네이티브 공유 | `navigator.share({files,text})` | **모바일 주 경로.** 설치된 앱에 로그인 없이 바로 전달 |
+| X | `x.com/intent/post` — `<a href>` | 앱 설치 시 Universal Link 로 앱이 열림 |
+| Threads | `threads.net/intent/post` — `<a href>` | 동일 |
+| LINE | `line.me/R/share` — `<a href>` | **LINE URL 스킴.** 앱의 전송 대상 선택 화면이 열림 |
 | Instagram | **인텐트 없음** → 이미지 저장 + 문구 복사 | 아래 설명 |
 | 이미지 저장 / 텍스트 복사 | `toBlob` / `clipboard` | 수동 경로 |
+
+### 왜 `window.open()` 을 쓰면 안 되는가 (실제 발생한 버그)
+
+「공유 버튼을 누르면 앱이 아니라 웹 로그인 화면이 뜬다」는 문제가 있었습니다.
+원인은 두 가지였습니다.
+
+**1. `window.open()` 은 OS 의 앱 라우팅을 우회한다**
+
+iOS Universal Links / Android App Links 는 **사용자가 링크를 탭했을 때** OS 가
+설치된 앱으로 넘기는 구조입니다. JS 에서 `window.open()` 으로 열면 이 판정을
+거치지 않고 브라우저가 열립니다. **브라우저 세션은 앱 로그인 상태를 공유하지
+않으므로**, 앱에 로그인해 둔 사용자에게도 로그인 화면이 나옵니다.
+
+→ X·Threads·LINE 버튼을 `<button>` + `window.open()` 에서
+**실제 `<a href>` 로 교체**했습니다. `href` 는 결과 표시 시점에 채웁니다.
+
+**2. LINE URL 이 애초에 웹용이었다**
+
+`social-plugins.line.me/lineit/share` 는 **웹 소셜 플러그인**이라 웹 페이지가
+열립니다. 앱을 여는 것은 `line.me/R/share` 입니다
+([LINE URL scheme](https://developers.line.biz/en/docs/messaging-api/using-line-url-scheme/)).
+LINE 은 `url` 파라미터가 없으므로 URL 을 `text` 안에 넣습니다.
+
+**남는 한계** — Universal Link 는 사용자가 앱 측에서 꺼 두었거나, 브라우저 내
+웹뷰(인앱 브라우저)에서 열린 경우 동작하지 않을 수 있습니다. 확실하게 앱으로
+넘기는 유일한 경로는 `navigator.share` 이므로, **지원 기기에서는 이쪽을
+주 버튼으로 크게 노출**하도록 바꿨습니다.
 
 **Instagram에는 외부에서 투고 내용을 넘기는 공개 수단이 없습니다.** 이는 우회할 수 없는
 플랫폼 제약이므로, 링크가 동작하는 척하지 않고 실제로 되는 흐름(이미지 저장 + 캡션 복사 →

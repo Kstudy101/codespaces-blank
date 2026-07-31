@@ -63,15 +63,22 @@ for html in "$OUT"/index.html "$OUT"/privacy.html "$OUT"/contact.html "$OUT"/tip
   grep -q 'rel="canonical"' "$html" || { echo "✗ $(basename "$html"): canonical がありません" >&2; fail=1; }
 done
 
-# 3) 旧ホストが残っていないか（移行時の取りこぼし検出）
+# 3) 旧ホストの取りこぼし検出。
+#
+#    「許可リストに無いホスト」を疑う書き方にしていたが、外部サービスを
+#    足すたびにリストを直す必要があり、実際 Clarity を入れた時に正常なURLを
+#    大量に警告した。探したいのは自分の古いホストなので、そちらを直接見る。
+#    自サイトのホストは canonical で一意に決まり、それ以外で "kstudy" を
+#    含むホストは移行の取りこぼしとみなせる。
 host=$(grep -o 'rel="canonical" href="https://[^/"]*' "$OUT/index.html" | sed 's|.*https://||')
 if [ -n "$host" ]; then
   for f in "$OUT"/*.html "$OUT"/sitemap.xml "$OUT"/robots.txt; do
-    if grep -oE 'https://[A-Za-z0-9.-]+/' "$f" \
-       | grep -vE "https://($host|[a-z]+\.google\.com|policies\.google\.com|www\.googletagmanager\.com|pagead2\.googlesyndication\.com|formspree\.io|line\.me|x\.com|www\.threads\.net|www\.aboutads\.info|tools\.google\.com|marketingplatform\.google\.com|www\.w3\.org|www\.sitemaps\.org)/" \
-       | grep -q .; then
-      echo "⚠ $(basename "$f"): $host 以外の自サイトURLらしきものがあります" >&2
-      grep -oE 'https://[A-Za-z0-9.-]+/' "$f" | sort -u | sed 's/^/    /' >&2
+    stale=$(grep -oE 'https://[A-Za-z0-9.-]+' "$f" | sed 's|https://||' | sort -u \
+            | grep -iE 'kstudy|pages\.dev|github\.io' | grep -vx "$host" || true)
+    if [ -n "$stale" ]; then
+      echo "✗ $(basename "$f"): 旧ホストが残っています（正: $host）" >&2
+      echo "$stale" | sed 's/^/    /' >&2
+      fail=1
     fi
   done
 fi

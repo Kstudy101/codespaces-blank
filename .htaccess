@@ -25,10 +25,21 @@ RewriteCond %{HTTP:X-Forwarded-Proto} !=https
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
 
 # ------------------------------------------------------------------
-# 2) www なしに寄せる（canonical と揃える）
+# 2) www ありに寄せる（canonical と揃える）
+#
+#    このサーバーは kstudy101.jp → www.kstudy101.jp の 301 を
+#    すでに返している（サーバーパネルの「www有無の統一」設定）。
+#    ここで逆向き（www を外す）を書くと
+#      apex →(サーバー)→ www →(この設定)→ apex → …
+#    と無限ループになりサイトが落ちる。サーバーの向きに合わせること。
+#
+#    apex を正としたい場合は、先にサーバーパネルの統一設定を解除し、
+#    そのうえでこの規則を逆向きにして
+#    tools/set-site-url.py で canonical も入れ替える。
 # ------------------------------------------------------------------
-RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
-RewriteRule ^ https://%1%{REQUEST_URI} [R=301,L]
+RewriteCond %{HTTP_HOST} !^www\. [NC]
+RewriteCond %{HTTP_HOST} !^$
+RewriteRule ^ https://www.%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
 
 # ------------------------------------------------------------------
 # 3) 重複URLを1つに寄せる

@@ -284,7 +284,7 @@ GDPR·CCPA 항목을 정확히 기재하는 것까지이고, 그건 `privacy.htm
 
 ### 배포: Xserver (kstudy101.jp)
 
-<https://kstudy101.jp/> 로 배포합니다. `main` 에 push 하면
+<https://www.kstudy101.jp/> 로 배포합니다. `main` 에 push 하면
 `.github/workflows/deploy.yml` 이 rsync 로 동기화합니다.
 
 **빌드 도구는 없습니다.** `package.json` 도 `dist`/`build` 도 원래 존재하지 않습니다.
@@ -328,8 +328,11 @@ RewriteRule ^(.+?)/?$ $1.html [L]
 | `XSERVER_USER` | secret | 서버 ID |
 | `XSERVER_SSH_KEY` | secret | 비밀키 전문 (`-----BEGIN`~`END-----`) |
 | `XSERVER_PATH` | secret | `/home/<ID>/kstudy101.jp/public_html` |
+
+> 転送先に WordPress 等が入っていれば Guard 段階で停止する。`--delete` を伴うため、
+> 別サイトの上に流すと消してしまう。実際に一度その構成のまま走らせかけた。
 | `XSERVER_PORT` | secret | `10022` (미설정 시 기본값) |
-| `SITE_HOST` | variable | `kstudy101.jp` |
+| `SITE_HOST` | variable | `www.kstudy101.jp` |
 
 Xserver 는 SSH 가 기본 OFF 입니다. 서버패널 → SSH설정 → ON, 공개키 등록 후
 포트 **10022** 로 접속합니다.
@@ -339,8 +342,23 @@ Xserver 는 SSH 가 기본 OFF 입니다. 서버패널 → SSH설정 → ON, 공
 절대 URL(canonical / og / sitemap / robots / `SITE_URL` 상수)은 한 번에 바꿉니다:
 
 ```bash
-python3 tools/set-site-url.py https://kstudy101.jp
+python3 tools/set-site-url.py https://www.kstudy101.jp
 ```
+
+#### www の向きはサーバーに合わせる
+
+このサーバーは apex → www の 301 をすでに返している（サーバーパネルの統一設定）。
+`.htaccess` に逆向き（www を外す）を書くと
+
+```
+apex →(サーバー)→ www →(.htaccess)→ apex → …
+```
+
+で**無限ループになりサイトが落ちる**。そのため `.htaccess` は www 側に寄せている。
+apex を正にしたい場合は、先にパネルの統一設定を解除してから
+`.htaccess` の向きを変え、`set-site-url.py` で canonical も入れ替えること。
+
+実 Apache で確認済み — apex は www へ 301 が1回、www は 200 で停止（リダイレクト0回）。
 
 > **주의 — 실제로 한 번 사고를 냈습니다.** 초판은 "제외 목록에 없는 호스트를 전부
 > 치환"하는 방식이었는데, 제외 목록에 `googlesyndication.com` 만 넣고 실제 호스트인

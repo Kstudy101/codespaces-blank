@@ -5,4 +5,4 @@ Allow: /
 User-agent: Mediapartners-Google
 Allow: /
 
-Sitemap: https://kstudy101.jp/sitemap.xml
+Sitemap: https://www.kstudy101.jp/sitemap.xml

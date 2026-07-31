@@ -62,7 +62,9 @@ def main():
         if not os.path.exists(f):
             continue
         s = open(f, encoding="utf-8").read()
-        if old_host in s:
+        # スキームまで含めて見る。apex → www のように新ホストが旧ホストを
+        # 部分文字列として含む場合、ホスト名だけの比較では必ず誤検知する。
+        if f"https://{old_host}/" in s or s.rstrip().endswith(f"https://{old_host}"):
             bad.append(f"{f}: 旧ホストが残存")
     for f in ["index.html", "privacy.html", "contact.html", "tips.html"]:
         s = open(f, encoding="utf-8").read()

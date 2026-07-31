@@ -99,6 +99,48 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
 
       # ---------------------------------------------------------------
+      # 転送先の安全確認。
+      #
+      # このドメインの apex（kstudy101.jp）には別の WordPress サイトが
+      # 動いている。そこへ --delete 付きで同期すると、そのサイトを
+      # まるごと消してしまう。転送前に必ず中身を見て、他人の家なら止める。
+      # ---------------------------------------------------------------
+      - name: Guard destination
+        if: ${{ !inputs.dry_run }}
+        env:
+          HOST: ${{ secrets.XSERVER_HOST }}
+          USER: ${{ secrets.XSERVER_USER }}
+          PORT: ${{ secrets.XSERVER_PORT }}
+          DEST: ${{ secrets.XSERVER_PATH }}
+        run: |
+          set -euo pipefail
+          SSH="ssh -p ${PORT:-10022} -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes $USER@$HOST"
+
+          echo "転送先: $DEST"
+          $SSH "test -d '$DEST'" || { echo "✗ 転送先が存在しません"; exit 1; }
+
+          # WordPress など別サイトが入っていないか
+          for f in wp-config.php wp-load.php wp-content wp-includes; do
+            if $SSH "test -e '$DEST/$f'"; then
+              echo "✗ 転送先に $f があります。別のサイトが動いています。"
+              echo "  --delete でそのサイトを消してしまうため中止します。"
+              echo "  サブドメイン用の public_html を XSERVER_PATH に設定してください。"
+              exit 1
+            fi
+          done
+
+          # 見覚えのないファイルが多数ある場合も止める
+          # （初回は空 or index.html のみのはず）
+          n=$($SSH "ls -A '$DEST' 2>/dev/null | wc -l")
+          known=$($SSH "ls -A '$DEST' 2>/dev/null" | grep -cE '^(index|privacy|contact|tips|404)\.html$|^(page\.css|kanji\.json|ogp\.png|ads\.txt|robots\.txt|sitemap\.xml|\.htaccess|default_page\.png)$' || true)
+          if [ "$n" -gt 2 ] && [ "$known" -eq 0 ]; then
+            echo "✗ 転送先に想定外のファイルが $n 件あります。中止します。"
+            $SSH "ls -A '$DEST'" | sed 's/^/    /'
+            exit 1
+          fi
+          echo "✓ 転送先は空か、このサイトのファイルのみです（$n 件）"
+
+      # ---------------------------------------------------------------
       # 同期。--delete でサーバー側の余分なファイルも消える。
       # .htaccess も転送対象（rsync はドット始まりも送る）。
       # ---------------------------------------------------------------

@@ -232,6 +232,54 @@ h2{font-size:1.18rem; margin:0 0 18px; letter-spacing:-.01em}
 .sent .ja{font-size:.85rem; color:var(--text-dim)}
 .sent .note{font-size:.78rem; color:var(--text-dim); margin-top:6px; padding-top:6px; border-top:1px dashed var(--line)}
 
+/* 場面会話（クリックで開く） */
+.talk{margin-top:16px; border-top:1px dashed var(--line); padding-top:14px}
+.talk > summary{
+  list-style:none; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+  font-size:.88rem; font-weight:700; color:var(--accent);
+  padding:6px 2px; border-radius:6px;
+}
+.talk > summary::-webkit-details-marker{display:none}
+.talk > summary:hover{opacity:.8}
+.talk > summary:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.talk-arrow{transition:transform .18s; display:inline-block}
+.talk[open] .talk-arrow{transform:rotate(90deg)}
+.talk-body{padding-top:14px}
+.talk-head{
+  font-size:.82rem; font-weight:700; color:var(--text-dim);
+  display:flex; align-items:center; gap:8px; margin-bottom:14px;
+  padding-bottom:10px; border-bottom:1px solid var(--line);
+}
+.talk-emo{font-size:1.2rem}
+.line{display:flex; gap:10px; margin-bottom:12px; align-items:flex-start}
+.line .who{
+  flex:none; width:58px; font-size:.7rem; font-weight:700; color:var(--text-dim);
+  padding-top:3px; text-align:right;
+}
+.line .say{
+  flex:1; min-width:0; background:var(--surface-2);
+  border-radius:12px; border-top-left-radius:3px; padding:10px 14px;
+}
+.line.me .say{background:var(--accent-soft)}
+.line.me .who{color:var(--accent)}
+.line .say .ko{font-size:1.02rem; font-weight:700; line-height:1.6}
+.line.me .say .ko{color:var(--accent)}
+.line .say .ja{font-size:.78rem; color:var(--text-dim); margin-top:2px}
+.talk-note{
+  font-size:.78rem; color:var(--text-dim); margin:14px 0 0;
+  padding-top:10px; border-top:1px dashed var(--line);
+}
+.talk-more{
+  width:auto; margin-top:14px; padding:9px 16px; font-size:.8rem;
+  background:transparent; color:var(--accent); border:1.5px solid var(--line);
+}
+.talk-more:hover{border-color:var(--accent); opacity:1}
+@media (prefers-reduced-motion:reduce){ .talk-arrow{transition:none} }
+@media (max-width:420px){
+  .line .who{width:auto; text-align:left; flex:1 0 100%; padding-top:0}
+  .line{flex-wrap:wrap; gap:4px}
+}
+
 /* culture */
 .call{
   display:flex; gap:12px; align-items:baseline; padding:12px 0;
@@ -557,6 +605,14 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
       自分の名前が入った文は、記憶に残ります。声に出して読んでみてください。
     </p>
     <div id="d-sent"></div>
+
+    <details class="talk">
+      <summary>簡単な会話を見てみよう<span class="talk-arrow" aria-hidden="true">→</span></summary>
+      <div class="talk-body">
+        <div id="d-talk"></div>
+        <button type="button" class="talk-more" id="talk-again">別の場面を見る</button>
+      </div>
+    </details>
   </div>
 
   <!-- STEP 5 -->
@@ -1392,6 +1448,109 @@ const ZODIAC = [
 ];
 
 /* ==================================================================
+   4b. 名前を使った場面会話
+   ------------------------------------------------------------------
+   {name}    → 名前そのまま（韓国語の行はハングル、日本語の行はふりがな）
+   {ieyo}    → 이에요 / 예요      （パッチムで変化）
+   {eun}     → 은 / 는
+   {ga}      → 이 / 가
+   {voc}     → 名前＋아 / 야      （親しい相手への呼びかけ）
+
+   注意：助詞は「直前の文字」に従う。名前の直後に置く場合だけ {ieyo} 等を使い、
+   「{name} 씨」のように間に語が入るときは、その語（씨）に合わせて直接書く。
+   ================================================================== */
+const SCENES = [
+  { p:'☕', t:'カフェで注文する', lines:[
+    ['店員','어서 오세요.','いらっしゃいませ。'],
+    ['あなた','아메리카노 한 잔 주세요.','アメリカーノを1杯ください。'],
+    ['店員','성함이 어떻게 되세요?','お名前をうかがえますか？'],
+    ['あなた','{name}입니다.','{name}です。'],
+    ['店員','{name} 님, 나왔습니다!','{name}様、お待たせしました！']
+  ], note:'お店では「씨」より <b>님</b> がよく使われます。'},
+
+  { p:'🏫', t:'教室ではじめての自己紹介', lines:[
+    ['先生','자기소개 해 볼까요?','自己紹介してみましょうか。'],
+    ['あなた','안녕하세요. 저는 {name}입니다.','こんにちは。わたしは{name}です。'],
+    ['あなた','일본에서 왔어요.','日本から来ました。'],
+    ['みんな','반갑습니다!','よろしくお願いします！'],
+    ['先生','{name} 씨, 한국어 잘하시네요.','{name}さん、韓国語お上手ですね。']
+  ], note:'「〜에서 왔어요」で出身が言えます。'},
+
+  { p:'🍻', t:'友だちに紹介される', lines:[
+    ['友だち','여기는 내 친구 {name}.','こっちは私の友だち、{name}。'],
+    ['あなた','안녕하세요, {name}{ieyo}.','こんにちは、{name}です。'],
+    ['相手','만나서 반가워요.','お会いできてうれしいです。'],
+    ['相手','{name} 씨는 무슨 일 하세요?','{name}さんは何のお仕事を？']
+  ], note:'初対面では <b>씨</b>。名前につけて使います。'},
+
+  { p:'✈️', t:'空港で名前を確認される', lines:[
+    ['職員','여권 주세요.','パスポートをお願いします。'],
+    ['あなた','여기 있습니다.','はい、どうぞ。'],
+    ['職員','성함이 {name} 맞으세요?','お名前は{name}で間違いないですか？'],
+    ['あなた','네, 맞습니다.','はい、そうです。'],
+    ['職員','여행 잘 하세요.','よいご旅行を。']
+  ], note:'「맞아요/맞습니다」は「そのとおりです」。'},
+
+  { p:'🍚', t:'食堂で呼ばれる', lines:[
+    ['店員','{name} 님, 몇 분이세요?','{name}様、何名様ですか？'],
+    ['あなた','두 명이요.','2人です。'],
+    ['店員','이쪽으로 오세요.','こちらへどうぞ。'],
+    ['あなた','감사합니다.','ありがとうございます。']
+  ], note:'人数は「한 명・두 명・세 명」と数えます。'},
+
+  { p:'💬', t:'友だちからメッセージが来る', lines:[
+    ['友だち','{voc}, 지금 뭐 해?','{name}、今なにしてる？'],
+    ['あなた','한국어 공부하고 있어.','韓国語の勉強してる。'],
+    ['友だち','오, 대단하다!','お、すごいね！'],
+    ['あなた','내 이름도 한글로 써 봤어.','自分の名前もハングルで書いてみた。']
+  ], note:'親しい相手には敬語を使わない <b>반말</b>。呼びかけは名前＋아/야。'},
+
+  { p:'🏢', t:'会社で名刺を渡す', lines:[
+    ['あなた','처음 뵙겠습니다. {name}{ieyo}.','はじめまして。{name}です。'],
+    ['相手','반갑습니다. 명함 감사합니다.','よろしくお願いします。名刺ありがとうございます。'],
+    ['相手','{name} 씨, 잘 부탁드립니다.','{name}さん、よろしくお願いいたします。'],
+    ['あなた','저야말로 잘 부탁드립니다.','こちらこそよろしくお願いします。']
+  ], note:'「처음 뵙겠습니다」はビジネスでの「はじめまして」。'}
+];
+
+function fillName(t, n){
+  const j = hasJong(n);
+  return t.replace(/\{name\}/g, n)
+          .replace(/\{ieyo\}/g, j ? '이에요' : '예요')
+          .replace(/\{eun\}/g,  j ? '은' : '는')
+          .replace(/\{ga\}/g,   j ? '이' : '가')
+          .replace(/\{voc\}/g,  n + (j ? '아' : '야'));
+}
+
+let sceneIdx = -1;
+function renderScene(){
+  if (!state) return;
+  /* 同じ場面が続けて出ないように選ぶ */
+  let i = sceneIdx;
+  if (SCENES.length > 1){
+    while (i === sceneIdx) i = Math.floor(Math.random() * SCENES.length);
+  } else { i = 0; }
+  sceneIdx = i;
+  const s = SCENES[i];
+  const n  = state.given;                        /* 韓国語の行はハングル名 */
+  const jn = state.meiF || state.seiF || n;      /* 日本語の行はふりがな   */
+
+  $('d-talk').innerHTML = `
+    <div class="talk-head"><span class="talk-emo">${s.p}</span>${esc(s.t)}</div>
+    ${s.lines.map(([who, ko, ja]) => {
+      const me = who === 'あなた';
+      return `<div class="line${me ? ' me' : ''}">
+        <div class="who">${esc(who)}</div>
+        <div class="say">
+          <div class="ko">${esc(fillName(ko, n))}</div>
+          <div class="ja">${esc(ja.replace(/\{name\}/g, jn))}</div>
+        </div>
+      </div>`;
+    }).join('')}
+    ${s.note ? `<p class="talk-note">${s.note}</p>` : ''}`;
+}
+
+/* ==================================================================
    5. 助詞の判定（パッチム有無）
    ================================================================== */
 function hasJong(word){
@@ -1579,6 +1738,8 @@ function run(){
   state = {seiK, meiK, seiF, meiF, seiStr, meiStr, fullH, given, allSyl, known,
            hanjaEum, zodiac:null, ohaengKo:null};
 
+  sceneIdx = -1;      /* 名前が変わったら場面も選び直す */
+  renderScene();
   buildCard();
 
   $('result').classList.add('on');
@@ -2003,6 +2164,8 @@ function go(){ kdbReady.then(run); }
 
 $('go').addEventListener('click', go);
 $('go2').addEventListener('click', run2);
+
+$('talk-again').addEventListener('click', renderScene);
 
 /* シェア */
 $('sh-x').addEventListener('click', shareX);

@@ -159,15 +159,42 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
           echo "✓ ホスト鍵取得"
 
+          # RSA 鍵の場合の互換設定。
+          # OpenSSH 8.8 以降（GitHub ランナーはこれ）は ssh-rsa（SHA-1 署名）を
+          # 既定で無効にしている。Xserver 側がそれしか受け付けないと、
+          # 鍵は正しいのに「認証できない」で終わる。明示的に許可しておく。
+          cat > ~/.ssh/config <<CONF
+          Host deploy
+            HostName $HOST
+            User $USER
+            Port ${PORT:-10022}
+            IdentityFile ~/.ssh/id_ed25519
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            BatchMode yes
+            ConnectTimeout 20
+            PubkeyAcceptedKeyTypes +ssh-rsa
+            PubkeyAcceptedAlgorithms +ssh-rsa
+            HostKeyAlgorithms +ssh-rsa
+          CONF
+          sed -i 's/^          //' ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
           echo "接続確認中…"
-          if ssh -p "${PORT:-10022}" -i ~/.ssh/id_ed25519 \
-               -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=15 \
-               "$USER@$HOST" 'echo ok' >/dev/null 2>&1; then
+          if out=$(ssh deploy 'echo ok' 2>&1); then
             echo "✓ SSH 接続成功"
           else
             echo "✗ SSH 接続に失敗しました"
-            echo "  ・公開鍵がサーバーパネルに登録されているか"
+            echo "--- ssh の出力 ---"
+            echo "$out" | sed 's/^/  /'
+            echo "------------------"
+            echo "確認する点:"
+            echo "  ・公開鍵（.pub）がサーバーパネルに登録されているか"
+            echo "  ・その公開鍵が XSERVER_SSH_KEY の秘密鍵と対になっているか"
             echo "  ・XSERVER_USER がサーバーIDと一致しているか"
+            echo
+            echo "登録済み公開鍵と照合するための、この秘密鍵に対応する公開鍵:"
+            ssh-keygen -y -f ~/.ssh/id_ed25519 2>/dev/null | sed 's/^/  /'
             exit 1
           fi
 
@@ -187,7 +214,7 @@ jobs:
           DEST: ${{ secrets.XSERVER_PATH }}
         run: |
           set -euo pipefail
-          SSH="ssh -p ${PORT:-10022} -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes $USER@$HOST"
+          SSH="ssh deploy"   # ~/.ssh/config の設定（RSA 互換込み）を使う
 
           echo "転送先: $DEST"
           $SSH "test -d '$DEST'" || { echo "✗ 転送先が存在しません"; exit 1; }
@@ -225,9 +252,7 @@ jobs:
           PORT: ${{ secrets.XSERVER_PORT }}
           DEST: ${{ secrets.XSERVER_PATH }}
         run: |
-          rsync -rlvz --delete --checksum \
-            -e "ssh -p ${PORT:-10022} -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes" \
-            dist/ "$USER@$HOST:$DEST/"
+          rsync -rlvz --delete --checksum -e ssh dist/ "deploy:$DEST/"
 
       # ---------------------------------------------------------------
       # 公開後の実地確認。本番の設定ミスを拾う最後の網。

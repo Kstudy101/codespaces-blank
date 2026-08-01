@@ -25,6 +25,9 @@ PUBLIC=(
   404.html
   page.css
   kanji.json
+  saju.js
+  fortune.js
+  solar-terms.json
   ogp.png
   ads.txt
   robots.txt

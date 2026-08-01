@@ -231,7 +231,12 @@
     var sy = solar.getUTCFullYear(), sm = solar.getUTCMonth() + 1,
         sd = solar.getUTCDate(), sh = solar.getUTCHours();
     var dn = dayNumber(sy, sm, sd);
-    if (known && sh >= 23) { dn += 1; notes.push("23시 이후이므로 일주를 다음 날로 봅니다"); }
+    // notes は画面にそのまま出る。このサイトの表示言語は日本語なので
+    // 日本語で返す（干支の読み「경오」などは学習用の中身なので韓国語のまま）。
+    if (known && sh >= 23) {
+      dn += 1;
+      notes.push("真太陽時で 23 時を過ぎているため、日柱は翌日として計算しました");
+    }
     var day = gz(mod(dn + 9, 10), mod(dn + 1, 12));
 
     // --- 年柱 ---------------------------------------------------------
@@ -260,7 +265,7 @@
       var bi = mod(Math.floor((sh + 1) / 2), 12);
       hour = gz(mod(day.stemIdx % 5 * 2 + bi, 10), bi);
     } else {
-      notes.push("출생 시각을 몰라 시주를 뺀 3주로 계산했습니다");
+      notes.push("生まれた時刻がわからないため、時柱を除いた 3 柱で計算しました");
     }
 
     // --- 五行の数 ------------------------------------------------------
@@ -291,6 +296,7 @@
     load: load, pillars: pillars,
     CITIES: CITIES, STEM: STEM, BRANCH: BRANCH,
     STEM_HANJA: STEM_HANJA, BRANCH_HANJA: BRANCH_HANJA,
+    STEM_ELEMENT: STEM_ELEMENT, BRANCH_ELEMENT: BRANCH_ELEMENT,
     equationOfTime: equationOfTime, offsetAt: offsetAt, dayNumber: dayNumber,
     _table: function () { return table; }
   };

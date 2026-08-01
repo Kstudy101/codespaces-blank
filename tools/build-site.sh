@@ -120,6 +120,48 @@ grep -o '<loc>https://[^<]*</loc>' "$OUT/sitemap.xml" \
     [ -e "$OUT$p.html" ] || { echo "✗ sitemap.xml: $p の実体がありません" >&2; exit 1; }
   done || fail=1
 
+# 5) CSS カスタムプロパティの取りこぼし。
+#
+#    page.css の色トークンは index.html と手で揃える約束になっている。
+#    実際に --gold を写し忘れ、/gilbang の方位盤で「中央」を指す印が
+#    消えていた。background は継承しないので、未定義の var() は
+#    transparent になる ── 中央が出る人にだけ何も表示されないので、
+#    画面を見ていても気づけない。
+#
+#    フォールバック付き var(--x, 既定) は未定義でも成立するので見ない。
+#    grep の「見つからない＝終了1」を && で繋ぐと set -e に殺されるので、
+#    判定は必ず if で書くこと。
+decls () { grep -ohE -- '--[a-z0-9-]+[[:space:]]*:' "$1" 2>/dev/null \
+             | sed 's/[[:space:]]*:$//' | sort -u || true; }
+props=$(decls "$OUT/page.css")
+for html in "$OUT"/*.html; do
+  own=$(decls "$html")
+  uses=$(grep -ohE 'var\(--[a-z0-9-]+\)' "$html" 2>/dev/null | sed 's/var(//;s/)//' | sort -u || true)
+  for v in $uses; do
+    if printf '%s\n' "$props" | grep -qx -- "$v"; then continue; fi
+    if printf '%s\n' "$own"   | grep -qx -- "$v"; then continue; fi
+    echo "✗ $(basename "$html"): $v が未定義です（page.css にも自身にもありません）" >&2
+    fail=1
+  done
+done
+
+# 6) index.html と page.css の色トークンの値がずれていないか。
+#
+#    5) は「使っているのに無い」を見る。こちらは「両方にあるが値が違う」を見る。
+#    どちらか片方だけ色を変えると、トップと下層で違う赤になる ── これも
+#    並べて見ないと気づけない類い。片方にしか無いトークン（--radius 等）は
+#    見ない。page.css が index.html の全部を要るわけではないので。
+tokens () { sed -n '/^:root{/,/^}/p' "$1" | grep -oE -- '--[a-z0-9-]+:[^;]+' | sed 's/:/ /' | sort || true; }
+ti=$(tokens "$OUT/index.html"); tp=$(tokens "$OUT/page.css")
+for name in $(printf '%s\n%s\n' "$ti" "$tp" | awk '{print $1}' | sort | uniq -d); do
+  vi=$(printf '%s\n' "$ti" | awk -v n="$name" '$1==n{sub(/^[^ ]+ /,""); print}')
+  vp=$(printf '%s\n' "$tp" | awk -v n="$name" '$1==n{sub(/^[^ ]+ /,""); print}')
+  if [ "$vi" != "$vp" ]; then
+    echo "✗ 色トークン $name がずれています（index.html: $vi / page.css: $vp）" >&2
+    fail=1
+  fi
+done
+
 [ "$fail" -eq 0 ] || exit 1
 
 echo "✓ dist/ を作成しました（$(find "$OUT" -type f | wc -l) ファイル / $(du -sh "$OUT" | cut -f1)）"

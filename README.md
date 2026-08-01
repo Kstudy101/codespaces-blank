@@ -60,7 +60,7 @@
 | `tools/build-new-moons.py` | 삭 계산 → `new-moons.json` |
 | `tools/fetch-naoj-reference.py` | 국립천문대에서 기준값 취득 → `data/naoj-reference.json` |
 | `tools/verify-*.mjs` | 배포 관문 6종 (아래 「검증」) |
-| `tools/build-site.sh` | 공개 파일만 `dist/` 로 모음 + 내부 링크·canonical·구 호스트·**sitemap 망라** 점검 |
+| `tools/build-site.sh` | 공개 파일만 `dist/` 로 모음 + 6종 점검 (내부 링크·canonical·구 호스트·sitemap 망라·**CSS 토큰**) |
 | `tools/set-site-url.py` | 절대 URL 일괄 교체 (도메인 이전용) |
 | `.github/workflows/deploy.yml` | push → 검증 6종 → Xserver rsync 배포 |
 
@@ -83,7 +83,18 @@
 
 **대신 잃은 것을 적어 둡니다** — `index.html`을 `file://` 로 바로 열면 운세 부분이
 동작하지 않습니다. 로컬에서는 아래 「로컬 실행」의 HTTP 서버를 써야 합니다.
-`page.css`의 컬러 토큰을 `index.html`과 수동으로 맞춰야 하는 것은 그대로입니다.
+
+`page.css`의 컬러 토큰을 `index.html`과 맞추는 일은 남아 있지만, **손으로 지키는
+약속에서 빌드가 막는 것으로 바꿨습니다.** 실제로 `--gold`를 옮겨 적지 않아
+`/gilbang` 방위반에서 「중앙」을 가리키는 점이 사라져 있었습니다 —
+`background`는 상속되지 않으므로 정의되지 않은 `var()`는 투명이 되고,
+중앙이 나오는 사람에게만 아무것도 안 보이므로 화면을 봐도 알 수 없습니다.
+`build-site.sh` 가 두 방향으로 봅니다.
+
+| 검사 | 잡는 것 |
+|---|---|
+| 폴백 없는 `var(--x)` 가 어디에도 정의되지 않음 | 옮겨 적기를 빠뜨림 (`--gold` 가 이 경우) |
+| 양쪽에 다 있는데 **값이 다름** | 한쪽만 색을 바꿈 |
 
 ### 깨알 지식(豆知識) 늘리는 법
 

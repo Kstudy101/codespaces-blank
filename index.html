@@ -484,6 +484,79 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
   text-align:center; font-size:1.05rem; font-weight:700; color:var(--accent);
   padding:28px 0; letter-spacing:-.01em;
 }
+/* ---- 今日の運勢 ------------------------------------------------- */
+.fortune{border:1px solid var(--line)}
+.fortune-lead{font-size:.9rem; line-height:1.85; margin:0 0 20px}
+.fortune-hint{margin:10px 0 0}
+.fortune-note{margin-top:14px}
+.row-2 > div{flex:1}
+
+.f-head{
+  display:flex; align-items:baseline; justify-content:space-between;
+  gap:10px; flex-wrap:wrap; margin:26px 0 4px;
+}
+.f-head h3{font-size:1.05rem; margin:0}
+.f-date{font-size:.78rem; color:var(--text-dim)}
+.f-pillars{
+  display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 20px;
+}
+.f-pillar{
+  flex:1; min-width:64px; text-align:center; padding:10px 6px;
+  background:var(--surface-2); border-radius:12px;
+}
+.f-pillar .lb{font-size:.68rem; color:var(--text-dim); display:block}
+.f-pillar .gz{font-size:1.15rem; font-weight:700; letter-spacing:.02em}
+.f-pillar .ko{font-size:.72rem; color:var(--text-dim); display:block}
+.f-pillar.is-day{background:var(--accent-soft)}
+
+/* 6 項目。棒は点数そのもので、色は等級ではなく項目に付ける。
+   等級の色分けは「赤＝悪い」の印象が強すぎて、末吉の日に開く気が失せる。 */
+.f-row{
+  display:grid; grid-template-columns:5.2em 2.4em 3.4em 1fr 3.4em;
+  align-items:center; gap:10px; padding:9px 0;
+  border-top:1px solid var(--line);
+}
+.f-row:first-of-type{border-top:0}
+.f-row.is-total{
+  border-top:0; margin-bottom:4px; padding:14px 12px;
+  background:var(--surface-2); border-radius:12px;
+}
+.f-name{font-size:.86rem; font-weight:700}
+.f-name small{display:block; font-size:.68rem; font-weight:400; color:var(--text-dim)}
+.f-score{font-size:1.05rem; font-weight:700; text-align:right; font-variant-numeric:tabular-nums}
+.f-row.is-total .f-score{font-size:1.5rem}
+.f-bar{height:8px; border-radius:99px; background:var(--line); overflow:hidden}
+.f-bar > i{display:block; height:100%; border-radius:99px; background:var(--accent)}
+.f-row.is-total .f-bar{height:10px}
+.f-grade{
+  font-size:.78rem; font-weight:700; text-align:center; color:var(--gold);
+  background:var(--gold-soft); border-radius:99px; padding:3px 0;
+}
+.f-delta{font-size:.78rem; text-align:right; font-variant-numeric:tabular-nums}
+.f-delta.up{color:var(--accent)}
+.f-delta.down{color:var(--blue)}
+.f-delta.flat{color:var(--text-dim)}
+.f-cmp{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:8px; font-size:.78rem; color:var(--text-dim);
+  margin:18px 0 2px; padding-top:14px; border-top:1px dashed var(--line);
+}
+.f-first{
+  font-size:.82rem; color:var(--text-dim); background:var(--blue-soft);
+  border-radius:12px; padding:12px 14px; margin:18px 0 0;
+}
+.f-next{
+  margin:18px 0 0; padding:14px 16px; border-radius:12px;
+  background:var(--accent-soft); font-size:.86rem; line-height:1.8;
+}
+.f-next b{color:var(--accent)}
+@media (max-width:480px){
+  /* 棒は飾りなので狭い画面では落とす。数字・等級・増減の 3 つが本体。 */
+  .f-row{grid-template-columns:4.6em 2.2em 3.2em 3.2em; gap:8px}
+  .f-bar{display:none}
+  .f-name{font-size:.8rem}
+}
+
 @media (max-width:480px){
   .row{flex-direction:column; gap:14px}
   .card{padding:20px 18px}
@@ -506,6 +579,62 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
   <span class="tipbar-txt">日本の名字が世界一多いって知ってた？</span>
   <span class="tipbar-go" aria-hidden="true">→</span>
 </a>
+
+<!-- ============ 今日の運勢（入口） ============
+     JS が動かない環境でも解説文だけは読める形にしてある。中身を全部
+     JS で作ると、クローラーには空のページに見える（AdSense の審査で
+     一度これに当たっている）。                                        -->
+<section class="card fortune" id="fortune" aria-labelledby="fortune-h">
+  <div class="step-no">🔮 今日の運勢<small>오늘의 운세</small></div>
+  <h2 id="fortune-h">生年月日から、今日の運勢を 6 項目で</h2>
+
+  <p class="fortune-lead">
+    韓国では占いを <b class="ko">사주</b>（四柱）と呼びます。生まれた年・月・日・時刻の
+    4 つを干支に直したもので、日本の四柱推命と同じ考え方です。
+    ここでは今日の<b>日辰</b>（その日の干支）とあなたの四柱を照らして、
+    総合・金・恋愛・仕事・健康・<b>学習</b>の 6 項目を出します。
+  </p>
+
+  <div class="row" data-clarity-mask="true">
+    <div>
+      <label for="f-y">年</label>
+      <input type="number" id="f-y" placeholder="1995" min="1930" max="2030" autocomplete="off">
+    </div>
+    <div>
+      <label for="f-m">月</label>
+      <input type="number" id="f-m" placeholder="4" min="1" max="12" autocomplete="off">
+    </div>
+    <div>
+      <label for="f-d">日</label>
+      <input type="number" id="f-d" placeholder="12" min="1" max="31" autocomplete="off">
+    </div>
+  </div>
+  <div class="row row-2" data-clarity-mask="true">
+    <div>
+      <label for="f-h">生まれた時刻</label>
+      <select id="f-h"></select>
+    </div>
+    <div>
+      <label for="f-city">生まれた場所</label>
+      <select id="f-city"></select>
+    </div>
+  </div>
+
+  <p class="hint fortune-hint">
+    時刻がわからなければ「わからない」のままで大丈夫です。時柱を除いた 3 柱で出します。
+    生まれた場所は、時刻を<b>真太陽時</b>に直すために使います（ソウルは標準時より約 32 分遅く、
+    東京は約 19 分早い）。
+  </p>
+
+  <p class="err" id="f-err"></p>
+  <button id="f-go">今日の運勢を見る</button>
+  <p class="disclaim fortune-note">
+    ※ 入力された生年月日は<b>保存されません</b>。点数の履歴だけがお使いの端末に残り、
+    次に来たときの「前回と比べて」に使われます。
+  </p>
+
+  <div id="f-result" hidden></div>
+</section>
 
 <!-- ============ STAGE 1 : INPUT ============ -->
 <div class="card" id="form-card" data-clarity-mask="true">
@@ -1038,6 +1167,11 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- 四柱の計算。ページ内に書かず外に置いてあるのは、tools/verify-saju.mjs と
+     tools/verify-fortune.mjs が同じファイルをそのまま読んで検証するため。 -->
+<script src="/saju.js"></script>
+<script src="/fortune.js"></script>
 
 <script>
 "use strict";
@@ -1817,6 +1951,28 @@ function run2(){
 
   /* 十二支 */
   const z = ZODIAC[((y - 2020) % 12 + 12) % 12];
+
+  /* 干支は暦の年で出している（1月1日で切り替わる、ふつうの数え方）。
+     ただし四柱＝사주 では立春が年の境なので、立春より前に生まれた人は
+     前年の干支になる。1〜2月生まれのおよそ 10 人に 1 人が食い違う。
+
+     どちらかが誤りというわけではなく、境をどこに置くかの違いでしかない。
+     そこで表示は動かさず、食い違う人にだけ理由を添える。上の運勢は
+     四柱の側なので、黙っていると同じページで違う干支が出ることになる。 */
+  let zNote = '';
+  try {
+    if (Saju._table()){
+      const sz = Saju.pillars({ y, m, d, hour: 12, city: 'seoul' }).zodiac;
+      if (sz !== z.ko){
+        const sj = ZODIAC.find(o => o.ko === sz);
+        zNote = `<p class="hint" style="margin:-6px 0 18px">
+          ※ 사주（四柱）では<b>立春</b>が年の境です。この生年月日は立春より前なので、
+          占いの世界では <b class="ko">${esc(sz)}띠</b>（${esc(sj ? sj.ja : '')}）として扱われます。
+          上の「今日の運勢」もそちらで計算しています。</p>`;
+      }
+    }
+  } catch (e) { /* 節気表が無くても名前診断は出す */ }
+
   $('d-zodiac').innerHTML = `
     <div class="zodiac">
       <div class="emo">${z.emo}</div>
@@ -1825,7 +1981,7 @@ function run2(){
         <div class="ko">${esc(z.ko)}띠</div>
         <div class="ja">${esc(z.ja)}年 — 「띠」は干支のこと。日本と同じ十二支です。</div>
       </div>
-    </div>`;
+    </div>${zNote}`;
 
   /* 生年月日を韓国語で言う（漢数詞） */
   const NUM = ['','일','이','삼','사','오','육','칠','팔','구'];
@@ -2192,12 +2348,169 @@ async function shareNative(){
 /* ==================================================================
    8. イベント
    ================================================================== */
+/* ==================================================================
+   9. 今日の運勢
+
+   計算は saju.js と fortune.js が持っている。ここにあるのは画面に
+   出す部分だけで、点数の作り方はここには書かない。
+   ================================================================== */
+
+/* 節気表。名前診断は使わないので、ページの読み込みでは取りに行かず、
+   運勢のところに触れたときに初めて落とす（40KB 弱）。kanji.json と
+   同じで、失敗しても resolve してボタンを固まらせない。 */
+let stReady = null;
+function loadSolarTerms(){
+  if (stReady) return stReady;
+  stReady = fetch('/solar-terms.json')
+    .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)))
+    .then(j => { Saju.load(j); return true; })
+    .catch(() => false);
+  return stReady;
+}
+
+/* 時刻は 2 時間ごとの時辰で選ばせる。分まで入れさせても、真太陽時に
+   直したあと 2 時間の枠に落ちるので、ほとんどの人にとって意味がない。 */
+function fillFortuneInputs(){
+  const h = $('f-h');
+  h.innerHTML = '<option value="">わからない</option>' +
+    Array.from({length: 24}, (_, i) =>
+      `<option value="${i}">${String(i).padStart(2,'0')}:00 〜 ${String(i).padStart(2,'0')}:59</option>`
+    ).join('');
+  $('f-city').innerHTML = Saju.CITIES.map(c =>
+    `<option value="${esc(c.id)}">${esc(c.ja)}（${esc(c.ko)}）</option>`).join('');
+  $('f-city').value = 'tokyo';   // 利用者の多くは日本在住
+}
+
+function fortuneError(msg){
+  const e = $('f-err');
+  e.textContent = msg;
+  e.classList.toggle('on', !!msg);
+  return !msg;
+}
+
+/* 「今日」は端末の暦日で決める。日柱は真太陽時 23 時で翌日に送るが、
+   それは生まれた瞬間の話で、画面に出す「今日」は利用者が今日だと
+   思っている日と一致していないと、日付表示が食い違う。 */
+function todayParts(){
+  const n = new Date();
+  return { y: n.getFullYear(), m: n.getMonth() + 1, d: n.getDate() };
+}
+const iso = p => `${p.y}-${String(p.m).padStart(2,'0')}-${String(p.d).padStart(2,'0')}`;
+
+function pillarBox(label, gz, ko){
+  return `<div class="f-pillar${label === '日柱' ? ' is-day' : ''}">
+    <span class="lb">${esc(label)}</span>
+    <span class="gz">${gz ? esc(gz.hanja) : '—'}</span>
+    <span class="ko">${gz ? esc(gz.stem + gz.branch) : esc(ko || '不明')}</span>
+  </div>`;
+}
+
+function renderFortune(mine, today, res, prev){
+  const diff = Fortune.diff(res.scores, prev);
+  const rows = Fortune.CATS.map(c => {
+    const v = res.scores[c.id], g = res.grades[c.id];
+    const d = diff ? diff.by[c.id] : null;
+    const cls = d === null ? '' : d > 0 ? 'up' : d < 0 ? 'down' : 'flat';
+    const txt = d === null ? '' : d > 0 ? `↑ +${d}` : d < 0 ? `↓ ${d}` : '→ 0';
+    // 等級と増減は並べる。片方を消すと、戻ってきた人には等級が
+    // 見えず、初めての人には増減が見えない、という別々の画面になる。
+    return `<div class="f-row${c.id === 'total' ? ' is-total' : ''}">
+      <div class="f-name">${esc(c.ja)}<small class="ko">${esc(c.ko)}</small></div>
+      <div class="f-score">${v}</div>
+      <div class="f-grade">${esc(g.ja)}</div>
+      <div class="f-bar"><i style="width:${v}%"></i></div>
+      <div class="f-delta ${cls}">${esc(txt)}</div>
+    </div>`;
+  }).join('');
+
+  // 比較は「あなたの昨日」とは書かない。同じ人かどうかを確かめていない
+  // ので（確かめるには生年月日を保存することになる）、書けるのは
+  // 「前回」までで、しかも実際の日付を出す必要がある。
+  const cmp = diff
+    ? `<div class="f-cmp"><span>前回（${esc(diff.date)}）と比べて</span>
+         <span>${esc(Fortune.grade(res.scores.total).ja)}</span></div>`
+    : `<p class="f-first">明日また来ると、前回との増減がわかります。
+         保存されるのは点数と日付だけで、生年月日は残りません。</p>`;
+
+  const st = res.scores.study;
+  const next = st < 50
+    ? `<p class="f-next">学習運は <b>${st}</b>。こんな日は気負わず、
+         <b>一語だけ</b>でどうぞ。下の診断で、あなたの名前の漢字から
+         韓国語の単語を 1 つ覚えられます。</p>`
+    : `<p class="f-next">学習運は <b>${st}</b>。伸びる日です。
+         下の診断で、あなたの名前から韓国語を覚えていきましょう。</p>`;
+
+  $('f-result').innerHTML = `
+    <div class="f-head">
+      <h3>${esc(iso(todayParts()))} の運勢</h3>
+      <span class="f-date">今日の日辰 <b>${esc(today.day.hanja)}</b>
+        ／ あなたの日柱 <b>${esc(mine.day.hanja)}</b></span>
+    </div>
+    <div class="f-pillars">
+      ${pillarBox('年柱', mine.year)}
+      ${pillarBox('月柱', mine.month)}
+      ${pillarBox('日柱', mine.day)}
+      ${pillarBox('時柱', mine.hour, '時刻不明')}
+    </div>
+    ${cmp}
+    ${rows}
+    ${mine.notes.length ? `<p class="hint">${mine.notes.map(esc).join('<br>')}</p>` : ''}
+    ${next}
+    <p class="disclaim">
+      ※ 四柱（사주）の考え方をもとにした、エンターテインメント目的のコンテンツです。
+      年柱は立春、月柱は十二節で切り替え、時刻は真太陽時に直しています。
+    </p>`;
+  $('f-result').hidden = false;
+}
+
+async function runFortune(){
+  fortuneError('');
+  const y = parseInt($('f-y').value, 10),
+        m = parseInt($('f-m').value, 10),
+        d = parseInt($('f-d').value, 10);
+  const hv = $('f-h').value;
+
+  if (!(y >= 1930 && y <= 2030)) return fortuneError('生まれた年を 1930〜2030 で入れてください');
+  if (!(m >= 1 && m <= 12))      return fortuneError('月を 1〜12 で入れてください');
+  if (!(d >= 1 && d <= 31))      return fortuneError('日を 1〜31 で入れてください');
+  // 2月30日のような日付をここで弾く。Date は勝手に繰り上げてしまう。
+  const chk = new Date(Date.UTC(y, m - 1, d));
+  if (chk.getUTCMonth() + 1 !== m || chk.getUTCDate() !== d)
+    return fortuneError(`${y}年${m}月${d}日 は存在しない日付です`);
+
+  if (!await loadSolarTerms())
+    return fortuneError('暦のデータを読み込めませんでした。通信環境を確かめて、もう一度お試しください');
+
+  const city = $('f-city').value;
+  let mine, today;
+  try {
+    mine  = Saju.pillars({ y, m, d, hour: hv === '' ? null : parseInt(hv, 10), city });
+    today = Saju.pillars({ ...todayParts(), hour: 12, city });
+  } catch (e) {
+    return fortuneError('その生年月日では計算できませんでした');
+  }
+
+  const res  = Fortune.of(mine, today);
+  const prev = Fortune.save(iso(todayParts()), res.scores);
+  renderFortune(mine, today, res, prev);
+  $('f-result').scrollIntoView({behavior:'smooth', block:'nearest'});
+  return true;
+}
+
 /* 漢字DBの読み込みを待ってから診断する。ふつうは入力中に読み終わっているので
    待ち時間は発生しない。読み込みに失敗していても resolve するので固まらない。 */
 function go(){ kdbReady.then(run); }
 
+fillFortuneInputs();
+$('f-go').addEventListener('click', runFortune);
+['f-y','f-m','f-d'].forEach(id => {
+  $(id).addEventListener('keydown', e => { if (e.key === 'Enter') runFortune(); });
+});
+
 $('go').addEventListener('click', go);
-$('go2').addEventListener('click', run2);
+/* STEP 6 の干支は暦の年で出している。四柱では立春が年の境なので、
+   1〜2月生まれは食い違う。注記を出すために節気表を待つ。 */
+$('go2').addEventListener('click', () => loadSolarTerms().then(run2));
 
 $('talk-again').addEventListener('click', renderScene);
 

@@ -399,17 +399,30 @@ jobs:
             *) echo "  ✗ ads.txt にパブリッシャーIDがありません"; fail=1 ;;
           esac
 
-          # 共用の JS と CSS は名前に版を持たないので、キャッシュが長いと
-          # 「新しい HTML が古いファイルを呼ぶ」が起きる。.htaccess で
-          # 毎回確認させているが、サーバーの設定次第で効かないことがある
-          # ので、実際に返るヘッダで見る。
+          # 共用ファイルは build-site.sh が ?v=<内容ハッシュ> を付けている。
+          # 見るべきは「HTML が実際に呼んでいるURL」で、素のパスではない。
           #
-          # CSS をこの確認から外していたせいで、新しい HTML と1週間前の
-          # page.css が組み合わさる状態を実際に出した。崩れて見えるだけで
-          # 200 は返るため、状態コードを見ていても気づけない。
-          echo "共用 JS・CSS のキャッシュ（版が無いので確認必須）"
-          for p in /fortune.js /amulet.js /page.css; do
-            cc=$(curl -sI --max-time 20 "$BASE$p" | tr -d '\r' \
+          # Xserver は Apache の前に nginx を置いていて、そこがURL単位で
+          # 応答を抱える。素のパスは古い写しが残り続けることがあるが、
+          # 中身が変われば ?v= が変わるので利用者には新しい方が届く。
+          echo "HTML が呼んでいる共用ファイル（?v= 付き）"
+          home=$(curl -s --max-time 20 "$BASE/")
+          refs=$(printf '%s' "$home" | grep -oE '(href|src)="/?[a-z-]+\.(css|js)\?v=[0-9a-f]+"' \
+                 | sed 's/.*="//;s/"$//' | sort -u)
+          if [ -z "$refs" ]; then
+            echo "  ✗ ?v= 付きの参照が1つも見つかりません（版付けが効いていません）"; fail=1
+          fi
+          for p in $refs; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$BASE/${p#/}" || echo 000)
+            if [ "$code" = "200" ]; then echo "  ✓ $p → 200"
+            else echo "  ✗ $p → $code"; fail=1; fi
+          done
+
+          # .htaccess の no-cache 指定そのものは、nginx の写しを避けて確かめる。
+          # 版付けがあるので実害は無いが、設定が壊れたことには気づきたい。
+          echo ".htaccess の no-cache 指定（nginx の写しを迂回して確認）"
+          for p in /page.css /fortune.js; do
+            cc=$(curl -sI --max-time 20 "$BASE$p?cb=$RANDOM$$" | tr -d '\r' \
                  | grep -i '^cache-control:' | cut -d' ' -f2- || true)
             case "$cc" in
               *no-cache*) echo "  ✓ $p → $cc" ;;

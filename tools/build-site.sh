@@ -164,6 +164,47 @@ done
 
 [ "$fail" -eq 0 ] || exit 1
 
+# --- 共用ファイルの参照に内容ハッシュを付ける -------------------------
+#
+# Xserver は Apache の前に nginx を置いており、そこが応答をURL単位で
+# キャッシュする。.htaccess で no-cache を返すようにしても、nginx が
+# すでに抱えている古い応答は差し替わらない ── 実際、page.css を
+# no-cache に変えたあとも一週間の max-age が返り続けた。
+#
+# ヘッダに頼らず、中身が変わったらURLが変わるようにする。
+# ?v= が変われば nginx にとってもブラウザにとっても別のURLなので、
+# 古い写しが残っていても新しい方を取りに行く。
+python3 - "$OUT" <<'PY'
+import hashlib, pathlib, re, sys
+
+out = pathlib.Path(sys.argv[1])
+assets = sorted(p.name for p in out.iterdir()
+                if p.suffix in ('.css', '.js') and p.is_file())
+ver = {a: hashlib.sha256((out / a).read_bytes()).hexdigest()[:8] for a in assets}
+
+for html in out.glob('*.html'):
+    s = t = html.read_text(encoding='utf-8')
+    for a, v in ver.items():
+        # href="page.css" と href="/page.css" の両方が使われている
+        s = re.sub(r'((?:href|src)=")(/?' + re.escape(a) + r')(")',
+                   lambda m: f'{m.group(1)}{m.group(2)}?v={ver[a]}{m.group(3)}', s)
+    if s != t:
+        html.write_text(s, encoding='utf-8')
+
+print('  版を付けた共用ファイル: ' + ', '.join(f'{a}?v={v}' for a, v in ver.items()))
+
+# 付け忘れが無いか確かめる。1つでも素のままだと、そのファイルだけ
+# 古い写しを掴み続ける。
+missed = []
+for html in out.glob('*.html'):
+    s = html.read_text(encoding='utf-8')
+    for a in ver:
+        if re.search(r'(?:href|src)="/?' + re.escape(a) + r'"', s):
+            missed.append(f'{html.name} → {a}')
+if missed:
+    sys.exit('✗ 版が付いていない参照: ' + ', '.join(missed))
+PY
+
 echo "✓ dist/ を作成しました（$(find "$OUT" -type f | wc -l) ファイル / $(du -sh "$OUT" | cut -f1)）"
 echo "  公開ホスト: ${host:-未検出}"
 find "$OUT" -type f | sed "s|^$OUT/|  |" | sort

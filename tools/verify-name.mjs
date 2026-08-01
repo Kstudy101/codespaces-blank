@@ -71,6 +71,9 @@ const conv = (s) => box.kanaToHangul(s).join("");
    あるので、同じ文脈に足して読ませる（decomp() を共有するため）。 */
 vm.runInContext(slice("const OHAENG = {", "   4b."), box, { filename: "index.html<ohaeng>" });
 vm.runInContext(slice("function hasJong(word){", "   6. 描画"), box, { filename: "index.html<josa>" });
+vm.runInContext(slice("const SCENES = [", "let sceneIdx") +
+                "\n;globalThis.SCENES=SCENES;globalThis.fillName=fillName;",
+                box, { filename: "index.html<scenes>" });
 vm.runInContext(slice("  const NUM = ['','일'", "  $('d-birth')") +
                 "\n;globalThis.OHAENG=OHAENG;globalThis.ZODIAC=ZODIAC;globalThis.sino=sino;globalThis.MONTH=MONTH;",
                 box, { filename: "index.html<num>" });
@@ -299,6 +302,102 @@ check("助詞の選び方が 2 つの実装で一致する", () => {
   }
   assert(!bad.length, bad.join(" / "));
   return "이/가・이에요/예요 とも一致";
+});
+
+head("[場面会話]  助詞は「直前の文字」に従う。離すと別の語で決まってしまう");
+
+/* SCENES の中の置き換え記号。index.html の 4b. の注意書きがそのまま規則。
+
+     {ieyo}{eun}{ga}  名前のパッチムで形が変わる → 名前の直後にしか置けない
+     {voc}            名前＋아/야 に展開される   → 自分で名前を含むので単独
+     {name}           そのまま
+
+   「{name} 씨{ga}」のように間に語を挟むと、助詞は 씨 ではなく名前で決まる。
+   画面には出るので壊れて見えず、韓国語だけが間違う。                    */
+const PARTICLES = ["ieyo", "eun", "ga"];
+
+function lines() {
+  const out = [];
+  for (const sc of box.SCENES)
+    for (const [who, ko, ja] of sc.lines) out.push({ t: sc.t, who, ko, ja });
+  return out;
+}
+
+check("場面と台詞の形がそろっている", () => {
+  assert(box.SCENES.length >= 5, `場面が ${box.SCENES.length} 件`);
+  for (const sc of box.SCENES) {
+    assert(sc.p && sc.t && Array.isArray(sc.lines), `${sc.t} の形が違います`);
+    for (const l of sc.lines)
+      assert(l.length === 3 && l.every(x => typeof x === "string"),
+        `${sc.t} に [話者, 韓, 日] でない行があります`);
+  }
+  const n = lines().length;
+  return `${box.SCENES.length} 場面 / ${n} 行`;
+});
+
+check("パッチムで変わる助詞が、名前の直後にある", () => {
+  const bad = [];
+  for (const l of lines())
+    for (const key of PARTICLES) {
+      let at = -1;
+      while ((at = l.ko.indexOf(`{${key}}`, at + 1)) >= 0) {
+        const before = l.ko.slice(0, at);
+        if (!before.endsWith("{name}"))
+          bad.push(`${l.t}「${l.ko}」の {${key}} が名前の直後にありません`);
+      }
+    }
+  assert(!bad.length, bad.join(" / "));
+  return `${PARTICLES.map(k => "{" + k + "}").join(" ")} すべて名前の直後`;
+});
+
+check("{voc} は名前を含むので単独で置かれている", () => {
+  const bad = [];
+  for (const l of lines()) {
+    let at = -1;
+    while ((at = l.ko.indexOf("{voc}", at + 1)) >= 0)
+      if (l.ko.slice(0, at).endsWith("{name}"))
+        bad.push(`${l.t}「${l.ko}」で名前が二重になります`);
+  }
+  assert(!bad.length, bad.join(" / "));
+  return "名前の二重出力なし";
+});
+
+check("日本語の行は {name} しか使っていない", () => {
+  // 日本語側は {name} だけを差し替える（ふりがなを入れるため）。
+  // 助詞の記号を書くと、画面に {ieyo} がそのまま出る。
+  const bad = [];
+  for (const l of lines())
+    for (const m of l.ja.matchAll(/\{([a-z]+)\}/g))
+      if (m[1] !== "name") bad.push(`${l.t}「${l.ja}」に {${m[1]}}`);
+  assert(!bad.length, bad.join(" / "));
+  return "日本語側は {name} のみ";
+});
+
+check("差し替え後に記号が残らない", () => {
+  // 綴りを間違えた記号（{gaa} など）はここで出る。パッチムのある名前と
+  // ない名前の両方で通す ── 片方でしか通らない書き方を弾くため。
+  const bad = [];
+  for (const name of ["\ubbfc", "\uc544\uc774"]) {            // 민（パッチムあり）/ 아이（なし）
+    for (const l of lines()) {
+      const ko = box.fillName(l.ko, name);
+      if (/[{}]/.test(ko)) bad.push(`${name}: ${l.ko} \u2192 ${ko}`);
+      const ja = l.ja.replace(/\{name\}/g, "ミン");
+      if (/[{}]/.test(ja)) bad.push(`${name}: ${l.ja} \u2192 ${ja}`);
+    }
+  }
+  assert(!bad.length, bad.slice(0, 3).join(" / "));
+  return "パッチムあり・なし両方で記号が残らない";
+});
+
+check("助詞がパッチムに従って実際に変わる", () => {
+  // 記号が置き換わっているだけでなく、名前によって形が変わること。
+  const withJong = box.fillName("{name}{ieyo}", "\ubbfc");
+  const without  = box.fillName("{name}{ieyo}", "\uc544\uc774");
+  assert(withJong.endsWith("\uc774\uc5d0\uc694"), `민 \u2192 ${withJong}`);
+  assert(without.endsWith("\uc608\uc694"), `아이 \u2192 ${without}`);
+  const v1 = box.fillName("{voc}", "\ubbfc"), v2 = box.fillName("{voc}", "\uc544\uc774");
+  assert(v1 === "\ubbfc\uc544" && v2 === "\uc544\uc774\uc57c", `${v1} / ${v2}`);
+  return `민${withJong.slice(1)} / 아이${without.slice(2)} / ${v1} / ${v2}`;
 });
 
 /* ---- 2. 手書きの漢字音 -----------------------------------

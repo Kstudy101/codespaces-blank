@@ -408,7 +408,7 @@ check("22:00〜01:59 を 1 分ずつ（4 都市 × 3 日）", () => {
           `${city} ${y}-${m}-${d} ${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}: `
           + `真太陽時 ${r.solar.trueSolar} で日柱 ${r.day.hanja}（${base.day.hanja} のはず）`);
         if (sh >= 23) {
-          assert(r.notes.some((s) => s.includes("23")), "送ったのに notes に出ていません");
+          assert(r.notes.some((s) => s.includes("23 時")), "送ったのに notes に出ていません");
           moves++;
         }
         if (sh >= 23 || sh < 1)      // 子時は真太陽時 23:00〜01:00
@@ -438,7 +438,7 @@ head("[時刻不明]  3 柱で返す");
 check("hour が null なら時柱を落とし、その旨を返す", () => {
   const r = Saju.pillars({ y: 1990, m: 5, d: 17, hour: null, city: "seoul" });
   assert(r.hour === null, "時柱が入っています");
-  assert(r.notes.some((s) => s.includes("시주")), `notes が ${JSON.stringify(r.notes)}`);
+  assert(r.notes.some((s) => s.includes("時柱を除いた")), `notes が ${JSON.stringify(r.notes)}`);
   const sum = Object.values(r.elements).reduce((a, b) => a + b, 0);
   assert(sum === 6, `五行の合計が ${sum}（3 柱なので 6 のはず）`);
   const known = Saju.pillars({ y: 1990, m: 5, d: 17, hour: 12, city: "seoul" });

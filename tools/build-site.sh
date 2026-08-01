@@ -95,6 +95,31 @@ if [ -n "$host" ]; then
   done
 fi
 
+# 4) sitemap の網羅性。両方向を見る。
+#
+#    ページを足して sitemap に入れ忘れる、が起きやすい。逆に、消した
+#    ページが sitemap に残っているとクローラーに 404 を出し続ける。
+#
+#    載せないページは意図して載せていないので、ここに理由つきで並べる:
+#      words … 端末ごとの一覧で、クローラーには常に空に見える（noindex）
+#      404   … エラーページ
+SITEMAP_SKIP=" words 404 "
+
+for html in "$OUT"/*.html; do
+  name=$(basename "$html" .html)
+  case "$SITEMAP_SKIP" in *" $name "*) continue ;; esac
+  if [ "$name" = "index" ]; then want="<loc>https://$host/</loc>"
+  else                            want="<loc>https://$host/$name</loc>"; fi
+  grep -qF "$want" "$OUT/sitemap.xml" \
+    || { echo "✗ sitemap.xml: /$name が載っていません" >&2; fail=1; }
+done
+
+grep -o '<loc>https://[^<]*</loc>' "$OUT/sitemap.xml" \
+  | sed "s|<loc>https://$host||;s|</loc>||" | sort -u | while read -r p; do
+    [ "$p" = "/" ] && p="/index"
+    [ -e "$OUT$p.html" ] || { echo "✗ sitemap.xml: $p の実体がありません" >&2; exit 1; }
+  done || fail=1
+
 [ "$fail" -eq 0 ] || exit 1
 
 echo "✓ dist/ を作成しました（$(find "$OUT" -type f | wc -l) ファイル / $(du -sh "$OUT" | cut -f1)）"

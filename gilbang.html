@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>恵方 × 길방 — 今日の方位と손없는 날 | 名前で学ぶ韓国語</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 32 32%22%3E%3Crect width%3D%2232%22 height%3D%2232%22 rx%3D%227%22 fill%3D%22%23e0526b%22%2F%3E%3Ccircle cx%3D%2216.00%22 cy%3D%228.80%22 r%3D%224.6%22 fill%3D%22%23fff%22%2F%3E%3Ccircle cx%3D%2222.85%22 cy%3D%2213.78%22 r%3D%224.6%22 fill%3D%22%23fff%22%2F%3E%3Ccircle cx%3D%2220.23%22 cy%3D%2221.82%22 r%3D%224.6%22 fill%3D%22%23fff%22%2F%3E%3Ccircle cx%3D%2211.77%22 cy%3D%2221.82%22 r%3D%224.6%22 fill%3D%22%23fff%22%2F%3E%3Ccircle cx%3D%229.15%22 cy%3D%2213.78%22 r%3D%224.6%22 fill%3D%22%23fff%22%2F%3E%3Ccircle cx%3D%2216%22 cy%3D%2216%22 r%3D%223.1%22 fill%3D%22%23ffd9df%22%2F%3E%3C%2Fsvg%3E">
+<meta name="description" content="日本の恵方と韓国の손없는 날（손のいない日）。恵方は年の十干で 4 方向、손없는 날は旧暦の日付で決まります。今日の方位と、生年月日から見る吉方をその場で計算します。">
+<link rel="canonical" href="https://www.kstudy101.jp/gilbang">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="名前で学ぶ韓国語">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:url" content="https://www.kstudy101.jp/gilbang">
+<meta property="og:title" content="恵方 × 길방｜名前で学ぶ韓国語">
+<meta property="og:description" content="恵方は年の十干で、손없는 날は旧暦の日付で決まります。今日の方位をその場で。">
+<meta property="og:image" content="https://www.kstudy101.jp/ogp.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="恵方 × 길방｜名前で学ぶ韓国語">
+<meta name="twitter:description" content="恵方は年の十干で、손없는 날は旧暦の日付で決まります。今日の方位をその場で。">
+<meta name="twitter:image" content="https://www.kstudy101.jp/ogp.png">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1754834273377558"
+     crossorigin="anonymous"></script>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-93VGD4GH58"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag("js", new Date());
+
+  gtag("config", "G-93VGD4GH58");
+</script>
+<!-- Microsoft Clarity -->
+<script type="text/javascript">
+    (function(c,l,a,r,i,t,y){
+        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, "clarity", "script", "xv3g9j6ivf");
+</script>
+<link rel="stylesheet" href="page.css">
+<style>
+/* 方位。page.css を土台に、この 1 ページだけの部品を足す。 */
+.gb-card{
+  border:1px solid var(--line); border-radius:16px; background:var(--surface);
+  padding:22px; box-shadow:var(--shadow); margin:0 0 16px;
+  display:flex; gap:20px; align-items:center;
+}
+.gb-card.is-free{background:var(--accent-soft); border-color:transparent}
+.gb-body{flex:1; min-width:0}
+.gb-lb{font-size:.72rem; font-weight:700; color:var(--text-dim); letter-spacing:.04em}
+.gb-dir{font-size:1.7rem; font-weight:700; line-height:1.3; margin-top:4px}
+.gb-dir .ko{font-size:.95rem; font-weight:400; color:var(--text-dim); margin-left:8px}
+.gb-sub{font-size:.82rem; color:var(--text-dim); line-height:1.8; margin-top:6px}
+
+/* 方位盤。針は角度をそのまま回す（北 0 度・時計回り）。 */
+.compass{
+  position:relative; flex:none; width:98px; height:98px; border-radius:50%;
+  border:2px solid var(--line); background:var(--surface-2);
+}
+.compass span{
+  position:absolute; font-size:.62rem; font-weight:700; color:var(--text-dim);
+  left:50%; top:50%; transform:translate(-50%,-50%);
+}
+.compass .n{top:9px} .compass .s{top:auto; bottom:9px; transform:translate(-50%,50%)}
+.compass .w{left:11px; transform:translate(-50%,-50%)}
+.compass .e{left:auto; right:11px; transform:translate(50%,-50%)}
+.compass i{
+  position:absolute; left:50%; top:50%; width:3px; height:34px;
+  background:var(--accent); border-radius:2px; transform-origin:50% 100%;
+  transform:translate(-50%,-100%) rotate(var(--deg,0deg));
+}
+.compass.is-center i{
+  height:12px; width:12px; border-radius:50%;
+  transform:translate(-50%,-50%); background:var(--gold);
+}
+.compass.is-none i{display:none}
+.compass.is-none::after{
+  content:"◯"; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  font-size:1.6rem; color:var(--accent);
+}
+.compass.warn i{background:var(--blue)}
+
+.gb-form{
+  border:1px solid var(--line); border-radius:16px; padding:22px;
+  background:var(--surface); margin:0 0 16px;
+}
+.gb-form .row{display:flex; gap:12px; margin-bottom:14px}
+.gb-form .row > div{flex:1; min-width:0}
+.gb-form label{display:block; font-size:.78rem; font-weight:700; margin-bottom:5px; color:var(--text-dim)}
+.gb-form input, .gb-form select{
+  width:100%; padding:11px 12px; font-size:1rem; border:1px solid var(--line);
+  border-radius:10px; background:var(--bg); color:var(--text);
+}
+.gb-form button{
+  width:100%; padding:13px; font-size:.95rem; font-weight:700; border:0;
+  border-radius:11px; background:var(--accent); color:#fff; cursor:pointer;
+}
+.gb-err{color:var(--accent); font-size:.82rem; margin:10px 0 0; display:none}
+.gb-err.on{display:block}
+.gb-el{display:flex; gap:6px; flex-wrap:wrap; margin-top:10px}
+.gb-el span{font-size:.74rem; background:var(--surface-2); border-radius:8px; padding:4px 9px}
+.gb-el b{color:var(--accent)}
+@media (max-width:480px){
+  .gb-card{flex-direction:column; text-align:center; gap:14px}
+  .gb-form .row{flex-direction:column; gap:12px}
+}
+</style>
+</head>
+<body>
+
+<div class="site-head"><a href="/">← 名前で学ぶ韓国語 トップへ</a></div>
+
+<div class="wrap">
+
+<h1 class="page-title">恵方 × 길방</h1>
+<p class="updated">에호와 길방</p>
+
+<p class="lead">
+  日本の<b>恵方</b>は年に 1 つ、韓国の<b class="ko">손없는 날</b>は
+  旧暦の日付で 5 日ごとに移ります。どちらも「どっちを向くか」の話ですが、
+  決め方も変わる周期も違います。
+</p>
+
+<div id="gb-today">
+  <!-- JS で置き換わる。置き換わらなかったときに空にならないよう、
+       読み込み中の表示を置いておく。 -->
+  <p class="note">今日の方位を計算しています…</p>
+</div>
+
+<h2>あなたの吉方</h2>
+<p>
+  生年月日から四柱を出し、<strong>足りない五行の方位</strong>を出します。
+  入力は保存されません。
+</p>
+
+<div class="gb-form" data-clarity-mask="true">
+  <div class="row">
+    <div><label for="g-y">年</label>
+      <input type="number" id="g-y" placeholder="1995" min="1930" max="2030" autocomplete="off"></div>
+    <div><label for="g-m">月</label>
+      <input type="number" id="g-m" placeholder="4" min="1" max="12" autocomplete="off"></div>
+    <div><label for="g-d">日</label>
+      <input type="number" id="g-d" placeholder="12" min="1" max="31" autocomplete="off"></div>
+  </div>
+  <div class="row">
+    <div><label for="g-h">生まれた時刻</label><select id="g-h"></select></div>
+    <div><label for="g-city">生まれた場所</label><select id="g-city"></select></div>
+  </div>
+  <button type="button" id="g-go">吉方を見る</button>
+  <p class="gb-err" id="g-err"></p>
+</div>
+
+<div id="gb-mine"></div>
+
+<h2>恵方とは</h2>
+<p>
+  その年の<b>歳徳神（としとくじん）</b>がいるとされる方角です。
+  恵方巻きを食べるときに向く、あの方向のこと。
+  年の<strong>十干</strong>で決まり、<strong>方向は 4 つしかありません</strong> —
+  東北東・西南西・南南東・北北西を繰り返します。十干は 10 あるので、
+  同じ方角が 2〜3 の干に割り当てられます（戊年と癸年は丙年と同じ南南東）。
+</p>
+<p>
+  切り替わるのは<strong>立春</strong>です。節分の豆まきが前日の行事なのは、
+  そこが年の境だからで、このサイトの<a href="/">今日の運勢</a>が
+  年柱を立春で切り替えているのと同じ区切りです。
+</p>
+
+<h2>손없는 날（손のいない日）とは</h2>
+<p>
+  韓国で引っ越しや開店の日取りを決めるときに、今でも使われる考え方です。
+  <b class="ko">손</b>は方角をまわって邪魔をするものとされ、
+  <strong>旧暦の日付の一の位</strong>でどこにいるかが決まります。
+</p>
+<div class="tbl">
+<table>
+  <tr><th>旧暦の日（一の位）</th><th>손のいる方角</th><th>意味</th></tr>
+  <tr><td>1・2 日</td><td>東（<span class="ko">동</span>）</td><td>東を避ける</td></tr>
+  <tr><td>3・4 日</td><td>南（<span class="ko">남</span>）</td><td>南を避ける</td></tr>
+  <tr><td>5・6 日</td><td>西（<span class="ko">서</span>）</td><td>西を避ける</td></tr>
+  <tr><td>7・8 日</td><td>北（<span class="ko">북</span>）</td><td>北を避ける</td></tr>
+  <tr><td>9・0 日</td><td>いない</td><td><b class="ko">손없는 날</b> — どの方角でもよい</td></tr>
+</table>
+</div>
+<p>
+  9 日と 0 日は손が天に上がるとされ、<strong>10 日のうち 2 日</strong>が
+  「どこへ動いてもよい日」になります。韓国の引っ越し業者はこの日に予約が集中し、
+  料金が上がることもあります。カレンダーに <b class="ko">손없는 날</b> と
+  書き込まれているのを見かけたら、これのことです。
+</p>
+<p>
+  <strong>恵方との大きな違いは、向く先ではなく避ける先を言う点です。</strong>
+  恵方は「こちらを向くとよい」、손없는 날は「こちらは避けよ、ただし今日はどこでもよい」。
+  同じ方位の話でも、良い方を指すか悪い方を指すかが逆になっています。
+</p>
+
+<h2>五行と方位</h2>
+<p>
+  もうひとつ、四柱から見る方位があります。五行はそれぞれ方角と季節に結びついていて、
+  <b class="ko">목</b>（木）＝東・春、<b class="ko">화</b>（火）＝南・夏、
+  <b class="ko">금</b>（金）＝西・秋、<b class="ko">수</b>（水）＝北・冬、
+  そして<b class="ko">토</b>（土）＝中央です。
+</p>
+<p>
+  上の「あなたの吉方」は、命式に<strong>足りない五行</strong>の方角を出しています。
+  足りないものを補う方角へ動くとよい、という考え方です。
+  土が中央なのは、四季の変わり目それぞれに土が配されるためで、
+  だから土だけが特定の方角を持ちません。
+</p>
+
+<div class="pagenav">
+  <a href="/" class="primary">🔮 今日の運勢を見る</a>
+  <a href="/omikuji">🎋 おみくじを引く</a>
+  <a href="/words">📗 単語帳</a>
+</div>
+
+<footer>
+  <p class="foot-note">
+    ※ 当サイトは広告配信（Google AdSense）、アクセス解析（Google アナリティクス）、
+    および利用状況の記録（Microsoft Clarity）を利用しており、
+    これらのために Cookie が使用される場合があります。
+    診断機能に入力されたお名前・生年月日が、広告配信やアクセス解析に
+    利用されることはありません。
+    詳しくは<a href="/privacy">プライバシーポリシー</a>、および
+    <a href="https://policies.google.com/technologies/ads?hl=ja"
+       target="_blank" rel="noopener noreferrer">Google の広告に関するポリシー</a>
+    をご確認ください。
+  </p>
+  <p><b>名前で学ぶ韓国語</b> — powered by <a href="#" id="brand">Kstudy101</a></p>
+</footer>
+
+</div>
+
+<script src="/saju.js"></script>
+<script src="/gilbang.js"></script>
+<script>
+"use strict";
+
+const $ = id => document.getElementById(id);
+function esc(s){
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+/* 「今日」は端末の暦日。トップの運勢・おみくじと同じ区切りにそろえる。 */
+function todayParts(){
+  const n = new Date();
+  return { y:n.getFullYear(), m:n.getMonth()+1, d:n.getDate() };
+}
+const iso = p => `${p.y}-${String(p.m).padStart(2,'0')}-${String(p.d).padStart(2,'0')}`;
+
+function compass(dir, cls){
+  if (!dir) return `<div class="compass is-none ${cls||''}"><span class="n">北</span>
+    <span class="e">東</span><span class="s">南</span><span class="w">西</span><i></i></div>`;
+  const center = dir.deg === null;
+  return `<div class="compass ${center ? 'is-center' : ''} ${cls||''}"
+    style="--deg:${center ? 0 : dir.deg}deg">
+    <span class="n">北</span><span class="e">東</span><span class="s">南</span><span class="w">西</span>
+    <i></i></div>`;
+}
+
+function card(label, dir, title, sub, opts){
+  opts = opts || {};
+  return `<div class="gb-card ${opts.free ? 'is-free' : ''}">
+    ${compass(dir, opts.warn ? 'warn' : '')}
+    <div class="gb-body">
+      <div class="gb-lb">${esc(label)}</div>
+      <div class="gb-dir">${title}</div>
+      <div class="gb-sub">${sub}</div>
+    </div>
+  </div>`;
+}
+
+let ready = null;
+function load(){
+  if (ready) return ready;
+  ready = Promise.all([
+    fetch('/solar-terms.json').then(r => r.json()).then(j => Saju.load(j)),
+    fetch('/new-moons.json').then(r => r.json()).then(j => Gilbang.load(j))
+  ]).then(() => true).catch(() => false);
+  return ready;
+}
+
+async function renderToday(){
+  if (!await load()){
+    $('gb-today').innerHTML =
+      `<p class="note">暦のデータを読み込めませんでした。通信環境をご確認ください。</p>`;
+    return;
+  }
+  const t = todayParts(), today = Saju.pillars({ ...t, hour:12, city:'seoul' });
+
+  let son;
+  try { son = Gilbang.son(iso(t)); }
+  catch (e) { son = null; }
+
+  const eho = Gilbang.eho(today.year.stemIdx);
+  const flow = Gilbang.flow(today);
+
+  const sonCard = !son
+    ? ''
+    : son.free
+      ? card('今日 · 손없는 날', null,
+          `<b class="ko">손없는 날</b>`,
+          `旧暦 ${son.lunarDay} 日。손が天に上がっている日で、<b>どの方角へ動いてもよい</b>とされます。
+           引っ越しや大きな買い物の日取りに選ばれます。`, { free:true })
+      : card('今日 · 避ける方角',
+          son.dir,
+          `${esc(son.dir.ja)}<span class="ko">${esc(son.dir.ko)}</span>`,
+          `旧暦 ${son.lunarDay} 日は、손がこの方角にいるとされます。
+           次の<b class="ko">손없는 날</b>は旧暦 ${son.lunarDay < 9 ? 9 : son.lunarDay < 19 ? 19 : son.lunarDay < 29 ? 29 : 9} 日です。`,
+          { warn:true });
+
+  $('gb-today').innerHTML = sonCard
+    + card('今年の恵方', eho.dir,
+        `${esc(eho.dir.ja)}<span class="ko">${esc(eho.dir.ko)}</span>`,
+        `${today.sajuYear} 年（${esc(today.year.hanja)}）の恵方。立春から翌年の立春まで変わりません。`)
+    + card('今日の五行', flow.dir,
+        `${esc(flow.dir.ja)}<span class="ko">${esc(flow.dir.ko)}</span>`,
+        `今日の日辰は ${esc(today.day.hanja)}。日干の五行は
+         <b class="ko">${esc(flow.element)}</b> で、その気が向く方角です。`);
+}
+
+function error(msg){
+  const e = $('g-err');
+  e.textContent = msg;
+  e.classList.toggle('on', !!msg);
+  return !msg;
+}
+
+function fillInputs(){
+  $('g-h').innerHTML = '<option value="">わからない</option>' +
+    Array.from({length:24}, (_,i) =>
+      `<option value="${i}">${String(i).padStart(2,'0')}:00 〜 ${String(i).padStart(2,'0')}:59</option>`
+    ).join('');
+  $('g-city').innerHTML = Saju.CITIES.map(c =>
+    `<option value="${esc(c.id)}">${esc(c.ja)}（${esc(c.ko)}）</option>`).join('');
+  $('g-city').value = 'tokyo';
+}
+
+async function runMine(){
+  error('');
+  const y = parseInt($('g-y').value,10), m = parseInt($('g-m').value,10),
+        d = parseInt($('g-d').value,10), hv = $('g-h').value;
+  if (!(y >= 1930 && y <= 2030)) return error('生まれた年を 1930〜2030 で入れてください');
+  if (!(m >= 1 && m <= 12))      return error('月を 1〜12 で入れてください');
+  if (!(d >= 1 && d <= 31))      return error('日を 1〜31 で入れてください');
+  const chk = new Date(Date.UTC(y, m-1, d));
+  if (chk.getUTCMonth()+1 !== m || chk.getUTCDate() !== d)
+    return error(`${y}年${m}月${d}日 は存在しない日付です`);
+  if (!await load()) return error('暦のデータを読み込めませんでした');
+
+  let me;
+  try {
+    me = Saju.pillars({ y, m, d, hour: hv === '' ? null : parseInt(hv,10),
+                        city: $('g-city').value });
+  } catch (e) { return error('その生年月日では計算できませんでした'); }
+
+  const r = Gilbang.mine(me);
+  const bars = r.all.map(x =>
+    `<span>${esc(x.element)} ${x.count}${x.element === r.element ? ' <b>← 最も不足</b>' : ''}</span>`
+  ).join('');
+
+  $('gb-mine').innerHTML = card('あなたの吉方', r.dir,
+    `${esc(r.dir.ja)}<span class="ko">${esc(r.dir.ko)}</span>`,
+    `四柱は ${esc(me.year.hanja)} ${esc(me.month.hanja)} ${esc(me.day.hanja)}
+     ${me.hour ? esc(me.hour.hanja) : '（時刻不明）'}。
+     五行のうち <b class="ko">${esc(r.element)}</b> がいちばん足りないので、
+     その方角が補いになります。`)
+    + `<div class="gb-el">${bars}</div>`
+    + (me.notes.length ? `<p class="note">${me.notes.map(esc).join('<br>')}</p>` : '');
+  $('gb-mine').scrollIntoView({behavior:'smooth', block:'nearest'});
+  return true;
+}
+
+fillInputs();
+$('g-go').addEventListener('click', runMine);
+['g-y','g-m','g-d'].forEach(id => {
+  $(id).addEventListener('keydown', e => { if (e.key === 'Enter') runMine(); });
+});
+renderToday();
+</script>
+</body>
+</html>

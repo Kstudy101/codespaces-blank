@@ -3,3 +3,7 @@ node_modules/
 *.log
 .claude/settings.local.json
 dist/
+
+# JPL の暦（de421.bsp、約 17MB）。tools/build-solar-terms.py が
+# 初回に落としてくる中間物で、成果物は solar-terms.json の方。
+.ephem/

@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /* ==================================================================
-   verify-name.mjs — index.html の「名前の変換」
+   verify-name.mjs — index.html にインラインで書かれた学習データ
 
      使い方:  node tools/verify-name.mjs
 
-   このサイトの STEP 1 は「あなたの名前は韓国語でどう書くか」で、
-   それを出しているのは index.html にインラインで書かれた 2 つの表。
+   STEP 1〜6 が出しているものは、ほぼ全部 index.html の中の表。
 
      かな → ハングル   KANA1 / KANA2 + kanaToHangul()
      漢字 → 韓国漢字音 HANJA（手書き 222 字）
+     漢数詞           sino()（1995 → 천구백구십오）
+     十二支・五行     ZODIAC / OHAENG（saju.js 側にも同じものがある）
 
    どちらもこの저장소の中では何とも突き合わせていなかった。README に
    「jsdom で 53 ケース」と書いてあるが、それはここに無く、二度と走らない。
@@ -44,11 +45,42 @@ if (from < 0 || to < 0 || to <= from) {
 }
 const box = {};
 vm.createContext(box);
+
+/** index.html から見出しの間を切り出す。見出しが変われば落ちる ── そのとき
+    黙って検査を素通りするより、切り出せないと言って止まるほうがよい。 */
+function slice(startMark, endMark) {
+  const a = IDX.indexOf(startMark), b = IDX.indexOf(endMark, a + 1);
+  if (a < 0 || b <= a) {
+    console.error(`\u2717 index.html から切り出せません: ${startMark}`);
+    process.exit(1);
+  }
+  let out = IDX.slice(a, b);
+  // 見出しはコメントの中にあるので、切ると開いたままの /* が末尾に残る。
+  // 閉じられていない分は落とす。
+  while ((out.match(/\/\*/g) || []).length > (out.match(/\*\//g) || []).length)
+    out = out.slice(0, out.lastIndexOf("/*"));
+  return out;
+}
 // const 宣言は文脈オブジェクトの属性にならない（function は なる）ので、
 // 表を見たい分だけ明示的に出す。
 vm.runInContext(IDX.slice(from, to) + "\n;globalThis.KANA1=KANA1;globalThis.KANA2=KANA2;",
                 box, { filename: "index.html<kana>" });
 const conv = (s) => box.kanaToHangul(s).join("");
+
+/* 十二支・五行と、パッチム判定・漢数詞。どれも同じ script の中の別の場所に
+   あるので、同じ文脈に足して読ませる（decomp() を共有するため）。 */
+vm.runInContext(slice("const OHAENG = {", "   4b."), box, { filename: "index.html<ohaeng>" });
+vm.runInContext(slice("function hasJong(word){", "   6. 描画"), box, { filename: "index.html<josa>" });
+vm.runInContext(slice("  const NUM = ['','일'", "  $('d-birth')") +
+                "\n;globalThis.OHAENG=OHAENG;globalThis.ZODIAC=ZODIAC;globalThis.sino=sino;globalThis.MONTH=MONTH;",
+                box, { filename: "index.html<num>" });
+
+/* study.js は同じパッチム判定をもう 1 つ持っている（words.html から
+   index.html のインライン関数を呼べないため）。二重に持つと必ず片方だけ
+   直るので、突き合わせる相手として読み込む。 */
+const S = {};
+vm.createContext(S);
+vm.runInContext(fs.readFileSync("study.js", "utf8"), S, { filename: "study.js" });
 
 /* ---- 1. かな → ハングル ---------------------------------------------- */
 
@@ -166,6 +198,107 @@ check("終声は前の音節に付き、音節を増やさない", () => {
   }
   assert(!bad.length, bad.join(" / "));
   return "ん・っ を足しても音節数が変わらない";
+});
+
+/* ---- 2. 数と暦のことば ---------------------------------------------- */
+
+head("[漢数詞]  生年月日を韓国語で言う。1995 \u2192 천구백구십오");
+
+check("README に書いた読みになる", () => {
+  const cases = [
+    [1995, "천구백구십오"], [2026, "이천이십육"], [1900, "천구백"],
+    [2000, "이천"], [1000, "천"], [100, "백"], [10, "십"], [11, "십일"],
+    [1, "일"], [0, "영"], [30, "삼십"], [9999, "구천구백구십구"]
+  ];
+  const bad = [];
+  for (const [n, want] of cases) {
+    const got = box.sino(n);
+    if (got !== want) bad.push(`${n} \u2192 ${got}（${want} のはず）`);
+  }
+  assert(!bad.length, bad.join(" / "));
+  // 1 の位取りは読まない（일천ではなく천）。ここを間違えると全部の年がずれる
+  assert(box.sino(1000)[0] !== "\uc77c", "1000 が 일천 になっています");
+  return `${cases.length} 件`;
+});
+
+check("月名の不規則は 6 月と 10 月だけ", () => {
+  // 육월・십월 と読むのは誤り。画面でもそう説明しているので、
+  // 表と説明が離れると自分で書いた注意書きが嘘になる。
+  const bad = [];
+  for (let m = 1; m <= 12; m++) {
+    const want = m === 6 ? "\uc720" : m === 10 ? "\uc2dc" : box.sino(m);
+    if (box.MONTH[m] !== want) bad.push(`${m} 月が ${box.MONTH[m]}（${want} のはず）`);
+  }
+  assert(!bad.length, bad.join(" / "));
+  assert(box.MONTH[6] !== box.sino(6) && box.MONTH[10] !== box.sino(10),
+    "6 月・10 月が規則形と同じになっています");
+  return "6=유 / 10=시 / 他は漢数詞どおり";
+});
+
+head("[十二支・五行]  saju.js 側にも同じものがある");
+
+check("十二支の並びが saju.js と一致する", () => {
+  // ここがずれると、同じ人にトップとおみくじで違う띠が出る。
+  const idx = box.ZODIAC.map(z => z.ko);
+  assert(Array.isArray(idx) && idx.length === 12, `index.html 側が ${idx.length} 件`);
+  // saju.js は ZODIAC を公開していない（pillars() の結果に載せるだけ）ので、
+  // ソースの表そのものを読む。公開させるために saju.js を変えるより、
+  // 見る側で完結させるほうが波及が無い。
+  const m = /var ZODIAC = \[([^\]]+)\]/.exec(fs.readFileSync("saju.js", "utf8"));
+  assert(m, "saju.js に ZODIAC が見つかりません");
+  const list = m[1].split(",").map(t => t.trim().replace(/^"|"$/g, ""));
+  assert(idx.join(",") === list.join(","), `index=${idx.join("")} / saju=${list.join("")}`);
+  return `12 支一致（${idx.slice(0, 3).join(" ")}…）`;
+});
+
+check("五行の韓国語表記が他のファイルと同じ 5 つ", () => {
+  // saju.js / fortune.js / gilbang.js / amulet.js は 목화토금수 で通している。
+  // index.html だけ別の綴りになると、同じ五行が別物として並ぶ。
+  const ko = Object.values(box.OHAENG).map(o => o.ko).sort().join("");
+  assert(ko === "\uae08\ubaa9\uc218\ud1a0\ud654", `index.html の五行が ${ko}`);
+  return Object.values(box.OHAENG).map(o => o.ko).join(" ");
+});
+
+check("初声 19 個すべてに五行が割り当たっている", () => {
+  const cho = ["\u3131","\u3132","\u3134","\u3137","\u3138","\u3139","\u3141","\u3142","\u3143","\u3145",
+               "\u3146","\u3147","\u3148","\u3149","\u314a","\u314b","\u314c","\u314d","\u314e"];
+  const seen = {};
+  for (const c of cho) {
+    const e = box.choToOhaeng(c);
+    assert(box.OHAENG[e], `${c} が ${e}（OHAENG に無い）`);
+    seen[e] = (seen[e] || 0) + 1;
+  }
+  assert(Object.keys(seen).length === 5, `${Object.keys(seen).length} 種類しか出ません`);
+  return Object.entries(seen).map(([e, n]) => `${e}${n}`).join(" ");
+});
+
+head("[パッチム]  同じ判定が index.html と study.js の 2 か所にある");
+
+check("2 つの実装がハングルで同じ答えを出す", () => {
+  // words.html から index.html のインライン関数を呼べないので二重に持って
+  // いる。二重に持つと必ず片方だけ直るので、機械に見張らせる。
+  const bad = [];
+  let n = 0;
+  for (let c = 0xac00; c <= 0xd7a3; c += 7) {      // 全 11,172 音節を 7 つおきに
+    const ch = String.fromCharCode(c);
+    if (box.hasJong(ch) !== S.Study.hasJong(ch)) bad.push(ch);
+    n++;
+  }
+  assert(!bad.length, `${bad.length} 字で食い違い: ${bad.slice(0, 5).join(" ")}`);
+  return `${n} 音節で一致`;
+});
+
+check("助詞の選び方が 2 つの実装で一致する", () => {
+  const bad = [];
+  for (const w of ["\ubc15", "\ud558\ub098", "\uac74", "\uc544\uc774", "\uc57c", "\uc11c\uc6b8", "\ub3c4\ucfc4"]) {
+    const a = box.ega(w), b = S.Study.josa(w, "\uc774", "\uac00");
+    if (a !== b) bad.push(`${w}: index=${a} study=${b}`);
+    const c = box.ieyo(w);
+    const want = S.Study.hasJong(w) ? "\uc774\uc5d0\uc694" : "\uc608\uc694";
+    if (c !== want) bad.push(`${w}: ieyo=${c}（${want} のはず）`);
+  }
+  assert(!bad.length, bad.join(" / "));
+  return "이/가・이에요/예요 とも一致";
 });
 
 /* ---- 2. 手書きの漢字音 -----------------------------------

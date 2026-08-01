@@ -93,6 +93,19 @@ ErrorDocument 404 /404.html
 # キャッシュ
 #   HTML は毎回確認させる（内容を差し替えたらすぐ反映したいため）。
 #   kanji.json は差し替え頻度が低いので1日。
+#
+#   .js も HTML と同じ扱いにする。この設定を書いた時点では index.html が
+#   自己完結していて外部 JS が 1 つも無かったが、今は共用スクリプトが
+#   6 つある（saju/fortune/study/omikuji/gilbang/amulet）。
+#
+#   ファイル名に版が入っていないので、既定の 1 週間のままだと
+#   「HTML は毎回取り直すのに JS は最大 1 週間古いまま」という組み合わせが
+#   起きる。新しい HTML が古い JS を呼ぶ形になり、直したはずの不具合が
+#   一部の利用者にだけ残る ── しかも本人にしか再現しない。
+#
+#   no-cache は「保存するな」ではなく「使う前に確認しろ」なので、
+#   中身が変わっていなければ 304 が返るだけ。ファイルは 7〜19KB で
+#   トップでも 4 本なので、往復の増加は無視できる。
 # ------------------------------------------------------------------
 <IfModule mod_expires.c>
   ExpiresActive On
@@ -104,7 +117,9 @@ ErrorDocument 404 /404.html
   ExpiresByType image/svg+xml         "access plus 1 month"
 </IfModule>
 <IfModule mod_headers.c>
-  <FilesMatch "\.html$">
+  # 拡張子で見る。.js の MIME 型は環境によって text/javascript にも
+  # application/javascript にもなるので、ExpiresByType では取りこぼす。
+  <FilesMatch "\.(html|js)$">
     Header set Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
 </IfModule>

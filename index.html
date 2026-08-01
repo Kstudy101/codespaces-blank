@@ -560,6 +560,13 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 .attend a{margin-left:auto; color:var(--blue); font-weight:700; text-decoration:none}
 .attend a:hover{text-decoration:underline}
 
+/* まだ引いていないもの */
+.f-todo{
+  margin:12px 0 0; padding:13px 16px; border-radius:12px;
+  border:1px dashed var(--line); font-size:.84rem; line-height:1.8; color:var(--text-dim);
+}
+.f-todo a{color:var(--accent); font-weight:700}
+
 /* 今日の 3 語 */
 .f-words{margin-top:26px; padding-top:22px; border-top:1px solid var(--line)}
 .f-words h4{font-size:1rem; margin:0 0 6px}
@@ -1214,6 +1221,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 <script src="/saju.js"></script>
 <script src="/fortune.js"></script>
 <script src="/study.js"></script>
+<script src="/omikuji.js"></script>
 
 <script>
 "use strict";
@@ -2543,6 +2551,14 @@ function renderFortune(mine, today, res, prev){
       <a href="/words">単語帳を見る →</a>
     </div>`;
 
+  // まだ引いていないものを出す。全部済んでいれば何も出さない ──
+  // 常に出ていると、やり残しではなくただのメニューになる。
+  const todo = Omikuji.drawn(iso(todayParts()))
+    ? ''
+    : `<p class="f-todo">今日まだ引いていないもの —
+         <a href="/omikuji">おみくじ</a>。
+         こちらは計算ではなく<b>くじ引き</b>で、韓国のことわざが 1 つ出ます。</p>`;
+
   $('f-result').innerHTML = `
     <div class="f-head">
       <h3>${esc(iso(todayParts()))} の運勢</h3>
@@ -2560,6 +2576,7 @@ function renderFortune(mine, today, res, prev){
     ${mine.notes.length ? `<p class="hint">${mine.notes.map(esc).join('<br>')}</p>` : ''}
     ${next}
     ${stamp}
+    ${todo}
     ${renderWords(res, today)}
     <p class="disclaim">
       ※ 四柱（사주）の考え方をもとにした、エンターテインメント目的のコンテンツです。

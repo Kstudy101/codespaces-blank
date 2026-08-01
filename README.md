@@ -59,10 +59,10 @@
 | `tools/build-solar-terms.py` | 절기 시각 계산 → `solar-terms.json` |
 | `tools/build-new-moons.py` | 삭 계산 → `new-moons.json` |
 | `tools/fetch-naoj-reference.py` | 국립천문대에서 기준값 취득 → `data/naoj-reference.json` |
-| `tools/verify-*.mjs` | 배포 관문 7종 (아래 「검증」) |
+| `tools/verify-*.mjs` | 배포 관문 8종 (아래 「검증」) |
 | `tools/build-site.sh` | 공개 파일만 `dist/` 로 모음 + 6종 점검 (내부 링크·canonical·구 호스트·sitemap 망라·**CSS 토큰**) |
 | `tools/set-site-url.py` | 절대 URL 일괄 교체 (도메인 이전용) |
-| `.github/workflows/deploy.yml` | push → 검증 7종 → Xserver rsync 배포 |
+| `.github/workflows/deploy.yml` | push → 검증 8종 → Xserver rsync 배포 |
 
 ### `index.html` 의 「자체 완결」은 이제 깨졌습니다
 
@@ -557,7 +557,7 @@ DB는 **상용한자만** 수록합니다. 일본 인명에는 人名用漢字(8
 
 ### 1. 배포 관문 — 저장소에 있고, push 할 때마다 돌아갑니다
 
-`tools/verify-*.mjs` 7종 **137항목**. `.github/workflows/deploy.yml` 이 rsync 앞에
+`tools/verify-*.mjs` 8종 **144항목**. `.github/workflows/deploy.yml` 이 rsync 앞에
 세워 두었으므로, 하나라도 실패하면 배포가 멈춥니다. `package.json` 이 없으므로
 의존 패키지도 없습니다 — 각 스크립트가 `vm` 으로 대상 `.js` 를 그대로 읽어 실행합니다.
 
@@ -565,7 +565,8 @@ DB는 **상용한자만** 수록합니다. 일본 인명에는 人名用漢字(8
 |---|---|---|
 | `verify-saju.mjs` | 20 | **국립천문대 공표값** — 절기 456건 / 일주 연속 540일 / 서머타임 / 경도 |
 | `verify-fortune.mjs` | 20 | 대조할 공표값이 없어 **약속한 것** — 결정론·항목 간 공평·저장물에 생년월일 부재 |
-| `verify-study.mjs` | 25 | 받침에 따른 조사, 저장 실패를 삼키지 않는 것 + **`index.html` 손수 한자음 222자** |
+| `verify-study.mjs` | 20 | 받침에 따른 조사, 저장 실패를 삼키지 않는 것, 200어·400일 상한 |
+| `verify-name.mjs` | 12 | **STEP 1 그 자체** — 가나→한글 규칙(README 표)과 손수 한자음 222자 |
 | `verify-omikuji.mjs` | 15 | 운세와 **반대** — 뽑을 때마다 바뀌는가 / 같은 날 다시 못 뽑는가 |
 | `verify-gilbang.mjs` | 15 | **국립천문대 공표값** — 삭(朔) 235건 전건 일치 |
 | `verify-amulet.mjs` | 28 | **`kanji.json` 2,136자** — 부적 한자의 한국음·훈음 12자 |
@@ -631,7 +632,7 @@ python3 -m http.server 8000
 검증만 돌리려면 서버도 필요 없습니다:
 
 ```bash
-for t in saju fortune study omikuji gilbang amulet pages; do node tools/verify-$t.mjs; done
+for t in name saju fortune study omikuji gilbang amulet pages; do node tools/verify-$t.mjs; done
 bash tools/build-site.sh    # dist/ 를 만들고 링크·canonical·구 호스트를 점검
 ```
 

@@ -119,7 +119,12 @@ ErrorDocument 404 /404.html
 <IfModule mod_headers.c>
   # 拡張子で見る。.js の MIME 型は環境によって text/javascript にも
   # application/javascript にもなるので、ExpiresByType では取りこぼす。
-  <FilesMatch "\.(html|js)$">
+  #
+  # .css も同じ扱いにする。ファイル名に版が無いので、
+  # 新しい HTML と古い CSS が組み合わさると、追加したばかりの部分が
+  # 素のまま出るか、まったく見えなくなる。JS だけ直して CSS を
+  # 1週間キャッシュのままにしていたため、実際にそれが起きた。
+  <FilesMatch "\.(html|js|css)$">
     Header set Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
 </IfModule>

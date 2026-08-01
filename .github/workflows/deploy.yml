@@ -141,8 +141,8 @@ jobs:
 
           # 共用 JS は名前に版が無いので、毎回確認させる指定が要る。
           # 本番のヘッダはあとのスモークテストで見るが、送る前に気づきたい。
-          grep -qE 'FilesMatch "\\\.\(html\|js\)\$"' dist/.htaccess \
-            || { echo "✗ .htaccess で .js が no-cache になっていません"; fail=1; }
+          grep -qE 'FilesMatch "\\\.\(html\|js\|css\)\$"' dist/.htaccess \
+            || { echo "✗ .htaccess で .js/.css が no-cache になっていません"; fail=1; }
 
           if find dist \( -name '*.db' -o -name '*.py' -o -name '*.sh' \) | grep -q .; then
             echo "✗ 非公開ファイルが dist にあります"; fail=1
@@ -399,12 +399,16 @@ jobs:
             *) echo "  ✗ ads.txt にパブリッシャーIDがありません"; fail=1 ;;
           esac
 
-          # 共用スクリプトは名前に版を持たないので、キャッシュが長いと
-          # 「新しい HTML が古い JS を呼ぶ」が起きる。.htaccess で
+          # 共用の JS と CSS は名前に版を持たないので、キャッシュが長いと
+          # 「新しい HTML が古いファイルを呼ぶ」が起きる。.htaccess で
           # 毎回確認させているが、サーバーの設定次第で効かないことがある
           # ので、実際に返るヘッダで見る。
-          echo "共用 JS のキャッシュ（版が無いので確認必須）"
-          for p in /fortune.js /amulet.js; do
+          #
+          # CSS をこの確認から外していたせいで、新しい HTML と1週間前の
+          # page.css が組み合わさる状態を実際に出した。崩れて見えるだけで
+          # 200 は返るため、状態コードを見ていても気づけない。
+          echo "共用 JS・CSS のキャッシュ（版が無いので確認必須）"
+          for p in /fortune.js /amulet.js /page.css; do
             cc=$(curl -sI --max-time 20 "$BASE$p" | tr -d '\r' \
                  | grep -i '^cache-control:' | cut -d' ' -f2- || true)
             case "$cc" in

@@ -11,6 +11,11 @@
   二十四節気  /cgi-bin/koyomi/cande/phenomena_s.cgi   2009〜2027 年のみ
   日の干支    /cgi-bin/koyomi/cande/cale2j.cgi        年の範囲に制限なし
   均時差      /cgi-bin/koyomi/cande/gst.cgi           2009〜2027 年のみ
+  朔（新月）  /cgi-bin/koyomi/cande/phenomena_p.cgi   2009〜2027 年のみ
+
+朔は旧暦の月初めで、韓国の「손없는 날」（방위に손＝厄がいない日）は旧暦の
+日付の一の位で決まる。つまり朔さえ当たっていれば出せる。閏月の扱いは
+月の番号にしか効かないので、日付だけ要るこの用途では要らない。
 
 取得結果は data/ に置く。data/ は build-site.sh の PUBLIC に無く、
 deploy.yml の paths-ignore にも入っているので配信されない。
@@ -115,11 +120,25 @@ def fetch_eot(year, step=10, days=360):
     return out
 
 
+def fetch_moons(year):
+    """その年の朔（新月）を UTC で。 → [{"utc":"2026-01-18T10:52"}, ...]"""
+    out = []
+    for r in rows(post("phenomena_p.cgi", {"year": year, "lst": 0})):
+        if len(r) < 4 or r[3] != "朔":
+            continue
+        if not re.fullmatch(r"\d{4}/\d{2}/\d{2}", r[0]) or not r[1]:
+            sys.exit(f"✗ {year}: 朔の行を読めません: {r}")
+        out.append({"utc": r[0].replace("/", "-") + "T" + r[1]})
+    if not 12 <= len(out) <= 13:
+        sys.exit(f"✗ {year}: 朔が {len(out)} 件（12〜13 件のはず）")
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     # 節を指定できるようにしてあるのは、取り直したいのが 1 節だけのときに
     # 30 回も国立天文台へ叩きに行かずに済ませるため。--refresh だけなら全部。
-    ap.add_argument("--refresh", nargs="*", choices=["terms", "ganji", "eot"],
+    ap.add_argument("--refresh", nargs="*", choices=["terms", "ganji", "eot", "moons"],
                     metavar="SECTION",
                     help="取り直す。節を指定するとその節だけ（例: --refresh eot）")
     a = ap.parse_args()
@@ -128,8 +147,8 @@ def main():
     if have and a.refresh is None:
         print(f"{OUT} は取得済みです。取り直すなら --refresh")
         return
-    want = set(a.refresh or ["terms", "ganji", "eot"]) if have else \
-        {"terms", "ganji", "eot"}
+    want = set(a.refresh or ["terms", "ganji", "eot", "moons"]) if have else \
+        {"terms", "ganji", "eot", "moons"}
 
     ref = {
         "source": "国立天文台 暦計算室 (https://eco.mtk.nao.ac.jp/koyomi/cande/)",
@@ -138,6 +157,7 @@ def main():
         "terms": {},
         "ganji": {},
         "eot": {},
+        "moons": {},
     }
     if have:
         # 取り直さない節は前の内容をそのまま残す。
@@ -165,13 +185,20 @@ def main():
             print(f"  均時差 {y}  {len(ref['eot'][str(y)])} 点")
             time.sleep(1)
 
+    if "moons" in want:
+        for y in TERM_YEARS:
+            ref["moons"][str(y)] = fetch_moons(y)
+            print(f"  朔 {y}  {len(ref['moons'][str(y)])} 件")
+            time.sleep(1)
+
     with open(OUT, "w", encoding="utf-8") as f:
         json.dump(ref, f, ensure_ascii=False, indent=1)
 
     n_t = sum(len(v) for v in ref["terms"].values())
     n_g = sum(v["days"] for v in ref["ganji"].values())
     n_e = sum(len(v) for v in ref["eot"].values())
-    print(f"\n{OUT}: 節気 {n_t} 件 / 干支 {n_g} 日 / 均時差 {n_e} 点  "
+    n_m = sum(len(v) for v in ref.get("moons", {}).values())
+    print(f"\n{OUT}: 節気 {n_t} 件 / 干支 {n_g} 日 / 均時差 {n_e} 点 / 朔 {n_m} 件  "
           f"({os.path.getsize(OUT)/1024:.0f} KB)")
 
 

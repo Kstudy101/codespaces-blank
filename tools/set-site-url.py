@@ -15,7 +15,8 @@ canonical / og:url / og:image / twitter:image / sitemap.xml / robots.txt、
 import re, sys, os, pathlib
 
 TARGETS = ["index.html", "privacy.html", "contact.html", "tips.html",
-           "words.html", "omikuji.html", "gilbang.html", "404.html", "sitemap.xml", "robots.txt"]
+           "words.html", "omikuji.html", "gilbang.html", "amulet.html",
+           "404.html", "sitemap.xml", "robots.txt"]
 
 def main():
     if len(sys.argv) != 2:

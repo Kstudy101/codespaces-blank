@@ -72,6 +72,14 @@ jobs:
         run: node tools/verify-gilbang.mjs
 
       # ---------------------------------------------------------------
+      # 부적。ここは占いと違って数値が無いので、確かめるのは「書いてある
+      # ことが正しいか」── 中央に置いた漢字の韓国音を kanji.json の
+      # 2,136 字と突き合わせる。読みが違えば、飾りではなく教材の誤りになる。
+      # ---------------------------------------------------------------
+      - name: Verify amulet
+        run: node tools/verify-amulet.mjs
+
+      # ---------------------------------------------------------------
       # 公開ファイルを dist/ に集める。
       # このプロジェクトにビルドツールは無い（package.json も無い）。
       # それでも dist を作るのは、リポジトリにはあるが公開しては
@@ -334,13 +342,13 @@ jobs:
           }
 
           echo "拡張子なしURL（Apache は既定で解決しない。移行の要）"
-          for p in / /privacy /contact /tips /words /omikuji /gilbang; do check "$p" 200; done
+          for p in / /privacy /contact /tips /words /omikuji /gilbang /amulet; do check "$p" 200; done
 
           echo "実ファイル"
           for p in /kanji.json /ogp.png /ads.txt /sitemap.xml /robots.txt; do check "$p" 200; done
 
           echo "運勢が使う実ファイル（PUBLIC への追加漏れはここで出る）"
-          for p in /saju.js /fortune.js /study.js /omikuji.js /gilbang.js \
+          for p in /saju.js /fortune.js /study.js /omikuji.js /gilbang.js /amulet.js \
                    /solar-terms.json /new-moons.json; do check "$p" 200; done
 
           echo "存在しないURLは 404（SPA フォールバックを入れていない確認）"

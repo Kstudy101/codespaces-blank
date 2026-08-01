@@ -2562,7 +2562,14 @@ function renderFortune(mine, today, res, prev){
   // 結果に応じて次に勧めるものを変える。全員に同じ導線を並べるとただの
   // メニューだが、今日の出方に合わせて別のものを勧めると、
   // 続けて見る理由になる（§7 ④）。
-  const branch = res.scores.work >= 60
+  //
+  // 出すのは 1 本だけにする。2 本並べた時点でメニューに戻るので、
+  // 低い項目への手当て（부적）を先に見て、無ければ動きの話（吉方）へ。
+  const branch = res.scores.money < 45
+    ? `<p class="f-todo">金運が <b>${res.scores.money}</b>。低く出た日は、
+         <a href="/amulet">부적（韓国のお守り）</a>を 1 枚どうぞ。
+         財＝<b class="ko">재</b> の字を書いた紙で、画像で保存できます。</p>`
+    : res.scores.work >= 60
     ? `<p class="f-todo">仕事運が <b>${res.scores.work}</b>。動きのある日は方角も見ておくと —
          <a href="/gilbang">今日の吉方</a>。韓国には<b class="ko">손없는 날</b>という、
          どの方角へ動いてもよい日があります。</p>`

@@ -25,6 +25,7 @@ PUBLIC=(
   words.html
   omikuji.html
   gilbang.html
+  amulet.html
   404.html
   page.css
   kanji.json
@@ -33,6 +34,7 @@ PUBLIC=(
   study.js
   omikuji.js
   gilbang.js
+  amulet.js
   new-moons.json
   solar-terms.json
   ogp.png
@@ -69,7 +71,7 @@ for html in "$OUT"/*.html; do
 done
 
 # 2) canonical が全ページにあるか
-for html in "$OUT"/index.html "$OUT"/privacy.html "$OUT"/contact.html "$OUT"/tips.html "$OUT"/words.html "$OUT"/omikuji.html "$OUT"/gilbang.html; do
+for html in "$OUT"/index.html "$OUT"/privacy.html "$OUT"/contact.html "$OUT"/tips.html "$OUT"/words.html "$OUT"/omikuji.html "$OUT"/gilbang.html "$OUT"/amulet.html; do
   grep -q 'rel="canonical"' "$html" || { echo "✗ $(basename "$html"): canonical がありません" >&2; fail=1; }
 done
 

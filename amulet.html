@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>부적メーカー — 韓国のお守りを 1 枚つくる | 名前で学ぶ韓国語</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 32 32%22%3E%3Crect width%3D%2232%22 height%3D%2232%22 rx%3D%227%22 fill%3D%22%23e0526b%22%2F%3E%3Ccircle cx%3D%2216.00%22 cy%3D%228.80%22 r%3D%224.6%22 fill%3D%22%23fff%22%2F%3E%3Ccircle cx%3D%2222.85%22 cy%3D%2213.78%22 r%3D%224.6%22 fill%3D%22%23fff%22%2F%3E%3Ccircle cx%3D%2220.23%22 cy%3D%2221.82%22 r%3D%224.6%22 fill%3D%22%23fff%22%2F%3E%3Ccircle cx%3D%2211.77%22 cy%3D%2221.82%22 r%3D%224.6%22 fill%3D%22%23fff%22%2F%3E%3Ccircle cx%3D%229.15%22 cy%3D%2213.78%22 r%3D%224.6%22 fill%3D%22%23fff%22%2F%3E%3Ccircle cx%3D%2216%22 cy%3D%2216%22 r%3D%223.1%22 fill%3D%22%23ffd9df%22%2F%3E%3C%2Fsvg%3E">
+<meta name="description" content="韓国のお守り「부적（符籍）」を 1 枚つくって画像で保存できます。願いに合わせた漢字と、その韓国漢字音・訓音つき。生年月日を入れると、命式に足りない五行から 1 種をおすすめします。">
+<link rel="canonical" href="https://www.kstudy101.jp/amulet">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="名前で学ぶ韓国語">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:url" content="https://www.kstudy101.jp/amulet">
+<meta property="og:title" content="부적メーカー｜名前で学ぶ韓国語">
+<meta property="og:description" content="韓国のお守り「부적」を 1 枚つくって保存できます。願いの漢字と、その韓国読みつき。">
+<meta property="og:image" content="https://www.kstudy101.jp/ogp.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="부적メーカー｜名前で学ぶ韓国語">
+<meta name="twitter:description" content="韓国のお守り「부적」を 1 枚つくって保存できます。願いの漢字と、その韓国読みつき。">
+<meta name="twitter:image" content="https://www.kstudy101.jp/ogp.png">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1754834273377558"
+     crossorigin="anonymous"></script>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-93VGD4GH58"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag("js", new Date());
+
+  gtag("config", "G-93VGD4GH58");
+</script>
+<!-- Microsoft Clarity -->
+<script type="text/javascript">
+    (function(c,l,a,r,i,t,y){
+        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, "clarity", "script", "xv3g9j6ivf");
+</script>
+<link rel="stylesheet" href="page.css">
+<style>
+/* 부적。page.css を土台に、このページだけの部品を足す。 */
+.am-pick{
+  border:1px solid var(--line); border-radius:16px; padding:22px;
+  background:var(--surface); box-shadow:var(--shadow); margin:0 0 16px;
+}
+.am-kinds{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:6px}
+.am-kind{
+  display:flex; align-items:center; gap:11px; padding:11px 13px; cursor:pointer;
+  border:1.5px solid var(--line); border-radius:12px; background:var(--bg);
+  font-size:.86rem; font-weight:700; color:var(--text); text-align:left;
+  font-family:inherit; transition:border-color .15s, background .15s;
+}
+.am-kind:hover{border-color:var(--accent)}
+.am-kind[aria-pressed="true"]{border-color:var(--accent); background:var(--accent-soft)}
+.am-kind b{
+  flex:none; width:38px; height:38px; border-radius:9px; display:grid; place-items:center;
+  font-size:1.25rem; background:#f2e3b4; color:#b8352a;
+  font-family:"Hiragino Mincho ProN","Yu Mincho",YuMincho,"Noto Serif JP","Noto Serif KR",serif;
+}
+.am-kind small{display:block; font-size:.7rem; font-weight:400; color:var(--text-dim)}
+.am-kind .rec{color:var(--accent); font-size:.68rem; font-weight:700}
+
+.am-form{border-top:1px dashed var(--line); margin-top:18px; padding-top:18px}
+.am-form .row{display:flex; gap:12px; margin-bottom:12px}
+.am-form .row > div{flex:1; min-width:0}
+.am-form label{display:block; font-size:.78rem; font-weight:700; margin-bottom:5px; color:var(--text-dim)}
+.am-form input, .am-form select{
+  width:100%; padding:11px 12px; font-size:1rem; border:1px solid var(--line);
+  border-radius:10px; background:var(--bg); color:var(--text);
+}
+.am-form button{
+  width:100%; padding:12px; font-size:.9rem; font-weight:700; border:1.5px solid var(--line);
+  border-radius:11px; background:var(--surface); color:var(--text); cursor:pointer;
+  font-family:inherit;
+}
+.am-form button:hover{border-color:var(--accent)}
+.am-err{color:var(--accent); font-size:.82rem; margin:10px 0 0; display:none}
+.am-err.on{display:block}
+
+/* 부적そのもの。紙の色は画面のテーマに関係なく固定する ──
+   保存した画像と画面が違う色だと、作ったものが変わって見える。 */
+.am-sheet{
+  border:1px solid var(--line); border-radius:16px; background:var(--surface);
+  padding:20px; box-shadow:var(--shadow); margin:0 0 16px;
+}
+.am-sheet canvas{
+  display:block; width:100%; max-width:380px; height:auto; margin:0 auto;
+  border-radius:8px; box-shadow:0 2px 14px -6px rgba(43,33,36,.4);
+}
+.am-nocanvas{font-size:.84rem; color:var(--text-dim); padding:18px; margin:0; text-align:center}
+.am-acts{display:flex; gap:10px; margin-top:16px; flex-wrap:wrap}
+.am-acts button{
+  flex:1; min-width:140px; padding:12px; font-size:.9rem; font-weight:700;
+  border:0; border-radius:11px; background:var(--accent); color:#fff; cursor:pointer;
+  font-family:inherit;
+}
+.am-acts button.sub{background:var(--surface); color:var(--text); border:1.5px solid var(--line)}
+
+.am-say{
+  border:1px solid var(--line); border-radius:16px; background:var(--surface);
+  padding:20px 22px; margin:0 0 16px;
+}
+.am-say .ko{font-size:1.28rem; font-weight:700; color:var(--accent); line-height:1.5}
+.am-say .rom{font-size:.8rem; color:var(--text-dim); margin:2px 0 8px}
+.am-say .ja{font-size:.92rem; margin-bottom:12px}
+.am-say .parts{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px}
+.am-say .parts span{font-size:.76rem; background:var(--surface-2); border-radius:8px; padding:4px 9px}
+.am-say .parts b{color:var(--accent)}
+.am-say .gram{font-size:.82rem; color:var(--text-dim); margin:0 0 12px}
+.am-say button{
+  padding:9px 16px; font-size:.82rem; font-weight:700; font-family:inherit;
+  border:1.5px solid var(--line); border-radius:10px; background:var(--bg);
+  color:var(--text); cursor:pointer;
+}
+.am-say button:hover{border-color:var(--accent)}
+.am-lack{font-size:.82rem; color:var(--text-dim); margin:12px 0 0; line-height:1.8}
+.am-lack b{color:var(--accent)}
+
+.toast{
+  position:fixed; left:50%; bottom:26px; transform:translate(-50%,16px);
+  background:var(--text); color:var(--bg); padding:12px 20px; border-radius:999px;
+  font-size:.85rem; font-weight:700; opacity:0; pointer-events:none;
+  transition:opacity .2s, transform .2s; z-index:50; max-width:90vw; text-align:center;
+}
+.toast.on{opacity:1; transform:translate(-50%,0)}
+@media (max-width:480px){
+  .am-form .row{flex-direction:column; gap:12px}
+}
+</style>
+</head>
+<body>
+
+<div class="site-head"><a href="/">← 名前で学ぶ韓国語 トップへ</a></div>
+
+<div class="wrap">
+
+<h1 class="page-title">부적メーカー</h1>
+<p class="updated">부적 — 韓国のお守り</p>
+
+<p class="lead">
+  日本の<b>お守り</b>は袋を開けずに持ちますが、韓国の<b class="ko">부적</b>は
+  <strong>書かれた文字そのものを見せて</strong>貼ったり持ったりします。
+  願いに合う漢字を 1 字選んで、韓国漢字音つきで 1 枚つくります。
+  画像で保存できます。
+</p>
+
+<div class="am-pick">
+  <div class="am-kinds" id="am-kinds"></div>
+  <div class="am-form" data-clarity-mask="true">
+    <p style="font-size:.8rem; color:var(--text-dim); margin:0 0 12px">
+      生年月日を入れると、四柱の<strong>足りない五行</strong>から 1 種をおすすめします（任意）。
+      入力は保存されません。
+    </p>
+    <div class="row">
+      <div><label for="a-y">年</label>
+        <input type="number" id="a-y" placeholder="1995" min="1930" max="2030" autocomplete="off"></div>
+      <div><label for="a-m">月</label>
+        <input type="number" id="a-m" placeholder="4" min="1" max="12" autocomplete="off"></div>
+      <div><label for="a-d">日</label>
+        <input type="number" id="a-d" placeholder="12" min="1" max="31" autocomplete="off"></div>
+    </div>
+    <div class="row">
+      <div><label for="a-h">生まれた時刻</label><select id="a-h"></select></div>
+      <div><label for="a-city">生まれた場所</label><select id="a-city"></select></div>
+    </div>
+    <button type="button" id="a-go">命式からおすすめを見る</button>
+    <p class="am-err" id="a-err"></p>
+  </div>
+</div>
+
+<div class="am-sheet">
+  <canvas id="am-canvas" width="760" height="1200" role="img"
+          aria-label="つくった부적の画像"></canvas>
+  <p class="am-nocanvas" id="am-nocanvas" hidden>
+    この環境では画像を作れません。下の説明で、何が書かれているかをご覧いただけます。
+  </p>
+  <div class="am-acts">
+    <button type="button" id="am-dl">画像を保存</button>
+    <button type="button" class="sub" id="am-copy">願いの文をコピー</button>
+  </div>
+</div>
+
+<div id="am-info"></div>
+
+<h2>부적（符籍）とは</h2>
+<p>
+  韓国で厄よけや願かけに使われる紙のお守りです。<b class="ko">부적</b>は漢字で
+  <b>符籍</b>と書き、<span class="ko">부</span>（符）は「しるし」、
+  <span class="ko">적</span>（籍）は「書きつけ」。文字どおり
+  <strong>しるしを書いた紙</strong>のことです。
+</p>
+<p>
+  財布や手帳に入れて持つほか、玄関や部屋の壁に貼ります。ふつうは
+  <strong>1 年</strong>で新しくし、旧正月に合わせて替える家が多くあります。
+  日本のお守りを 1 年で返納するのと、期間の考え方はよく似ています。
+</p>
+
+<h2>なぜ黄色い紙に赤い字なのか</h2>
+<p>
+  부적の地色は<strong>黄色</strong>、文字は<strong>朱色</strong>と決まっています。
+  これは好みではなく、それぞれに理由があるとされてきました。
+</p>
+<ul>
+  <li><b>朱色</b> — 赤は邪気を退ける色とされ、伝統的には
+      <b class="ko">경면주사</b>（鏡面朱砂＝辰砂）という鉱物の顔料で書かれました</li>
+  <li><b>黄色</b> — 五行で<b class="ko">토</b>（土）にあたり、方位でいうと
+      <strong>中央</strong>。どこにも偏らない位置の色です</li>
+</ul>
+<p>
+  このページの부적も、地色と文字色はこの通りに固定しています。
+  五行ごとに紙の色を変えたりはしません。
+  代わりに、下の隅に押した<strong>印</strong>のほうを五方色
+  （<b class="ko">오방색</b>）にしてあります —— こちらは表示のためにこのサイトで
+  決めた部分で、伝統的な作法ではありません。
+</p>
+
+<h2>お守りと부적 — 見せない中身と、見せる文字</h2>
+<p>
+  同じ「持ち歩くお守り」でも、日本と韓国では見え方が反対です。
+</p>
+<div class="tbl">
+<table>
+  <tr><th></th><th>日本のお守り</th><th>韓国の<span class="ko">부적</span></th></tr>
+  <tr><td>形</td><td>錦の袋に入った札</td><td>紙に朱で書いた符</td></tr>
+  <tr><td>中身</td><td><strong>開けて見ない</strong></td><td><strong>文字が見えている</strong></td></tr>
+  <tr><td>置き方</td><td>身につける・鞄に下げる</td><td>身につける・壁や戸に貼る</td></tr>
+  <tr><td>手に入れ方</td><td>神社や寺で授かる</td><td>寺や占い師に頼む・自分で書く</td></tr>
+  <tr><td>期間</td><td>1 年で返納</td><td>1 年で新しくする</td></tr>
+</table>
+</div>
+<p>
+  <strong>いちばん違うのは、効き目がどこにあると考えるかです。</strong>
+  お守りは袋の中の札に宿るとされるので開けません。부적は
+  <strong>書かれた文字と形そのもの</strong>が働くとされるので、見えていて構わない。
+  だから부적は「作る」ことができて、このページのようなものが成り立ちます。
+</p>
+<p>
+  このサイトの<a href="/omikuji">おみくじ</a>が「引く占い」と「計算する占い」の違い、
+  <a href="/gilbang">恵方と길방</a>が「向かう方角」と「避ける方角」の違いだったのと同じで、
+  ここも<strong>隠す/見せる</strong>という一点で日韓が分かれています。
+</p>
+
+<h2>五行と、願いの漢字</h2>
+<p>
+  選べる 6 種です。<a href="/">今日の運勢</a>の 6 項目と同じ区分けで、
+  五行の対応もそろえてあります。中央に置く漢字は、五行の字（木火土金水）ではなく
+  <strong>願いを表す 1 字</strong>を選びました。부적は願いを書くものだからです。
+</p>
+<div class="tbl">
+<table>
+  <tr><th>願い</th><th>漢字</th><th>韓国漢字音</th><th>五行</th><th>五方色</th><th>方位</th></tr>
+  <tr><td>厄除け</td><td>福</td><td><span class="ko">복</span>（복 복）</td>
+      <td>—</td><td>五方色すべて</td><td>—</td></tr>
+  <tr><td>金運</td><td>財</td><td><span class="ko">재</span>（재물 재）</td>
+      <td><span class="ko">금</span>（金）</td><td>白</td><td>西</td></tr>
+  <tr><td>恋愛運</td><td>愛</td><td><span class="ko">애</span>（사랑 애）</td>
+      <td><span class="ko">수</span>（水）</td><td>黒</td><td>北</td></tr>
+  <tr><td>仕事運</td><td>業</td><td><span class="ko">업</span>（업 업）</td>
+      <td><span class="ko">목</span>（木）</td><td>青</td><td>東</td></tr>
+  <tr><td>健康運</td><td>康</td><td><span class="ko">강</span>（편안 강）</td>
+      <td><span class="ko">토</span>（土）</td><td>黄</td><td>中央</td></tr>
+  <tr><td>学習運</td><td>習</td><td><span class="ko">습</span>（익힐 습）</td>
+      <td><span class="ko">화</span>（火）</td><td>赤</td><td>南</td></tr>
+</table>
+</div>
+<p>
+  括弧の中は<b>訓音</b>（<b class="ko">훈음</b>）といって、韓国で漢字を覚えるときに使う
+  「意味＋読み」の言い方です。「재물 재」なら〈財物の재〉。日本の音訓に似ていますが、
+  <strong>1 字につき 1 セット</strong>で唱えるのが韓国式です。
+</p>
+<p>
+  上に置いた<b>勅令</b>（<b class="ko">칙령</b>）は、多くの부적が実際に使う書き出しです。
+  「天の命として、この符を発する」という体裁で、ここで考えた文句ではありません。
+</p>
+
+<h2>「-소서」という語尾</h2>
+<p>
+  부적に書く願いの文は、いまの会話体では書きません。このページでは
+  <b class="ko">-소서</b>という語尾を使っています。
+</p>
+<div class="tbl">
+<table>
+  <tr><th>言い方</th><th>形</th><th>使う場面</th></tr>
+  <tr><td>ふつうの依頼</td><td><span class="ko">-아/어 주세요</span></td><td>会話</td></tr>
+  <tr><td>あらたまった依頼</td><td><span class="ko">-아/어 주십시오</span></td><td>案内・書面</td></tr>
+  <tr><td><b>祈願</b></td><td><b class="ko">-소서</b></td><td>祈りの文・祝詞・歌詞</td></tr>
+</table>
+</div>
+<p>
+  <b class="ko">-소서</b>は古い祈願文の終結語尾で、いまは日常会話には出てきません。
+  韓国の国歌の一節「<b class="ko">길이 보전하세</b>」のように、古い言い方が
+  祈りや歌の中にだけ残っているのと同じです。
+  <b class="ko">물리치다</b>（追い払う）＋<b class="ko">-소서</b> で
+  <b class="ko">물리치소서</b>。パッチムの有無で形が変わらないので、
+  どの動詞にもそのままつきます。
+</p>
+
+<h2>このページについて</h2>
+<p>
+  つくった부적は<strong>お使いの端末の中だけで描いています</strong>。
+  画像がサーバーへ送られることはありません。生年月日を入れた場合も、
+  計算に使うだけで<strong>保存も送信もしません</strong>。
+  このページは端末に何も残しません（<a href="/privacy">プライバシーポリシー</a>）。
+</p>
+<p>
+  同じ願いを選べば、いつ来ても同じ 1 枚になります。
+  부적は 1 年持つものなので、日替わりにはしていません ——
+  日ごとに変わるものを見たい方は<a href="/">今日の運勢</a>と
+  <a href="/gilbang">今日の吉方</a>、その場の運試しは
+  <a href="/omikuji">おみくじ</a>へどうぞ。
+</p>
+<p class="note">
+  ※ 五行や四柱（사주）の考え方をもとにした、エンターテインメント目的のコンテンツです。
+  効果を保証するものではありません。
+</p>
+
+<div class="pagenav">
+  <a href="/" class="primary">🔮 今日の運勢を見る</a>
+  <a href="/gilbang">🧭 今日の吉方</a>
+  <a href="/omikuji">🎋 おみくじを引く</a>
+  <a href="/words">📗 単語帳</a>
+</div>
+
+<footer>
+  <p class="foot-note">
+    ※ 当サイトは広告配信（Google AdSense）、アクセス解析（Google アナリティクス）、
+    および利用状況の記録（Microsoft Clarity）を利用しており、
+    これらのために Cookie が使用される場合があります。
+    診断機能に入力されたお名前・生年月日が、広告配信やアクセス解析に
+    利用されることはありません。
+    詳しくは<a href="/privacy">プライバシーポリシー</a>、および
+    <a href="https://policies.google.com/technologies/ads?hl=ja"
+       target="_blank" rel="noopener noreferrer">Google の広告に関するポリシー</a>
+    をご確認ください。
+  </p>
+  <p><b>名前で学ぶ韓国語</b> — powered by <a href="#" id="brand">Kstudy101</a></p>
+</footer>
+
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="/saju.js"></script>
+<script src="/gilbang.js"></script>
+<script src="/study.js"></script>
+<script src="/amulet.js"></script>
+<script>
+"use strict";
+
+const $ = id => document.getElementById(id);
+function esc(s){
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+let toastTimer = null;
+function toast(msg){
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('on'), 2600);
+}
+
+/* ==================================================================
+   1. 状態
+   ================================================================== */
+let cat  = 'total';    // 選ばれている願い
+let saju = null;       // 生年月日を入れた場合だけ入る（保存はしない）
+let card = null;       // Amulet.of() の結果
+
+/* ==================================================================
+   2. 부적を描く
+   ================================================================== */
+/* 紙の色と朱は画面のテーマに関係なく固定する。ダークモードの人が
+   保存した画像だけ色が違う、という状態を作らないため。 */
+const P = {
+  paper:'#f2e3b4', paperEdge:'#e6d093',
+  red:'#b8352a', redSoft:'#d9a08f',
+  ink:'#5b4423', dim:'#8a7145'
+};
+/* 明朝体（韓国では명조체）で書く。부적は筆で書くものなので、
+   ゴシックだと字の性格が変わる。外部フォントは読み込まない —— この
+   サイトは外部フォント要求が 0 件で、ハングル全字を含む書道フォントは
+   数 MB になる（計画書 §7 5 段階）。端末にある明朝を順に当てる。 */
+const SERIF = '"Hiragino Mincho ProN","Yu Mincho",YuMincho,"Noto Serif JP",' +
+              '"Noto Serif KR","Apple SD Gothic Neo",serif';
+const SANS  = '"Hiragino Sans","Noto Sans JP","Yu Gothic",Meiryo,' +
+              '"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif';
+
+function font(g, weight, px, family){ g.font = `${weight} ${px}px ${family || SANS}`; }
+function fit(g, text, maxW, startPx, weight, family){
+  let px = startPx;
+  font(g, weight, px, family);
+  while (g.measureText(text).width > maxW && px > 14){
+    px -= 2; font(g, weight, px, family);
+  }
+  return px;
+}
+function line(g, x1, y, x2, color, w){
+  g.strokeStyle = color; g.lineWidth = w || 2;
+  g.beginPath(); g.moveTo(x1, y); g.lineTo(x2, y); g.stroke();
+}
+
+let canvasOk = false;
+
+function draw(){
+  const cv = $('am-canvas');
+  let g;
+  try { g = cv.getContext('2d'); } catch(e){ g = null; }
+  if (!g){
+    canvasOk = false;
+    $('am-nocanvas').hidden = false;
+    cv.style.display = 'none';
+    return;
+  }
+
+  const W = cv.width, H = cv.height, CX = W / 2;
+  const k = card.kind;
+
+  /* ---- 紙 ---- */
+  g.fillStyle = P.paper; g.fillRect(0, 0, W, H);
+  g.strokeStyle = P.paperEdge; g.lineWidth = 10;
+  g.strokeRect(5, 5, W - 10, H - 10);
+  g.strokeStyle = P.red; g.lineWidth = 6;
+  g.strokeRect(30, 30, W - 60, H - 60);
+  g.strokeStyle = P.redSoft; g.lineWidth = 2;
+  g.strokeRect(44, 44, W - 88, H - 88);
+
+  g.textAlign = 'center';
+
+  /* ---- 勅令（符の書き出し） ---- */
+  g.textBaseline = 'middle';
+  font(g, 700, 86, SERIF); g.fillStyle = P.red;
+  g.fillText(card.header.hanja, CX, 140);
+  g.textBaseline = 'top';
+  font(g, 400, 26); g.fillStyle = P.dim;
+  g.fillText(card.header.eum, CX, 192);
+  line(g, 96, 244, W - 96, P.redSoft, 2);
+
+  /* ---- 中央の 1 字 ---- */
+  const BOX = 380, BX = CX - BOX / 2, BY = 286;
+  g.strokeStyle = P.red; g.lineWidth = 4;
+  g.strokeRect(BX, BY, BOX, BOX);
+  g.strokeStyle = P.redSoft; g.lineWidth = 2;
+  g.strokeRect(BX + 12, BY + 12, BOX - 24, BOX - 24);
+
+  g.textBaseline = 'middle';
+  fit(g, k.hanja, BOX - 80, 300, 700, SERIF);
+  g.fillStyle = P.red;
+  g.fillText(k.hanja, CX, BY + BOX / 2 + 8);
+
+  /* ---- 韓国漢字音と訓音 ---- */
+  g.textBaseline = 'top';
+  font(g, 700, 58); g.fillStyle = P.ink;
+  g.fillText(k.eum, CX, BY + BOX + 30);
+  font(g, 400, 28); g.fillStyle = P.dim;
+  g.fillText(k.hun, CX, BY + BOX + 106);
+  line(g, 96, BY + BOX + 168, W - 96, P.redSoft, 2);
+
+  /* ---- 願いの文 ---- */
+  let y = BY + BOX + 206;
+  fit(g, k.wish.k, W - 150, 54, 700, SANS); g.fillStyle = P.red;
+  g.fillText(k.wish.k, CX, y);
+  y += 74;
+  fit(g, k.wish.r, W - 150, 26, 400, SANS); g.fillStyle = P.dim;
+  g.fillText(k.wish.r, CX, y);
+  y += 42;
+  fit(g, k.wish.j, W - 150, 30, 400, SANS); g.fillStyle = P.ink;
+  g.fillText(k.wish.j, CX, y);
+
+  /* ---- 印（五方色）と署名 ---- */
+  const SY = H - 148, S = 76;
+  if (card.color){
+    seal(g, 70, SY, S, card.color.fill, card.color.ink, card.hanja);
+    g.textAlign = 'left';
+    font(g, 700, 24); g.fillStyle = P.ink;
+    g.fillText(`${card.hanja}・${card.color.ja}・${card.dir.ja}`, 70 + S + 16, SY + 16);
+    font(g, 400, 21); g.fillStyle = P.dim;
+    g.fillText(`${k.ko}（${k.ja}）`, 70 + S + 16, SY + 48);
+  } else {
+    /* 総合運は五行を 1 つに絞らないので、五方色を全部並べる。 */
+    const w = 34;
+    card.colors.forEach((c, i) => seal(g, 70 + i * (w + 6), SY + 8, w, c.fill, c.ink, ''));
+    g.textAlign = 'left';
+    font(g, 700, 24); g.fillStyle = P.ink;
+    g.fillText('五方色', 70 + 5 * (w + 6) + 12, SY + 16);
+    font(g, 400, 21); g.fillStyle = P.dim;
+    g.fillText(`${k.ko}（${k.ja}）`, 70 + 5 * (w + 6) + 12, SY + 48);
+  }
+
+  g.textAlign = 'right';
+  font(g, 700, 22); g.fillStyle = P.dim;
+  g.fillText('名前で学ぶ韓国語', W - 70, SY + 16);
+  font(g, 400, 20);
+  g.fillText('kstudy101.jp', W - 70, SY + 48);
+
+  canvasOk = true;
+  $('am-nocanvas').hidden = true;
+  cv.style.display = '';
+}
+
+function seal(g, x, y, s, fill, ink, ch){
+  g.fillStyle = fill; g.fillRect(x, y, s, s);
+  g.strokeStyle = P.red; g.lineWidth = 3; g.strokeRect(x, y, s, s);
+  if (!ch) return;
+  const ta = g.textAlign, tb = g.textBaseline;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  font(g, 700, Math.round(s * 0.56), SERIF); g.fillStyle = ink;
+  g.fillText(ch, x + s / 2, y + s / 2 + 2);
+  g.textAlign = ta; g.textBaseline = tb;
+}
+
+/* ==================================================================
+   3. 画面
+   ================================================================== */
+function renderKinds(){
+  $('am-kinds').innerHTML = Amulet.KINDS.map(k => {
+    const on = k.cat === cat;
+    const rec = card && card.suggested && card.suggested.cat === k.cat;
+    return `<button type="button" class="am-kind" data-cat="${esc(k.cat)}"
+      aria-pressed="${on}">
+      <b>${esc(k.hanja)}</b>
+      <span>${esc(k.ja)}<small class="ko">${esc(k.ko)}</small>
+        ${rec ? '<span class="rec">▲ 命式のおすすめ</span>' : ''}</span>
+    </button>`;
+  }).join('');
+}
+
+function renderInfo(){
+  const k = card.kind, w = k.wish;
+  const parts = w.p.map(p => `<span><b class="ko">${esc(p[0])}</b> ${esc(p[1])}</span>`).join('');
+
+  let lack = '';
+  if (card.lack){
+    const l = card.lack;
+    const counts = l.all.map(x =>
+      `${esc(x.element)} ${x.count}`).join(' / ');
+    lack = `<p class="am-lack">
+      あなたの四柱の五行は ${counts}。いちばん足りないのは
+      <b class="ko">${esc(l.element)}</b> で、
+      ${card.recommended
+        ? 'いま選んでいる부적がその五行にあたります。'
+        : `<b>${esc(Amulet.byElement(l.element).ja)}</b> の부적がその五行にあたります
+           （願いはご自身で選んでください。上書きはしません）。`}
+    </p>`;
+  }
+
+  $('am-info').innerHTML = `<div class="am-say">
+    <div class="ko">${esc(w.k)}</div>
+    <div class="rom">${esc(w.r)}</div>
+    <div class="ja">${esc(w.j)}</div>
+    <div class="parts">${parts}</div>
+    <p class="gram">${esc(w.g)}</p>
+    <button type="button" id="am-say">🔊 発音を聞く</button>
+    ${lack}
+  </div>`;
+  $('am-say').addEventListener('click', () => {
+    if (!Study.speak(w.k)) toast('この端末では音声を再生できません');
+  });
+}
+
+function render(){
+  card = Amulet.of({ cat: cat, saju: saju });
+  renderKinds();
+  renderInfo();
+  draw();
+}
+
+/* ==================================================================
+   4. 生年月日（任意）
+   ================================================================== */
+function error(msg){
+  const e = $('a-err');
+  e.textContent = msg;
+  e.classList.toggle('on', !!msg);
+  return !msg;
+}
+
+function fillInputs(){
+  $('a-h').innerHTML = '<option value="">わからない</option>' +
+    Array.from({length:24}, (_,i) =>
+      `<option value="${i}">${String(i).padStart(2,'0')}:00 〜 ${String(i).padStart(2,'0')}:59</option>`
+    ).join('');
+  $('a-city').innerHTML = Saju.CITIES.map(c =>
+    `<option value="${esc(c.id)}">${esc(c.ja)}（${esc(c.ko)}）</option>`).join('');
+  $('a-city').value = 'tokyo';
+}
+
+let ready = null;
+function loadTerms(){
+  if (ready) return ready;
+  ready = fetch('/solar-terms.json').then(r => r.json())
+    .then(j => { Saju.load(j); return true; }).catch(() => false);
+  return ready;
+}
+
+async function runSaju(){
+  error('');
+  const y = parseInt($('a-y').value,10), m = parseInt($('a-m').value,10),
+        d = parseInt($('a-d').value,10), hv = $('a-h').value;
+  if (!(y >= 1930 && y <= 2030)) return error('生まれた年を 1930〜2030 で入れてください');
+  if (!(m >= 1 && m <= 12))      return error('月を 1〜12 で入れてください');
+  if (!(d >= 1 && d <= 31))      return error('日を 1〜31 で入れてください');
+  const chk = new Date(Date.UTC(y, m-1, d));
+  if (chk.getUTCMonth()+1 !== m || chk.getUTCDate() !== d)
+    return error(`${y}年${m}月${d}日 は存在しない日付です`);
+  if (!await loadTerms()) return error('暦のデータを読み込めませんでした');
+
+  try {
+    saju = Saju.pillars({ y, m, d, hour: hv === '' ? null : parseInt(hv,10),
+                          city: $('a-city').value });
+  } catch (e) { return error('その生年月日では計算できませんでした'); }
+
+  // おすすめは出すが、選択そのものは動かさない。願いは本人が決めるもの。
+  render();
+  $('am-info').scrollIntoView({behavior:'smooth', block:'nearest'});
+  return true;
+}
+
+/* ==================================================================
+   5. 保存・コピー
+   ================================================================== */
+function blob(){
+  return new Promise(res => {
+    const cv = $('am-canvas');
+    if (!canvasOk || !cv.toBlob) return res(null);
+    try { cv.toBlob(b => res(b), 'image/png'); } catch(e){ res(null); }
+  });
+}
+
+async function download(){
+  const b = await blob();
+  if (!b){ toast('この環境では画像を保存できません'); return; }
+  const url = URL.createObjectURL(b);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `bujeok-${card.kind.cat}.png`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast('画像を保存しました');
+}
+
+async function copyText(s){
+  try {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function'){
+      await navigator.clipboard.writeText(s); return true;
+    }
+  } catch(e){ /* 権限なし等 → 下のフォールバックへ */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = s;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch(e){ return false; }
+}
+
+/* ==================================================================
+   6. 起動
+   ================================================================== */
+fillInputs();
+render();
+
+$('am-kinds').addEventListener('click', e => {
+  const b = e.target.closest('.am-kind');
+  if (!b) return;
+  cat = b.dataset.cat;
+  render();
+});
+$('a-go').addEventListener('click', runSaju);
+['a-y','a-m','a-d'].forEach(id => {
+  $(id).addEventListener('keydown', e => { if (e.key === 'Enter') runSaju(); });
+});
+$('am-dl').addEventListener('click', download);
+$('am-copy').addEventListener('click', async () => {
+  const w = card.kind.wish;
+  toast(await copyText(`${w.k}\n${w.r}\n${w.j}`)
+    ? '願いの文をコピーしました' : 'コピーできませんでした');
+});
+</script>
+</body>
+</html>

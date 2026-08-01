@@ -550,11 +550,52 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
   background:var(--accent-soft); font-size:.86rem; line-height:1.8;
 }
 .f-next b{color:var(--accent)}
+/* 出席スタンプ */
+.attend{
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  margin:16px 0 0; padding:12px 16px; border-radius:12px;
+  background:var(--surface-2); font-size:.82rem; color:var(--text-dim);
+}
+.attend b{font-size:1.1rem; color:var(--accent); font-variant-numeric:tabular-nums}
+.attend a{margin-left:auto; color:var(--blue); font-weight:700; text-decoration:none}
+.attend a:hover{text-decoration:underline}
+
+/* 今日の 3 語 */
+.f-words{margin-top:26px; padding-top:22px; border-top:1px solid var(--line)}
+.f-words h4{font-size:1rem; margin:0 0 6px}
+.w-card{
+  border:1px solid var(--line); border-radius:14px;
+  padding:16px 18px; margin-bottom:12px; background:var(--surface);
+}
+.w-tag{
+  display:inline-block; font-size:.68rem; font-weight:700; color:var(--blue);
+  background:var(--blue-soft); border-radius:99px; padding:3px 10px; margin-bottom:10px;
+}
+.w-ko{font-size:1.45rem; font-weight:700; line-height:1.4; letter-spacing:-.01em}
+.w-roman{font-size:.78rem; color:var(--text-dim); margin-top:2px}
+.w-ja{font-size:.95rem; margin-top:6px}
+.w-parts{display:flex; flex-wrap:wrap; gap:6px; margin:12px 0 0}
+.w-parts span{
+  font-size:.76rem; background:var(--surface-2); border-radius:8px; padding:4px 9px;
+}
+.w-parts b{font-weight:700; color:var(--accent)}
+.w-gram{font-size:.78rem; color:var(--text-dim); line-height:1.8; margin:10px 0 0}
+.w-btns{display:flex; gap:8px; margin-top:14px}
+.w-btns button{
+  flex:1; margin:0; padding:9px 6px; font-size:.8rem; font-weight:700;
+  border-radius:10px; border:1px solid var(--line); background:var(--surface-2);
+  color:var(--text); cursor:pointer;
+}
+.w-btns button:hover:not(:disabled){border-color:var(--accent); color:var(--accent)}
+.w-btns button:disabled{opacity:.55; cursor:default}
+
 @media (max-width:480px){
   /* 棒は飾りなので狭い画面では落とす。数字・等級・増減の 3 つが本体。 */
   .f-row{grid-template-columns:4.6em 2.2em 3.2em 3.2em; gap:8px}
   .f-bar{display:none}
   .f-name{font-size:.8rem}
+  .attend{gap:10px; font-size:.78rem}
+  .attend a{margin-left:0; width:100%}
 }
 
 @media (max-width:480px){
@@ -1172,6 +1213,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
      tools/verify-fortune.mjs が同じファイルをそのまま読んで検証するため。 -->
 <script src="/saju.js"></script>
 <script src="/fortune.js"></script>
+<script src="/study.js"></script>
 
 <script>
 "use strict";
@@ -2405,6 +2447,57 @@ function pillarBox(label, gz, ko){
   </div>`;
 }
 
+/* 今日の 3 語。学習運のぶんは必ず入れ、あとは今日いちばん良い項目と
+   いちばん低い項目から採る。全員に同じ 3 語を出すと運勢と切り離された
+   ただの単語帳になり、結果を読んだ流れが切れる。
+
+   何語目を出すかは今日の日辰から決める。日替わりで変わるが、同じ日に
+   何度開いても同じ語になる（点数と同じで、引き直しても変わらない）。 */
+let todayWords = [];
+
+function renderWords(res, today){
+  const cats = Fortune.CATS.filter(c => c.el);
+  const byScore = cats.slice().sort((a, b) => res.scores[b.id] - res.scores[a.id]);
+  const label = {};
+  label.study = '学習運の言葉';
+  label[byScore[0].id] = `今日いちばん良い ${byScore[0].ja}`;
+  label[byScore[byScore.length - 1].id] = `気をつけたい ${byScore[byScore.length - 1].ja}`;
+
+  const order = ['study', byScore[0].id, byScore[byScore.length - 1].id, 'total']
+    .concat(byScore.map(c => c.id));
+  const ids = [];
+  for (const id of order) if (ids.indexOf(id) < 0 && ids.length < 3) ids.push(id);
+
+  const t = todayParts();
+  const n = Saju.dayNumber(t.y, t.m, t.d);
+  todayWords = ids.map((id, i) => Study.pick(id, n + i));
+
+  const cards = todayWords.map((w, i) => {
+    const saved = Study.has(w.k);
+    return `<div class="w-card">
+      <div class="w-tag">${esc(label[ids[i]] || '今日の言葉')}</div>
+      <div class="w-ko ko">${esc(w.k)}</div>
+      <div class="w-roman">${esc(w.r)}</div>
+      <div class="w-ja">${esc(w.j)}</div>
+      <div class="w-parts">${w.p.map(pt =>
+        `<span><b class="ko">${esc(pt[0])}</b> ${esc(pt[1])}</span>`).join('')}</div>
+      <p class="w-gram">${esc(w.g)}</p>
+      <div class="w-btns">
+        <button type="button" class="w-say" data-i="${i}">🔊 発音を聞く</button>
+        <button type="button" class="w-save" data-i="${i}" ${saved ? 'disabled' : ''}>
+          ${saved ? '✓ 保存済み' : '＋ 単語帳に保存'}</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div class="f-words">
+    <h4>今日の 3 語</h4>
+    <p class="hint" style="margin:-4px 0 14px">
+      運勢の項目に合わせて選んでいます。声に出して、気に入ったものだけ保存してください。</p>
+    ${cards}
+  </div>`;
+}
+
 function renderFortune(mine, today, res, prev){
   const diff = Fortune.diff(res.scores, prev);
   const rows = Fortune.CATS.map(c => {
@@ -2435,10 +2528,20 @@ function renderFortune(mine, today, res, prev){
   const st = res.scores.study;
   const next = st < 50
     ? `<p class="f-next">学習運は <b>${st}</b>。こんな日は気負わず、
-         <b>一語だけ</b>でどうぞ。下の診断で、あなたの名前の漢字から
-         韓国語の単語を 1 つ覚えられます。</p>`
+         <b>一語だけ</b>でどうぞ。下の 3 語から 1 つ選ぶだけでも、
+         今日やったことになります。</p>`
     : `<p class="f-next">学習運は <b>${st}</b>。伸びる日です。
-         下の診断で、あなたの名前から韓国語を覚えていきましょう。</p>`;
+         下の 3 語を声に出して、単語帳に入れておきましょう。</p>`;
+
+  // 出席は運勢を見た時点で 1 日ぶん。押さずに眺めただけで貯まると、
+  // 「続けている」の意味が薄くなる。
+  const at = Study.mark(iso(todayParts()));
+  const stamp = `<div class="attend">
+      <span><b>${at.streak}</b> 日連続</span>
+      <span>のべ <b>${at.days}</b> 日</span>
+      <span>単語帳 <b class="w-count">${Study.list().length}</b> 語</span>
+      <a href="/words">単語帳を見る →</a>
+    </div>`;
 
   $('f-result').innerHTML = `
     <div class="f-head">
@@ -2456,6 +2559,8 @@ function renderFortune(mine, today, res, prev){
     ${rows}
     ${mine.notes.length ? `<p class="hint">${mine.notes.map(esc).join('<br>')}</p>` : ''}
     ${next}
+    ${stamp}
+    ${renderWords(res, today)}
     <p class="disclaim">
       ※ 四柱（사주）の考え方をもとにした、エンターテインメント目的のコンテンツです。
       年柱は立春、月柱は十二節で切り替え、時刻は真太陽時に直しています。
@@ -2503,6 +2608,36 @@ function go(){ kdbReady.then(run); }
 
 fillFortuneInputs();
 $('f-go').addEventListener('click', runFortune);
+
+/* 単語カードのボタン。カードは押すたびに作り直すので、個々に付けず
+   親でまとめて拾う。 */
+$('f-result').addEventListener('click', e => {
+  const say = e.target.closest('.w-say'), save = e.target.closest('.w-save');
+  if (say){
+    const w = todayWords[+say.dataset.i];
+    if (!w) return;
+    if (!Study.speak(w.k)) toast('この端末では音声を再生できません');
+    return;
+  }
+  if (save){
+    const w = todayWords[+save.dataset.i];
+    if (!w) return;
+    const r = Study.add(w, iso(todayParts()));
+    if (r === 'added'){
+      save.disabled = true; save.textContent = '✓ 保存済み';
+      const c = $('f-result').querySelector('.w-count');
+      if (c) c.textContent = String(Study.list().length);
+      toast(`「${w.k}」を単語帳に保存しました`);
+    } else if (r === 'duplicate'){
+      save.disabled = true; save.textContent = '✓ 保存済み';
+      toast('すでに保存されています');
+    } else if (r === 'full'){
+      toast(`単語帳は ${Study.MAX_WORDS} 語までです。/words で整理してください`);
+    } else {
+      toast('保存できませんでした（ブラウザの設定をご確認ください）');
+    }
+  }
+});
 ['f-y','f-m','f-d'].forEach(id => {
   $(id).addEventListener('keydown', e => { if (e.key === 'Enter') runFortune(); });
 });

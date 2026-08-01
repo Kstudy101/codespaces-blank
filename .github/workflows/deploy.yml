@@ -10,6 +10,7 @@ on:
     paths-ignore:
       - 'README.md'
       - 'data/**'
+      - 'docs/**'   # 計画書などの内部文書。build-site.sh の PUBLIC に無く配信もされない
       # tools/ は除外しない。build-site.sh が dist の中身を決めるので、
       # ここを直したのにデプロイされない、という食い違いが起きる。
   workflow_dispatch:

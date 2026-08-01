@@ -468,6 +468,24 @@ a.sns-btn{color:var(--text)}   /* リンクにしても見た目はボタンの�
 .pagenav a:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
 @media (prefers-reduced-motion:reduce){ .pagenav a{transition:none} }
 
+/* ---------- ほかのページ（生年月日なしで入れる入口） ---------- */
+.sm-grid{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:12px;
+}
+.sm-grid a{
+  display:grid; grid-template-columns:auto 1fr; gap:3px 12px; align-items:start;
+  padding:14px 16px; text-decoration:none; color:var(--text);
+  background:var(--surface); border:1.5px solid var(--line); border-radius:11px;
+  transition:border-color .15s, background .15s;
+}
+.sm-emoji{grid-row:1 / span 2; font-size:1.5rem; line-height:1.3}
+.sm-ttl{font-size:.95rem; font-weight:700}
+.sm-ttl small{font-size:.72rem; font-weight:400; color:var(--text-dim); margin-left:6px}
+.sm-txt{font-size:.78rem; line-height:1.7; color:var(--text-dim)}
+.sm-grid a:hover{border-color:var(--accent); background:var(--surface-2)}
+.sm-grid a:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+@media (prefers-reduced-motion:reduce){ .sm-grid a{transition:none} }
+
 footer{
   text-align:center; padding:32px 20px; color:var(--text-dim); font-size:.8rem;
   border-top:1px solid var(--line);
@@ -683,6 +701,41 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 
   <div id="f-result" hidden></div>
 </section>
+
+<!-- ============ ほかのページ ============
+     /omikuji /gilbang /amulet へは、これまで運勢の結果の中からしか
+     行けなかった。結果は生年月日を入れるまで hidden で、しかも中の
+     リンクは点数で出し分けている（金運 45 未満なら부적、仕事運 60 以上
+     なら吉方、それ以外は何も出ない）。生年月日を入れない人には
+     存在しないのと同じで、クローラーにも JS の文字列としてしか見えない。
+     入口はここに静的に置き、結果の中の出し分けはそのまま残す ──
+     あちらは「今日のあなたに勧める 1 本」で、こちらは一覧。         -->
+<nav class="card" aria-labelledby="sitemenu-h">
+  <div class="step-no">🗺️ ほかのページ<small>다른 페이지</small></div>
+  <h2 id="sitemenu-h">生年月日を入れなくても、今すぐ見られます</h2>
+  <div class="sm-grid">
+    <a href="/omikuji">
+      <span class="sm-emoji" aria-hidden="true">🎋</span>
+      <span class="sm-ttl">おみくじ<small>오미쿠지</small></span>
+      <span class="sm-txt">計算ではなく、くじ引き。韓国のことわざが 1 つ出ます。1 日 1 回。</span>
+    </a>
+    <a href="/gilbang">
+      <span class="sm-emoji" aria-hidden="true">🧭</span>
+      <span class="sm-ttl">今日の吉方<small>오늘의 길방</small></span>
+      <span class="sm-txt">日本の恵方と韓国の<b class="ko">손없는 날</b>。今日の方位をその場で計算します。</span>
+    </a>
+    <a href="/amulet">
+      <span class="sm-emoji" aria-hidden="true">🪄</span>
+      <span class="sm-ttl">부적メーカー<small>韓国のお守り</small></span>
+      <span class="sm-txt">願いの漢字を 1 字書いた 1 枚。画像で保存できます。</span>
+    </a>
+    <a href="/words">
+      <span class="sm-emoji" aria-hidden="true">📗</span>
+      <span class="sm-ttl">単語帳<small>단어장</small></span>
+      <span class="sm-txt">保存した言葉と、続けた日数。お使いの端末の中だけに残ります。</span>
+    </a>
+  </div>
+</nav>
 
 <!-- ============ STAGE 1 : INPUT ============ -->
 <div class="card" id="form-card" data-clarity-mask="true">
@@ -1192,6 +1245,11 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 </article>
 
 <nav class="pagenav" aria-label="サイト内リンク">
+  <a href="#fortune">🔮 今日の運勢</a>
+  <a href="/omikuji">🎋 おみくじ</a>
+  <a href="/gilbang">🧭 今日の吉方</a>
+  <a href="/amulet">🪄 부적メーカー</a>
+  <a href="/words">📗 単語帳</a>
   <a href="/tips">💡 韓国語の豆知識</a>
   <a href="/privacy">🔒 プライバシーポリシー</a>
   <a href="/contact">✉️ お問い合わせ</a>

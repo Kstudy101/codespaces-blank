@@ -2559,6 +2559,15 @@ function renderFortune(mine, today, res, prev){
          <a href="/omikuji">おみくじ</a>。
          こちらは計算ではなく<b>くじ引き</b>で、韓国のことわざが 1 つ出ます。</p>`;
 
+  // 結果に応じて次に勧めるものを変える。全員に同じ導線を並べるとただの
+  // メニューだが、今日の出方に合わせて別のものを勧めると、
+  // 続けて見る理由になる（§7 ④）。
+  const branch = res.scores.work >= 60
+    ? `<p class="f-todo">仕事運が <b>${res.scores.work}</b>。動きのある日は方角も見ておくと —
+         <a href="/gilbang">今日の吉方</a>。韓国には<b class="ko">손없는 날</b>という、
+         どの方角へ動いてもよい日があります。</p>`
+    : '';
+
   $('f-result').innerHTML = `
     <div class="f-head">
       <h3>${esc(iso(todayParts()))} の運勢</h3>
@@ -2577,6 +2586,7 @@ function renderFortune(mine, today, res, prev){
     ${next}
     ${stamp}
     ${todo}
+    ${branch}
     ${renderWords(res, today)}
     <p class="disclaim">
       ※ 四柱（사주）の考え方をもとにした、エンターテインメント目的のコンテンツです。

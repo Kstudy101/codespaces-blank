@@ -65,6 +65,13 @@ jobs:
         run: node tools/verify-omikuji.mjs
 
       # ---------------------------------------------------------------
+      # 方位。土台になる朔（新月）がずれると손없는 날が丸ごとずれるので、
+      # そこを国立天文台の公表値と突き合わせる。
+      # ---------------------------------------------------------------
+      - name: Verify gilbang
+        run: node tools/verify-gilbang.mjs
+
+      # ---------------------------------------------------------------
       # 公開ファイルを dist/ に集める。
       # このプロジェクトにビルドツールは無い（package.json も無い）。
       # それでも dist を作るのは、リポジトリにはあるが公開しては
@@ -327,13 +334,14 @@ jobs:
           }
 
           echo "拡張子なしURL（Apache は既定で解決しない。移行の要）"
-          for p in / /privacy /contact /tips /words /omikuji; do check "$p" 200; done
+          for p in / /privacy /contact /tips /words /omikuji /gilbang; do check "$p" 200; done
 
           echo "実ファイル"
           for p in /kanji.json /ogp.png /ads.txt /sitemap.xml /robots.txt; do check "$p" 200; done
 
           echo "運勢が使う実ファイル（PUBLIC への追加漏れはここで出る）"
-          for p in /saju.js /fortune.js /study.js /omikuji.js /solar-terms.json; do check "$p" 200; done
+          for p in /saju.js /fortune.js /study.js /omikuji.js /gilbang.js \
+                   /solar-terms.json /new-moons.json; do check "$p" 200; done
 
           echo "存在しないURLは 404（SPA フォールバックを入れていない確認）"
           check /no-such-page 404

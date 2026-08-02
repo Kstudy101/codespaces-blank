@@ -172,6 +172,11 @@ button.ghost{
   font-size:.74rem; font-weight:700; letter-spacing:.1em;
   color:var(--accent); margin-bottom:4px;
 }
+/* 見出しの韓国語には必ず日本語訳を並べる。韓国語だけを置くと、
+   読める人にしか意味が渡らない見出しになる。 */
+.step-no small{
+  font-size:.92em; font-weight:400; letter-spacing:.04em; color:var(--text-dim);
+}
 h2{font-size:1.18rem; margin:0 0 18px; letter-spacing:-.01em}
 
 /* name display */
@@ -295,6 +300,42 @@ h2{font-size:1.18rem; margin:0 0 18px; letter-spacing:-.01em}
 .call:first-of-type{border-top:0}
 .call .t{font-size:1.15rem; font-weight:700; color:var(--accent); flex:none; min-width:112px}
 .call .d{font-size:.86rem; color:var(--text-dim)}
+
+/* ---- まとめ ----
+   画面に出したものを、文字・語彙・表現・呼びかけ・文法に分けて並べ直す枠。
+   1 本の列に混ぜて出すと「何を覚えたのか」が種類ごとに見えない。 */
+.rc-name{
+  background:var(--surface-2); border-radius:12px; padding:16px 18px; margin-bottom:22px;
+}
+.rc-name .t{font-size:1.6rem; font-weight:700; color:var(--accent); line-height:1.3}
+.rc-name .d{font-size:.82rem; color:var(--text-dim); margin-top:4px; line-height:1.7}
+.rc-sec{margin-bottom:22px}
+.rc-sec:last-of-type{margin-bottom:0}
+.rc-h{
+  display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
+  font-size:.92rem; margin:0 0 4px; padding-bottom:8px;
+  border-bottom:1px solid var(--line);
+}
+.rc-h small{font-size:.74rem; font-weight:400; color:var(--text-dim); letter-spacing:.02em}
+.rc-h .rc-n{margin-left:auto; font-size:.72rem; font-weight:400; color:var(--text-dim)}
+.rc-lead{font-size:.8rem; color:var(--text-dim); margin:8px 0 0; line-height:1.8}
+/* .call は名前 1 語を横に並べる想定。まとめには文がそのまま入るので、
+   ここでは縦に積む（横並びのままだと狭い画面で桁が溢れる）。 */
+.rc-sec .call{flex-direction:column; align-items:stretch; gap:3px; padding:11px 0}
+.rc-sec .call .t{min-width:0; font-size:1.05rem; line-height:1.5}
+.rc-sec .call .d{font-size:.8rem; line-height:1.75}
+.rc-sec .call .d b{color:var(--text)}
+.rc-chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px}
+.rc-chip{
+  background:var(--surface-2); border-radius:9px; padding:6px 11px;
+  font-size:.78rem; color:var(--text-dim); line-height:1.4;
+}
+.rc-chip b{font-size:1.05rem; font-weight:700; color:var(--accent); margin-right:5px}
+.rc-tag{
+  display:inline-block; font-size:.66rem; font-weight:700; color:var(--blue);
+  background:var(--blue-soft); border-radius:99px; padding:2px 8px; margin-left:8px;
+  vertical-align:.1em; letter-spacing:.02em;
+}
 .warnbox{
   background:var(--gold-soft); border-left:3px solid var(--gold);
   padding:12px 16px; border-radius:8px; font-size:.86rem; margin-top:16px;
@@ -309,10 +350,10 @@ h2{font-size:1.18rem; margin:0 0 18px; letter-spacing:-.01em}
 .gate h2{margin-bottom:8px}
 .gate p{font-size:.88rem; color:var(--text-dim); margin:0 0 18px}
 .gate .row{text-align:left}
-/* 時刻・場所の注記。gate は中央寄せだが、この長さの文は左寄せでないと
+/* 時刻の注記。gate は中央寄せだが、この長さの文は左寄せでないと
    行ごとに頭が動いて読みにくい。 */
 .gate-hint{text-align:left; margin:12px 0 0}
-/* 暦の出どころと、占いであることの断り。ボタンより下、押す前に読める位置。 */
+/* 暦の立て方。ボタンより下、押す前に読める位置。 */
 .gate-src{
   text-align:left; font-size:.76rem; line-height:1.85; color:var(--text-dim);
   margin:18px 0 0; padding-top:16px; border-top:1px dashed var(--line);
@@ -383,11 +424,6 @@ h2{font-size:1.18rem; margin:0 0 18px; letter-spacing:-.01em}
 .zodiac .emo{font-size:2.4rem; flex:none}
 .zodiac .ko{font-size:1.3rem; font-weight:700; color:var(--accent)}
 .zodiac .ja{font-size:.85rem; color:var(--text-dim)}
-.disclaim{
-  font-size:.78rem; color:var(--text-dim); text-align:center;
-  padding:14px; background:var(--surface-2); border-radius:10px;
-}
-
 /* ---------- share ---------- */
 .cardwrap{
   border-radius:12px; overflow:hidden; background:var(--surface-2);
@@ -553,7 +589,6 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 /* ---- 今日の運勢 ------------------------------------------------- */
 .fortune{border:1px solid var(--line)}
 .fortune-lead{font-size:.9rem; line-height:1.85; margin:0 0 20px}
-.fortune-note{margin-top:14px}
 .row-2 > div{flex:1}
 
 .f-head{
@@ -632,9 +667,10 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 }
 .f-todo a{color:var(--accent); font-weight:700}
 
-/* 今日の 3 語 */
+/* 今日学ぶ 3 つの単語 */
 .f-words{margin-top:26px; padding-top:22px; border-top:1px solid var(--line)}
 .f-words h4{font-size:1rem; margin:0 0 6px}
+.f-words h4 small{font-size:.72rem; font-weight:400; color:var(--text-dim); margin-left:8px}
 .w-card{
   border:1px solid var(--line); border-radius:14px;
   padding:16px 18px; margin-bottom:12px; background:var(--surface);
@@ -892,12 +928,13 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
        結果の中の「今日のあなたに勧める 1 本」はそのまま残してある。
        あちらは点数から選ぶ 1 本、こちらは 5 つ全部。                -->
   <div class="gate" id="gate">
-    <div class="step-no" style="justify-content:center">🔮 ここから占い<small>사주 이야기</small></div>
+    <div class="step-no" style="justify-content:center">🔮 ここから占い<small>점 보기 ＝ 占う</small></div>
     <h2>韓国の名前で、占ってみませんか？</h2>
     <p>
-      生まれた年・月・日・時刻を干支に直した 4 本の柱 —— それが韓国でいう
+      占いのことを、韓国語では <b class="ko">점</b>（チョム）といいます。<br>
+      なかでも、生まれた年・月・日・時刻を干支に直した 4 本の柱が
       <b class="ko">사주</b>（四柱）です。<br>
-      あなたの四柱で、<b>名前の五行・今日の運勢・おみくじ・吉方・부적</b>の
+      あなたの四柱から、<b>名前の五行・今日の運勢・おみくじ・吉方・부적</b>の
       5 つをまとめてお出しします。
     </p>
     <div class="row">
@@ -925,24 +962,18 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
       </div>
     </div>
     <p class="hint gate-hint">
-      時刻がわからなければ「わからない」のままで大丈夫です。時柱を除いた 3 柱で出します。
-      生まれた場所は、時刻を<b>真太陽時</b>に直すために使います（ソウルは標準時より約 32 分遅く、
-      東京は約 19 分早い）。
+      生まれた時刻がわからなければ、「わからない」のままで大丈夫です。
+      その場合は時柱を除いた 3 柱でお出しします。
     </p>
     <p class="err" id="err2"></p>
     <button id="go2">占ってみる</button>
 
     <!-- どこから来た数字なのかを、押す前に置いておく。四柱は入力を
          そのまま並べ替えたものではなく暦の計算なので、根拠を書かないと
-         「それらしい漢字が出ただけ」と区別がつかない。
-         同時に、当たる当たらないの話ではないことも同じ場所で言う。 -->
+         「それらしい漢字が出ただけ」と区別がつかない。 -->
     <p class="gate-src">
       暦は<b>万年暦</b>（<b class="ko">만세력</b>）と同じ立て方です。年柱は<b>立春</b>、
-      月柱は<b>十二節</b>で切り替え、時刻は生まれた場所の<b>真太陽時</b>に直します。
-      その節気と朔（新月）の時刻は<b>国立天文台 暦計算室</b>の公表値と突き合わせて
-      確かめたものを使っています。<br>
-      そのうえで —— ここから出るものは<b>占いを題材にした読みもの</b>です。
-      楽しんでいただくためのもので、鑑定ではありません。
+      月柱は<b>十二節</b>で切り替え、時刻は生まれた場所の<b>真太陽時</b>に直しています。
     </p>
   </div>
 
@@ -951,35 +982,24 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 
     <!-- ① 韓国式ネーム診断 -->
     <div class="card">
-      <div class="step-no">🔮 その一<small>이름 풀이</small></div>
+      <div class="step-no">🔮 その一<small>이름 풀이 ＝ 名前の読み解き</small></div>
       <h2>あなたの名前を、韓国式に読み解くと</h2>
       <div id="d-ohaeng"></div>
       <div id="d-zodiac"></div>
       <div id="d-birth"></div>
-      <p class="disclaim">
-        ※ 韓国の姓名判断（성명학）の「子音五行」の考え方をもとにした、
-        エンターテインメント目的のコンテンツです。
-      </p>
     </div>
 
     <!-- ② 今日の運勢 -->
     <section class="card fortune" id="fortune" aria-labelledby="fortune-h">
-      <div class="step-no">🔮 その二<small>오늘의 운세</small></div>
+      <div class="step-no">🔮 その二<small>오늘의 운세 ＝ 今日の運勢</small></div>
       <h2 id="fortune-h">今日のあなたは、どんな日？</h2>
       <p class="fortune-lead">
-        韓国では占いを <b class="ko">사주</b>（四柱）と呼びます。生まれた年・月・日・時刻の
-        4 つを干支に直したもので、日本の四柱推命と同じ考え方です。
-        ここでは今日の<b>日辰</b>（その日の干支）とあなたの四柱を照らして、
-        総合・金・恋愛・仕事・健康・<b>学習</b>の 6 項目を出します。
+        生まれた年・月・日・時刻の 4 つを干支に直したものを、韓国語で
+        <b class="ko">사주</b>（四柱）といいます。日本の四柱推命と同じ考え方です。
+        ここでは今日の<b>日辰</b>（その日の干支）とあなたの四柱を照らし合わせて、
+        総合・金運・恋愛・仕事・健康・<b>学習</b>の 6 項目をお出しします。
       </p>
       <div id="f-result" hidden></div>
-      <p class="disclaim fortune-note">
-        ※ 四柱（사주）の考え方をもとにした、エンターテインメント目的のコンテンツです。
-        生年月日は<b>このタブを閉じるまで</b>お使いの端末の中だけに置かれ、
-        <a href="/gilbang">吉方</a>と<a href="/amulet">부적</a>で入れ直さずに済むようにしています。
-        サーバーへ送られることはありません。点数の履歴だけが端末に残り、
-        次に来たときの「前回と比べて」に使われます。
-      </p>
     </section>
 
     <!-- ③④⑤ おみくじ・吉方・부적
@@ -989,11 +1009,11 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
          直すことになる（同じ理由で amulet.js は五行の判定を
          gilbang.js から呼んでいる）。                              -->
     <div class="card">
-      <div class="step-no">🔮 その三<small>오늘의 세 가지</small></div>
+      <div class="step-no">🔮 その三<small>오늘의 세 가지 ＝ 今日の三つ</small></div>
       <h2>今日はもう 3 つ、あなたに</h2>
       <p class="hint" style="margin:-8px 0 18px">
         くじを 1 本、向かうとよい方角を 1 つ、お守りを 1 枚。
-        ここには今日の結論だけを出します —— 読み方や作り直しは、それぞれのページで。
+        ここでは今日の結論だけをお出しします —— 詳しい読み方や作り直しは、それぞれのページで。
       </p>
 
       <div class="s6-list">
@@ -1029,9 +1049,11 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
       </div>
     </div>
 
-    <!-- まとめ -->
+    <!-- まとめ。中身は renderRecap() が組み立てる。上の STEP と占いで
+         画面に出したものを、種類ごとに分けて並べ直す場所なので、
+         今日の 3 語まで出そろってから描く（runSaju の呼ぶ順を参照）。 -->
     <div class="card">
-      <div class="step-no">🌸 まとめ</div>
+      <div class="step-no">🌸 まとめ<small>오늘의 정리 ＝ 今日のまとめ</small></div>
       <h2>今日、あなたの名前で覚えた韓国語</h2>
       <div id="d-recap"></div>
     </div>
@@ -1319,10 +1341,11 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
   <div class="card">
     <h2>生年月日を入れなくても、今すぐ見られるページ</h2>
     <p class="body-p">
-      韓国では占いを <b class="ko">사주</b>（四柱）と呼びます。生まれた年・月・日・時刻の
-      4 つを干支に直したもので、日本の四柱推命と同じ考え方です。ページ後半の占いでは今日の
-      <b>日辰</b>（その日の干支）とあなたの四柱を照らして、
-      総合・金・恋愛・仕事・健康・<b>学習</b>の 6 項目を出します。
+      占いのことを、韓国語では <b class="ko">점</b>（チョム）といいます。なかでも、生まれた
+      年・月・日・時刻の 4 つを干支に直した <b class="ko">사주</b>（四柱）は、日本の
+      四柱推命と同じ考え方です。ページ後半の占いでは、今日の<b>日辰</b>（その日の干支）と
+      あなたの四柱を照らし合わせて、総合・金運・恋愛・仕事・健康・<b>学習</b>の
+      6 項目をお出しします。
       下の 3 つは生年月日が要らないので、名前を入れる前でもそのままご覧いただけます。
     </p>
     <div class="sm-grid">
@@ -2228,35 +2251,145 @@ function renderName(y, m, d){
       </div>
     </div>`;
 
-  /* まとめ */
-  const words = state.known.filter(c => HANJA[c].w)
-    .map(c => `<div class="call">
-        <div class="t">${esc(HANJA[c].w)}</div>
-        <div class="d">${esc(HANJA[c].wj || '')}（${esc(c)} = ${esc(HANJA[c].k)}）</div>
-      </div>`).join('');
-  $('d-recap').innerHTML = `
-    <div class="call">
-      <div class="t">${esc(state.fullH)}</div>
-      <div class="d">ハングルで書いたあなたの名前</div>
-    </div>
-    <div class="call">
-      <div class="t">${esc(state.given)} 씨</div>
-      <div class="d">韓国での呼ばれ方（〜さん）</div>
-    </div>
-    <div class="call">
-      <div class="t">만나서 반갑습니다</div>
-      <div class="d">はじめまして</div>
-    </div>
-    ${words}
-    <div class="warnbox" style="margin-top:18px">
-      これだけでも、韓国で自己紹介ができます。<br>
-      次は「誕生日」「好きな食べ物」「趣味」——<b>あなた自身</b>を材料に、韓国語を増やしていきましょう。
-    </div>`;
-
+  /* まとめが引き写せるように、ここで出したものを state に残す。
+     漢数詞の読みは上の sino()/MONTH に依っているので、値だけを渡す。 */
+  state.birthSay = {
+    ko:   `저는 ${y}년 ${m}월 ${d}일에 태어났어요.`,
+    ja:   `わたしは${y}年${m}月${d}日に生まれました。`,
+    read: `${sino(y)}년 ${MONTH[m]}월 ${sino(d)}일`,
+    irr:  (m === 6 || m === 10)
+            ? { t: `${MONTH[m]}월`,
+                d: `${m}月は ${m === 6 ? '육월' : '십월'} ではなく ${MONTH[m]}월。`
+                   + '韓国語の月名で 2 つだけある不規則です（6月=유월, 10月=시월）。' }
+            : null
+  };
   state.zodiac   = z.ko;
+  state.zodiacJa = z.ja;
   state.ohaengKo = o.ko;
+  state.ohaengJa = o.ja;
   buildCard();
   shareLinks();   /* 干支・五行が文面に加わるので貼り直す */
+}
+
+/* ==================================================================
+   6b. まとめ — 今日おぼえたものを、種類ごとに並べ直す
+   ------------------------------------------------------------------
+   STEP 1〜5 と占いで出したものは、画面上では「読んだ順」に散って
+   いる。持ち帰るには、それが文字なのか単語なのか言い回しなのか
+   文法なのかが見えている必要がある。そこでここでは、上に出したもの
+   だけを種類ごとに引き写す ── 新しい内容はひとつも足さない。
+
+   画面に出ていないものは節ごと落とす（漢字を使わない名前なら語彙は
+   名前由来のぶんが無く、占いを立てていなければ今日の 3 語も無い）。
+
+   todayWords が要るので、呼ぶのは showFortune() のあと。runSaju() の
+   呼ぶ順を変えるときはここも見ること。
+   ================================================================== */
+function renderRecap(){
+  if (!state) return;
+
+  const g  = state.given, jong = hasJong(g);
+  const jn = state.meiF || state.seiF || g;    /* 日本語側はふりがなで書く */
+
+  /* t / d は組み立てずみの HTML を受け取る。値の esc は呼ぶ側の責任。 */
+  const row = (t, d, tag) =>
+    `<div class="call">
+       <div class="t ko">${t}</div>
+       <div class="d">${d}${tag ? `<span class="rc-tag">${esc(tag)}</span>` : ''}</div>
+     </div>`;
+  /* 数の助数詞は節ごとに変える。文にも呼び方にも「個」は付けられない。 */
+  const sec = (emo, ja, ko, body, n, unit) => body ? `
+    <section class="rc-sec">
+      <h4 class="rc-h"><span aria-hidden="true">${emo}</span>${esc(ja)}
+        <small class="ko">${esc(ko)}</small>
+        <span class="rc-n">${n} ${esc(unit)}</span></h4>
+      ${body}
+    </section>` : '';
+
+  /* ① 文字 — STEP 2 で分解した字母。同じ字母は一度だけ数える。 */
+  const jamo = [];
+  for (const s of state.allSyl){
+    const d = decomp(s);
+    if (!d) continue;
+    for (const p of [d.cho, d.jung].concat(d.jong ? [d.jong] : []))
+      if (jamo.indexOf(p) < 0) jamo.push(p);
+  }
+  const letters = jamo.length ? `
+    <p class="rc-lead">あなたの名前を書くのに使った字母です。
+      この ${jamo.length} 字が読めれば、同じ字母を使う言葉はもう読めます。</p>
+    <div class="rc-chips">${jamo.map(p =>
+      `<span class="rc-chip"><b>${esc(p)}</b>${esc(JAMO_JA[p] || '')}</span>`).join('')}</div>` : '';
+
+  /* ② 語彙 — 名前の漢字（STEP 3）・干支と五行（その一）・今日の 3 語（その二） */
+  const voc = [];
+  for (const c of state.known){
+    const h = lookup(c);
+    if (h && h.w)
+      voc.push(row(esc(h.w), `${esc(h.wj || '')}（${esc(c)}＝${esc(h.k)}）`, '名前の漢字'));
+  }
+  if (state.zodiac)
+    voc.push(row(`${esc(state.zodiac)}띠`,
+      `あなたの干支は ${esc(state.zodiacJa)}年。<b>띠</b> が「干支」にあたる言葉です。`, '名前の読み解き'));
+  if (state.ohaengKo)
+    voc.push(row(esc(state.ohaengKo),
+      `あなたの名前の五行は ${esc(state.ohaengJa)}。`, '名前の読み解き'));
+  for (const w of todayWords)
+    voc.push(row(esc(w.k), `${esc(w.j)}　読み方は ${esc(w.r)}。`, '今日学ぶ単語'));
+
+  /* ③ 表現 — STEP 4 の例文と、生年月日の言い方（その一） */
+  const exp = [
+    row(`저는 ${esc(g)}입니다.`,
+      `わたしは${esc(jn)}です。<b>입니다</b> は初対面で使う丁寧な形。`, '自己紹介'),
+    row(`제 이름은 ${esc(g)}${esc(ieyo(g))}.`,
+      `わたしの名前は${esc(jn)}です。<b>제 이름은</b> で「わたしの名前は」。`, '自己紹介'),
+    row('만나서 반갑습니다.',
+      'お会いできてうれしいです。（はじめまして）「반갑습니다」だけでも使えます。', 'あいさつ'),
+    row(`${esc(g)}${esc(ega(g))} 한국어를 공부해요.`,
+      `${esc(jn)}は韓国語を勉強します。<b>공부해요</b> で「勉強します」。`, '自分のこと')
+  ];
+  if (state.birthSay)
+    exp.push(row(esc(state.birthSay.ko),
+      `${esc(state.birthSay.ja)}　読み方は <b>${esc(state.birthSay.read)}</b>。`, '自分のこと'));
+
+  /* ④ 呼びかけ — STEP 5 */
+  const call = [
+    row(`${esc(g)} 씨`,   '日本語の「〜さん」に近い、いちばん一般的な呼び方。', '丁寧'),
+    row(`${esc(g)} 님`,   '「씨」よりさらに丁寧。ネット・接客・ビジネスでよく使われます。', 'より丁寧'),
+    row(`${esc(g)}${jong ? '아' : '야'}`,
+      '親しい友だち・年下への呼びかけ。敬語を使わない<b>반말</b>の言い方です。', 'ため口')
+  ];
+
+  /* ⑤ 文法 — 上の言い回しが、なぜその形になったか */
+  const gram = [
+    row(jong ? '이에요' : '예요',
+      `「〜です」のくだけた形。「${esc(g)}」は${jong ? '最後にパッチム（子音）があるので <b>이에요</b>'
+                                                   : '最後が母音で終わるので <b>예요</b>'} がつきます。`, 'パッチム'),
+    row(jong ? '이' : '가',
+      `主語につく助詞。${jong ? 'パッチムがあるので <b>이</b>' : '母音で終わるので <b>가</b>'} を選びます。`, '助詞'),
+    row(jong ? '아' : '야',
+      `親しい相手を呼ぶときにつける語。${jong ? 'パッチムがあるので <b>아</b>'
+                                            : '母音で終わるので <b>야</b>'} がつきます。`, '呼びかけ'),
+    row('년 / 월 / 일', '年 / 月 / 日。数字は漢数詞（일・이・삼・사…）で読みます。', '数の読み')
+  ];
+  if (state.birthSay && state.birthSay.irr)
+    gram.push(row(esc(state.birthSay.irr.t), esc(state.birthSay.irr.d), '不規則'));
+
+  $('d-recap').innerHTML = `
+    <div class="rc-name">
+      <div class="t ko">${esc(state.fullH)}</div>
+      <div class="d">ハングルで書いたあなたの名前${state.hanjaEum
+        ? `　／　名前の漢字を韓国語で読むと <b class="ko">${esc(state.hanjaEum)}</b>` : ''}</div>
+    </div>
+    ${sec('🔤', '文字',     '한글 자모 ＝ ハングルの字母', letters,       jamo.length, '字')}
+    ${sec('📗', '語彙',     '단어 ＝ 単語',               voc.join(''),  voc.length,  '語')}
+    ${sec('💬', '表現',     '표현 ＝ 言い回し',           exp.join(''),  exp.length,  '文')}
+    ${sec('🗣', '呼びかけ', '호칭 ＝ 呼び方',             call.join(''), call.length, '通り')}
+    ${sec('📐', '文法',     '문법 ＝ 文法のきまり',       gram.join(''), gram.length, '点')}
+    <div class="warnbox" style="margin-top:22px">
+      ここまでの言葉だけでも、韓国で自己紹介ができます。<br>
+      次は「誕生日」「好きな食べ物」「趣味」——<b>あなた自身</b>のことを材料に、
+      韓国語を増やしていきましょう。
+    </div>`;
 }
 
 /* ==================================================================
@@ -2617,7 +2750,7 @@ function pillarBox(label, gz, ko){
   </div>`;
 }
 
-/* 今日の 3 語。学習運のぶんは必ず入れ、あとは今日いちばん良い項目と
+/* 今日学ぶ 3 つの単語。学習運のぶんは必ず入れ、あとは今日いちばん良い項目と
    いちばん低い項目から採る。全員に同じ 3 語を出すと運勢と切り離された
    ただの単語帳になり、結果を読んだ流れが切れる。
 
@@ -2661,9 +2794,10 @@ function renderWords(res, today){
   }).join('');
 
   return `<div class="f-words">
-    <h4>今日の 3 語</h4>
+    <h4>今日学ぶ 3 つの単語<small class="ko">오늘 배울 세 단어</small></h4>
     <p class="hint" style="margin:-4px 0 14px">
-      運勢の項目に合わせて選んでいます。声に出して、気に入ったものだけ保存してください。</p>
+      今日の運勢の項目に合わせて選んでいます。声に出してみて、
+      気に入ったものだけ単語帳に保存してください。</p>
     ${cards}
   </div>`;
 }
@@ -2756,11 +2890,7 @@ function renderFortune(mine, today, res, prev){
     ${stamp}
     ${todo}
     ${branch}
-    ${renderWords(res, today)}
-    <p class="disclaim">
-      ※ 四柱（사주）の考え方をもとにした、エンターテインメント目的のコンテンツです。
-      年柱は立春、月柱は十二節で切り替え、時刻は真太陽時に直しています。
-    </p>`;
+    ${renderWords(res, today)}`;
   $('f-result').hidden = false;
 }
 
@@ -2923,6 +3053,8 @@ async function runSaju(){
   showFortune(mine, today);
   paintOmikuji();
   paintAmulet(mine);
+  /* まとめは今日の 3 語まで引き写すので、①②が出そろってから描く。 */
+  renderRecap();
 
   // 開くのは待たない。朔の表を取りに行っている間ずっとボタンが
   // 押しっぱなしに見えるより、①②③⑤ を先に出して④だけ後から埋まる方がよい。

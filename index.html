@@ -309,6 +309,51 @@ h2{font-size:1.18rem; margin:0 0 18px; letter-spacing:-.01em}
 .gate h2{margin-bottom:8px}
 .gate p{font-size:.88rem; color:var(--text-dim); margin:0 0 18px}
 .gate .row{text-align:left}
+/* 時刻・場所の注記。gate は中央寄せだが、この長さの文は左寄せでないと
+   行ごとに頭が動いて読みにくい。 */
+.gate-hint{text-align:left; margin:12px 0 0}
+
+/* ---- STEP 6 にまとめた 3 つ（おみくじ・吉方・부적） ----
+   本体はそれぞれのページで、ここは今日の結論だけを出す枠。 */
+.s6-list{display:grid; gap:12px}
+.s6-item{
+  border:1px solid var(--line); border-radius:14px;
+  padding:16px 18px; background:var(--surface);
+}
+.s6-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.s6-emo{font-size:1.4rem; line-height:1}
+.s6-ttl{font-size:.98rem; font-weight:700}
+.s6-ttl small{font-size:.72rem; font-weight:400; color:var(--text-dim); margin-left:6px}
+.s6-go{
+  margin-left:auto; font-size:.78rem; font-weight:700; color:var(--accent);
+  text-decoration:none; white-space:nowrap;
+}
+.s6-go:hover{text-decoration:underline}
+.s6-go:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.s6-txt{font-size:.8rem; line-height:1.7; color:var(--text-dim); margin:8px 0 0}
+.s6-body{margin-top:14px}
+.s6-body button{margin:0; width:100%; padding:11px; font-size:.88rem}
+.s6-out{margin:0 0 4px; padding:14px 16px; border-radius:12px; background:var(--surface-2)}
+.s6-grade{font-size:1.5rem; font-weight:700; letter-spacing:.03em}
+.s6-grade small{font-size:.8rem; font-weight:400; color:var(--text-dim); margin-left:8px}
+.s6-say{font-size:1rem; line-height:1.6; margin:10px 0 0}
+.s6-say .ja{display:block; font-size:.82rem; color:var(--text-dim); margin-top:4px}
+.s6-rows{display:grid; gap:9px}
+.s6-row{display:flex; align-items:baseline; gap:10px; font-size:.88rem}
+.s6-row .lb{flex:none; width:7em; color:var(--text-dim); font-size:.76rem}
+.s6-row .vl{font-weight:700}
+.s6-row .vl small{font-weight:400; color:var(--text-dim); margin-left:6px; font-size:.76rem}
+.s6-hanja{display:flex; align-items:center; gap:14px}
+.s6-hanja .ch{
+  flex:none; width:58px; height:58px; display:flex; align-items:center;
+  justify-content:center; font-size:2rem; font-weight:700;
+  border:1px solid var(--line); border-radius:12px;
+}
+@media (max-width:480px){
+  /* ラベルを上に逃がす。7em を取ると値の入る幅が残らない。 */
+  .s6-row{flex-direction:column; gap:1px}
+  .s6-row .lb{width:auto}
+}
 
 /* analysis */
 #stage2{display:none}
@@ -505,7 +550,6 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 /* ---- 今日の運勢 ------------------------------------------------- */
 .fortune{border:1px solid var(--line)}
 .fortune-lead{font-size:.9rem; line-height:1.85; margin:0 0 20px}
-.fortune-hint{margin:10px 0 0}
 .fortune-note{margin-top:14px}
 .row-2 > div{flex:1}
 
@@ -646,97 +690,6 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
   <span class="tipbar-go" aria-hidden="true">→</span>
 </a>
 
-<!-- ============ 今日の運勢（入口） ============
-     JS が動かない環境でも解説文だけは読める形にしてある。中身を全部
-     JS で作ると、クローラーには空のページに見える（AdSense の審査で
-     一度これに当たっている）。                                        -->
-<section class="card fortune" id="fortune" aria-labelledby="fortune-h">
-  <div class="step-no">🔮 今日の運勢<small>오늘의 운세</small></div>
-  <h2 id="fortune-h">生年月日から、今日の運勢を 6 項目で</h2>
-
-  <p class="fortune-lead">
-    韓国では占いを <b class="ko">사주</b>（四柱）と呼びます。生まれた年・月・日・時刻の
-    4 つを干支に直したもので、日本の四柱推命と同じ考え方です。
-    ここでは今日の<b>日辰</b>（その日の干支）とあなたの四柱を照らして、
-    総合・金・恋愛・仕事・健康・<b>学習</b>の 6 項目を出します。
-  </p>
-
-  <div class="row" data-clarity-mask="true">
-    <div>
-      <label for="f-y">年</label>
-      <input type="number" id="f-y" placeholder="1995" min="1930" max="2030" autocomplete="off">
-    </div>
-    <div>
-      <label for="f-m">月</label>
-      <input type="number" id="f-m" placeholder="4" min="1" max="12" autocomplete="off">
-    </div>
-    <div>
-      <label for="f-d">日</label>
-      <input type="number" id="f-d" placeholder="12" min="1" max="31" autocomplete="off">
-    </div>
-  </div>
-  <div class="row row-2" data-clarity-mask="true">
-    <div>
-      <label for="f-h">生まれた時刻</label>
-      <select id="f-h"></select>
-    </div>
-    <div>
-      <label for="f-city">生まれた場所</label>
-      <select id="f-city"></select>
-    </div>
-  </div>
-
-  <p class="hint fortune-hint">
-    時刻がわからなければ「わからない」のままで大丈夫です。時柱を除いた 3 柱で出します。
-    生まれた場所は、時刻を<b>真太陽時</b>に直すために使います（ソウルは標準時より約 32 分遅く、
-    東京は約 19 分早い）。
-  </p>
-
-  <p class="err" id="f-err"></p>
-  <button id="f-go">今日の運勢を見る</button>
-  <p class="disclaim fortune-note">
-    ※ 入力された生年月日は<b>保存されません</b>。点数の履歴だけがお使いの端末に残り、
-    次に来たときの「前回と比べて」に使われます。
-  </p>
-
-  <div id="f-result" hidden></div>
-</section>
-
-<!-- ============ ほかのページ ============
-     /omikuji /gilbang /amulet へは、これまで運勢の結果の中からしか
-     行けなかった。結果は生年月日を入れるまで hidden で、しかも中の
-     リンクは点数で出し分けている（金運 45 未満なら부적、仕事運 60 以上
-     なら吉方、それ以外は何も出ない）。生年月日を入れない人には
-     存在しないのと同じで、クローラーにも JS の文字列としてしか見えない。
-     入口はここに静的に置き、結果の中の出し分けはそのまま残す ──
-     あちらは「今日のあなたに勧める 1 本」で、こちらは一覧。         -->
-<nav class="card" aria-labelledby="sitemenu-h">
-  <div class="step-no">🗺️ ほかのページ<small>다른 페이지</small></div>
-  <h2 id="sitemenu-h">生年月日を入れなくても、今すぐ見られます</h2>
-  <div class="sm-grid">
-    <a href="/omikuji">
-      <span class="sm-emoji" aria-hidden="true">🎋</span>
-      <span class="sm-ttl">おみくじ<small>오미쿠지</small></span>
-      <span class="sm-txt">計算ではなく、くじ引き。韓国のことわざが 1 つ出ます。1 日 1 回。</span>
-    </a>
-    <a href="/gilbang">
-      <span class="sm-emoji" aria-hidden="true">🧭</span>
-      <span class="sm-ttl">今日の吉方<small>오늘의 길방</small></span>
-      <span class="sm-txt">日本の恵方と韓国の<b class="ko">손없는 날</b>。今日の方位をその場で計算します。</span>
-    </a>
-    <a href="/amulet">
-      <span class="sm-emoji" aria-hidden="true">🪄</span>
-      <span class="sm-ttl">부적メーカー<small>韓国のお守り</small></span>
-      <span class="sm-txt">願いの漢字を 1 字書いた 1 枚。画像で保存できます。</span>
-    </a>
-    <a href="/words">
-      <span class="sm-emoji" aria-hidden="true">📗</span>
-      <span class="sm-ttl">単語帳<small>단어장</small></span>
-      <span class="sm-txt">保存した言葉と、続けた日数。お使いの端末の中だけに残ります。</span>
-    </a>
-  </div>
-</nav>
-
 <!-- ============ STAGE 1 : INPUT ============ -->
 <div class="card" id="form-card" data-clarity-mask="true">
   <p class="why">
@@ -871,53 +824,6 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     <div class="warnbox" id="d-callnote"></div>
   </div>
 
-  <!-- GATE -->
-  <div class="gate" id="gate">
-    <div class="step-no" style="justify-content:center">🌸 STEP 6</div>
-    <h2>生年月日を入れると、韓国式ネーム診断が見られます</h2>
-    <p>
-      名前の音から見る五行、そして韓国の干支（띠）まで。<br>
-      こちらも保存されません。
-    </p>
-    <div class="row">
-      <div>
-        <label for="y">年</label>
-        <input type="number" id="y" placeholder="1995" min="1900" max="2100">
-      </div>
-      <div>
-        <label for="m">月</label>
-        <input type="number" id="m" placeholder="4" min="1" max="12">
-      </div>
-      <div>
-        <label for="d">日</label>
-        <input type="number" id="d" placeholder="12" min="1" max="31">
-      </div>
-    </div>
-    <p class="err" id="err2"></p>
-    <button id="go2">韓国式ネーム診断を見る</button>
-  </div>
-
-  <!-- STAGE 2 -->
-  <div id="stage2">
-    <div class="card">
-      <div class="step-no">🌸 STEP 6</div>
-      <h2>韓国式ネーム診断</h2>
-      <div id="d-ohaeng"></div>
-      <div id="d-zodiac"></div>
-      <div id="d-birth"></div>
-      <p class="disclaim">
-        ※ 韓国の姓名判断（성명학）の「子音五行」の考え方をもとにした、
-        エンターテインメント目的のコンテンツです。
-      </p>
-    </div>
-
-    <div class="card">
-      <div class="step-no">🌸 まとめ</div>
-      <h2>今日、あなたの名前で覚えた韓国語</h2>
-      <div id="d-recap"></div>
-    </div>
-  </div>
-
   <!-- SHARE -->
   <div class="card">
     <div class="step-no">🌸 シェア</div>
@@ -969,6 +875,150 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
       個別ボタンでは<b>画像の保存</b>と<b>文章のコピー</b>のみ行います。
       アプリに直接渡したい場合は「アプリでシェア」をお使いください。
     </p>
+  </div>
+
+  <!-- ============ STEP 6 ============
+       生年月日で開くものを 1 か所にまとめた。以前は 3 か所に散っていて、
+       同じ生年月日を同じ画面で 2 回訊いていた:
+
+         韓国式ネーム診断  結果の途中（#gate の y/m/d）
+         今日の運勢        ページ最上部の別セクション（f-y/f-m/f-d）
+         おみくじ/吉方/부적 運勢の結果の中に、点数で 1 本だけ出し分け
+
+       入口はこの 1 つにして、シェアのあとへ置く。名前の 5 STEP が
+       このサイトの本体で、こちらはその先だから。年の範囲は狭いほう
+       （節気表のある 1930〜2030）に合わせてある ── 名前診断だけなら
+       1900〜2100 で出せるが、同じボタンで運勢まで出す以上、
+       片方だけ通って片方が落ちる入力を受け付ける意味がない。
+
+       結果の中の「今日のあなたに勧める 1 本」はそのまま残してある。
+       あちらは点数から選ぶ 1 本、こちらは 5 つ全部。                -->
+  <div class="gate" id="gate">
+    <div class="step-no" style="justify-content:center">🌸 STEP 6</div>
+    <h2>生年月日を入れると、ここから 5 つ開きます</h2>
+    <p>
+      韓国式ネーム診断・今日の運勢・おみくじ・今日の吉方・부적。<br>
+      入力はこの 1 か所だけです。こちらも保存されません。
+    </p>
+    <div class="row">
+      <div>
+        <label for="y">年</label>
+        <input type="number" id="y" placeholder="1995" min="1930" max="2030" autocomplete="off">
+      </div>
+      <div>
+        <label for="m">月</label>
+        <input type="number" id="m" placeholder="4" min="1" max="12" autocomplete="off">
+      </div>
+      <div>
+        <label for="d">日</label>
+        <input type="number" id="d" placeholder="12" min="1" max="31" autocomplete="off">
+      </div>
+    </div>
+    <div class="row row-2">
+      <div>
+        <label for="f-h">生まれた時刻</label>
+        <select id="f-h"></select>
+      </div>
+      <div>
+        <label for="f-city">生まれた場所</label>
+        <select id="f-city"></select>
+      </div>
+    </div>
+    <p class="hint gate-hint">
+      時刻がわからなければ「わからない」のままで大丈夫です。時柱を除いた 3 柱で出します。
+      生まれた場所は、時刻を<b>真太陽時</b>に直すために使います（ソウルは標準時より約 32 分遅く、
+      東京は約 19 分早い）。
+    </p>
+    <p class="err" id="err2"></p>
+    <button id="go2">STEP 6 をまとめて見る</button>
+  </div>
+
+  <!-- STAGE 2 -->
+  <div id="stage2">
+
+    <!-- ① 韓国式ネーム診断 -->
+    <div class="card">
+      <div class="step-no">🌸 STEP 6 ①<small>이름 풀이</small></div>
+      <h2>韓国式ネーム診断</h2>
+      <div id="d-ohaeng"></div>
+      <div id="d-zodiac"></div>
+      <div id="d-birth"></div>
+      <p class="disclaim">
+        ※ 韓国の姓名判断（성명학）の「子音五行」の考え方をもとにした、
+        エンターテインメント目的のコンテンツです。
+      </p>
+    </div>
+
+    <!-- ② 今日の運勢 -->
+    <section class="card fortune" id="fortune" aria-labelledby="fortune-h">
+      <div class="step-no">🌸 STEP 6 ②<small>오늘의 운세</small></div>
+      <h2 id="fortune-h">今日の運勢を 6 項目で</h2>
+      <p class="fortune-lead">
+        韓国では占いを <b class="ko">사주</b>（四柱）と呼びます。生まれた年・月・日・時刻の
+        4 つを干支に直したもので、日本の四柱推命と同じ考え方です。
+        ここでは今日の<b>日辰</b>（その日の干支）とあなたの四柱を照らして、
+        総合・金・恋愛・仕事・健康・<b>学習</b>の 6 項目を出します。
+      </p>
+      <div id="f-result" hidden></div>
+      <p class="disclaim fortune-note">
+        ※ 入力された生年月日は<b>保存されません</b>。点数の履歴だけがお使いの端末に残り、
+        次に来たときの「前回と比べて」に使われます。
+      </p>
+    </section>
+
+    <!-- ③④⑤ おみくじ・吉方・부적
+         3 つとも独立したページがあり、そちらが本体。ここに出すのは
+         今日ぶんの結論だけで、続きは各ページへ渡す。中身を丸ごと
+         持ってくると同じ表示が 2 か所に増え、直すときに片方だけ
+         直すことになる（同じ理由で amulet.js は五行の判定を
+         gilbang.js から呼んでいる）。                              -->
+    <div class="card">
+      <div class="step-no">🌸 STEP 6 ③<small>오늘의 세 가지</small></div>
+      <h2>今日のぶんを、ここで</h2>
+      <p class="hint" style="margin:-8px 0 18px">
+        どれも生年月日が無くても遊べるものです。ここでは今日の結論だけを出し、
+        続きはそれぞれのページでどうぞ。
+      </p>
+
+      <div class="s6-list">
+        <div class="s6-item">
+          <div class="s6-head">
+            <span class="s6-emo" aria-hidden="true">🎋</span>
+            <span class="s6-ttl">おみくじ<small>오미쿠지</small></span>
+            <a class="s6-go" href="/omikuji">全部見る →</a>
+          </div>
+          <p class="s6-txt">計算ではなく、くじ引き。韓国のことわざが 1 つ出ます。1 日 1 回。</p>
+          <div class="s6-body" id="om-body"></div>
+        </div>
+
+        <div class="s6-item">
+          <div class="s6-head">
+            <span class="s6-emo" aria-hidden="true">🧭</span>
+            <span class="s6-ttl">今日の吉方<small>오늘의 길방</small></span>
+            <a class="s6-go" href="/gilbang">全部見る →</a>
+          </div>
+          <p class="s6-txt">日本の恵方と韓国の<b class="ko">손없는 날</b>、そしてあなたの命式に足りない五行の方位。</p>
+          <div class="s6-body" id="gb-body"></div>
+        </div>
+
+        <div class="s6-item">
+          <div class="s6-head">
+            <span class="s6-emo" aria-hidden="true">🪄</span>
+            <span class="s6-ttl">부적メーカー<small>韓国のお守り</small></span>
+            <a class="s6-go" href="/amulet">全部見る →</a>
+          </div>
+          <p class="s6-txt">願いの漢字を 1 字書いた 1 枚。画像で保存できます。</p>
+          <div class="s6-body" id="am-body"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- まとめ -->
+    <div class="card">
+      <div class="step-no">🌸 まとめ</div>
+      <h2>今日、あなたの名前で覚えた韓国語</h2>
+      <div id="d-recap"></div>
+    </div>
   </div>
 
   <p class="tagline">私の名前から始める韓国語。</p>
@@ -1242,10 +1292,51 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     </p>
   </div>
 
+  <!-- 生年月日なしで入れる入口。
+       STEP 6 の一覧は #result の中にあり、名前を入れるまで display:none。
+       クローラーには空に見えるし、名前を入れない人にとっては存在しないのと
+       同じになる（中身を全部 JS で作って、AdSense の審査で一度これに
+       当たっている）。静的な入口はこちらへ置き、本文と一緒に読める形にする。 -->
+  <div class="card">
+    <h2>生年月日を入れなくても、今すぐ見られるページ</h2>
+    <p class="body-p">
+      韓国では占いを <b class="ko">사주</b>（四柱）と呼びます。生まれた年・月・日・時刻の
+      4 つを干支に直したもので、日本の四柱推命と同じ考え方です。STEP 6 では今日の
+      <b>日辰</b>（その日の干支）とあなたの四柱を照らして、
+      総合・金・恋愛・仕事・健康・<b>学習</b>の 6 項目を出します。
+      下の 3 つは生年月日が要らないので、名前を入れる前でもそのままご覧いただけます。
+    </p>
+    <div class="sm-grid">
+      <a href="/omikuji">
+        <span class="sm-emoji" aria-hidden="true">🎋</span>
+        <span class="sm-ttl">おみくじ<small>오미쿠지</small></span>
+        <span class="sm-txt">計算ではなく、くじ引き。韓国のことわざが 1 つ出ます。1 日 1 回。</span>
+      </a>
+      <a href="/gilbang">
+        <span class="sm-emoji" aria-hidden="true">🧭</span>
+        <span class="sm-ttl">今日の吉方<small>오늘의 길방</small></span>
+        <span class="sm-txt">日本の恵方と韓国の<b class="ko">손없는 날</b>。今日の方位をその場で計算します。</span>
+      </a>
+      <a href="/amulet">
+        <span class="sm-emoji" aria-hidden="true">🪄</span>
+        <span class="sm-ttl">부적メーカー<small>韓国のお守り</small></span>
+        <span class="sm-txt">願いの漢字を 1 字書いた 1 枚。画像で保存できます。</span>
+      </a>
+      <a href="/words">
+        <span class="sm-emoji" aria-hidden="true">📗</span>
+        <span class="sm-ttl">単語帳<small>단어장</small></span>
+        <span class="sm-txt">保存した言葉と、続けた日数。お使いの端末の中だけに残ります。</span>
+      </a>
+    </div>
+  </div>
+
 </article>
 
 <nav class="pagenav" aria-label="サイト内リンク">
-  <a href="#fortune">🔮 今日の運勢</a>
+  <!-- 「今日の運勢」は STEP 6 の中に入り、名前を入れるまで表示されない。
+       隠れている要素へのアンカーは押しても何も起きないので、
+       入口である名前の欄を指す。 -->
+  <a href="#form-card">✍️ 名前を入れて診断する</a>
   <a href="/omikuji">🎋 おみくじ</a>
   <a href="/gilbang">🧭 今日の吉方</a>
   <a href="/amulet">🪄 부적メーカー</a>
@@ -1280,6 +1371,10 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 <script src="/fortune.js"></script>
 <script src="/study.js"></script>
 <script src="/omikuji.js"></script>
+<!-- STEP 6 の吉方と부적。amulet.js の五行判定は gilbang.js を呼ぶので、
+     順序を入れ替えないこと。 -->
+<script src="/gilbang.js"></script>
+<script src="/amulet.js"></script>
 
 <script>
 "use strict";
@@ -2026,27 +2121,11 @@ function run(){
   $('result').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
-function run2(){
-  const y = parseInt($('y').value, 10);
-  const m = parseInt($('m').value, 10);
-  const d = parseInt($('d').value, 10);
-  const err = $('err2');
-
-  if (!y || y < 1900 || y > 2100){
-    err.textContent = '生まれた年を正しく入力してください（1900〜2100）。';
-    err.classList.add('on'); return;
-  }
-  if (!m || m < 1 || m > 12 || !d || d < 1 || d > 31){
-    err.textContent = '月と日を正しく入力してください。';
-    err.classList.add('on'); return;
-  }
-  const chk = new Date(y, m - 1, d);
-  if (chk.getMonth() !== m - 1 || chk.getDate() !== d){
-    err.textContent = 'その日付は存在しません。もう一度ご確認ください。';
-    err.classList.add('on'); return;
-  }
-  err.classList.remove('on');
-
+/* STEP 6 ① 韓国式ネーム診断。
+   入力の検証と画面の出し入れは runStep6() が持つ ── ここは渡された
+   生年月日を描くだけにしてある。同じ生年月日で ①〜⑤ を続けて出すので、
+   途中の 1 つが自前で検証をやり直すと、通る範囲が場所ごとに変わる。 */
+function renderName(y, m, d){
   /* 子音五行 */
   const first = decomp(state.given[0]);
   const el = choToOhaeng(first.cho);
@@ -2157,10 +2236,6 @@ function run2(){
   state.ohaengKo = o.ko;
   buildCard();
   shareLinks();   /* 干支・五行が文面に加わるので貼り直す */
-
-  $('gate').style.display = 'none';
-  $('stage2').classList.add('on');
-  $('stage2').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 /* ==================================================================
@@ -2495,13 +2570,6 @@ function fillFortuneInputs(){
   $('f-city').value = 'tokyo';   // 利用者の多くは日本在住
 }
 
-function fortuneError(msg){
-  const e = $('f-err');
-  e.textContent = msg;
-  e.classList.toggle('on', !!msg);
-  return !msg;
-}
-
 /* 「今日」は端末の暦日で決める。日柱は真太陽時 23 時で翌日に送るが、
    それは生まれた瞬間の話で、画面に出す「今日」は利用者が今日だと
    思っている日と一致していないと、日付表示が食い違う。 */
@@ -2666,23 +2734,147 @@ function renderFortune(mine, today, res, prev){
   $('f-result').hidden = false;
 }
 
-async function runFortune(){
-  fortuneError('');
-  const y = parseInt($('f-y').value, 10),
-        m = parseInt($('f-m').value, 10),
-        d = parseInt($('f-d').value, 10);
+/* STEP 6 ② 今日の運勢。四柱は runStep6() が一度だけ立てて渡す。 */
+function showFortune(mine, today){
+  const res  = Fortune.of(mine, today);
+  const prev = Fortune.save(iso(todayParts()), res.scores);
+  renderFortune(mine, today, res, prev);
+}
+
+/* ==================================================================
+   8. STEP 6 ③④⑤ おみくじ・吉方・부적
+
+   3 つとも独立したページがあり、そちらが本体。ここに出すのは今日ぶんの
+   結論だけで、続きは各ページへ渡す。表示を丸ごと持ってくると同じ
+   マークアップが 2 か所に増え、直すときに片方だけ直すことになる。
+   ================================================================== */
+
+/* 朔の表。吉方の「손없는 날」だけが使う（1.6KB）。節気表と同じで、
+   STEP 6 に触れたときに初めて落とし、失敗しても resolve する ──
+   손없는 날 が出せないことと、恵方も吉方も出せないことは別。 */
+let moonReady = null;
+function loadNewMoons(){
+  if (moonReady) return moonReady;
+  moonReady = fetch('/new-moons.json')
+    .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)))
+    .then(j => { Gilbang.load(j); return true; })
+    .catch(() => false);
+  return moonReady;
+}
+
+/* ③ おみくじ。引いたかどうかで出し分ける。1 日 1 回の制限は
+   omikuji.js が持っているので、ここでは持たない ── /omikuji で
+   引いた結果がそのままこちらにも出る（保存先が同じ）。 */
+function paintOmikuji(){
+  const date = iso(todayParts());
+  const o = Omikuji.today(date);
+  const body = $('om-body');
+
+  if (!o){
+    body.innerHTML = '<button type="button" id="om-draw">おみくじを引く</button>';
+    $('om-draw').addEventListener('click', () => {
+      Omikuji.draw(date);
+      paintOmikuji();
+      // ②の「今日まだ引いていないもの」は運勢を出した時点の話で、
+      // ここで引くと嘘になる。同じ画面に両方見えているので消す。
+      for (const p of $('f-result').querySelectorAll('.f-todo'))
+        if (p.querySelector('a[href="/omikuji"]')) p.remove();
+    });
+    return;
+  }
+  body.innerHTML = `
+    <div class="s6-out">
+      <div class="s6-grade">${esc(o.grade.ja)}<small class="ko">${esc(o.grade.ko)}</small></div>
+      <p class="s6-say"><b class="ko">${esc(o.saying.k)}</b>
+        <span class="ja">${esc(o.saying.j)}</span></p>
+    </div>
+    <p class="s6-txt">今日のぶんは引きました。読み方と解説は <a href="/omikuji">/omikuji</a> に、
+      明日また引けます。</p>`;
+}
+
+/* ④ 吉方。恵方（年・全員同じ）、손없는 날（日・全員同じ）、
+   あなたの吉方（人ごと・日ごと）の 3 つは決め方が違うので並べて出す。 */
+async function paintGilbang(mine, today){
+  const eho = Gilbang.eho(today.year.stemIdx);
+  const me  = Gilbang.mine(mine);
+
+  let son = null;
+  if (await loadNewMoons()){
+    // 朔の表には範囲がある。外の日付は例外になるので、その行だけ落とす。
+    try { son = Gilbang.son(iso(todayParts())); } catch (e) { son = null; }
+  }
+  const sonTxt = !son
+    ? '—<small>今日は出せませんでした</small>'
+    : son.free
+      ? `どの方角でも大丈夫<small>旧暦 ${son.lunarDay} 일</small>`
+      : `손は${esc(son.dir.ja)}<small class="ko">${esc(son.dir.ko)}／旧暦 ${son.lunarDay} 일</small>`;
+
+  $('gb-body').innerHTML = `
+    <div class="s6-out s6-rows">
+      <div class="s6-row"><span class="lb">今年の恵方</span>
+        <span class="vl">${esc(eho.dir.ja)}<small class="ko">${esc(eho.dir.ko)}</small></span></div>
+      <div class="s6-row"><span class="lb">손없는 날</span>
+        <span class="vl">${sonTxt}</span></div>
+      <div class="s6-row"><span class="lb">あなたの吉方</span>
+        <span class="vl">${esc(me.dir.ja)}<small class="ko">${esc(me.dir.ko)}／足りない五行は
+          ${esc(me.element)}</small></span></div>
+    </div>`;
+}
+
+/* ⑤ 부적。願いを指定せずに呼ぶと、命式の足りない五行から 1 種が返る。
+   選び直しと画像の書き出しは /amulet の側。 */
+function paintAmulet(mine){
+  const a = Amulet.of({ saju: mine });
+  const c = a.color;
+  const chip = c
+    ? `style="background:${esc(c.fill)}; color:${esc(c.ink)}"`
+    : 'style="background:var(--surface-2)"';   /* 総合運は五方色すべてで、1 色に決まらない */
+
+  $('am-body').innerHTML = `
+    <div class="s6-out s6-hanja">
+      <span class="ch" ${chip}>${esc(a.kind.hanja)}</span>
+      <div>
+        <div class="s6-ttl">${esc(a.kind.ja)}<small class="ko">${esc(a.kind.ko)}</small></div>
+        <p class="s6-txt">${esc(a.kind.hanja)} ＝ <b class="ko">${esc(a.kind.eum)}</b>
+          （${esc(a.kind.hun)}）。${esc(a.kind.lead)}</p>
+      </div>
+    </div>
+    <p class="s6-txt">${a.recommended
+      ? `足りない五行（<b class="ko">${esc(a.lack.element)}</b>）から選びました。`
+      : '命式からは 1 つに決まらなかったので、どの願いにも合う 1 枚です。'}
+      願いを選び直して画像で保存するには <a href="/amulet">/amulet</a> へ。</p>`;
+}
+
+/* ==================================================================
+   9. STEP 6 のまとめ役
+
+   ①〜⑤ を 1 つの生年月日で開く。以前は名前診断（y/m/d）と
+   今日の運勢（f-y/f-m/f-d）で 2 回訊いていたので、四柱も 2 回立てて
+   いた。受け口をここ 1 つにして、四柱も 1 度だけ立てて配る。
+   ================================================================== */
+async function runStep6(){
+  const err = $('err2');
+  const bad = msg => { err.textContent = msg; err.classList.add('on'); return false; };
+
+  const y = parseInt($('y').value, 10),
+        m = parseInt($('m').value, 10),
+        d = parseInt($('d').value, 10);
   const hv = $('f-h').value;
 
-  if (!(y >= 1930 && y <= 2030)) return fortuneError('生まれた年を 1930〜2030 で入れてください');
-  if (!(m >= 1 && m <= 12))      return fortuneError('月を 1〜12 で入れてください');
-  if (!(d >= 1 && d <= 31))      return fortuneError('日を 1〜31 で入れてください');
+  // 年の範囲は節気表のある 1930〜2030 に合わせる。名前診断だけなら
+  // 1900〜2100 で出せるが、同じボタンで運勢まで出す以上、片方だけ
+  // 通って片方が落ちる入力を受け付ける意味がない。
+  if (!(y >= 1930 && y <= 2030)) return bad('生まれた年を 1930〜2030 で入れてください。');
+  if (!(m >= 1 && m <= 12))      return bad('月を 1〜12 で入れてください。');
+  if (!(d >= 1 && d <= 31))      return bad('日を 1〜31 で入れてください。');
   // 2月30日のような日付をここで弾く。Date は勝手に繰り上げてしまう。
   const chk = new Date(Date.UTC(y, m - 1, d));
   if (chk.getUTCMonth() + 1 !== m || chk.getUTCDate() !== d)
-    return fortuneError(`${y}年${m}月${d}日 は存在しない日付です`);
+    return bad(`${y}年${m}月${d}日 は存在しない日付です。`);
+  err.classList.remove('on');
 
   if (!await loadSolarTerms())
-    return fortuneError('暦のデータを読み込めませんでした。通信環境を確かめて、もう一度お試しください');
+    return bad('暦のデータを読み込めませんでした。通信環境を確かめて、もう一度お試しください。');
 
   const city = $('f-city').value;
   let mine, today;
@@ -2690,13 +2882,24 @@ async function runFortune(){
     mine  = Saju.pillars({ y, m, d, hour: hv === '' ? null : parseInt(hv, 10), city });
     today = Saju.pillars({ ...todayParts(), hour: 12, city });
   } catch (e) {
-    return fortuneError('その生年月日では計算できませんでした');
+    return bad('その生年月日では計算できませんでした。');
   }
 
-  const res  = Fortune.of(mine, today);
-  const prev = Fortune.save(iso(todayParts()), res.scores);
-  renderFortune(mine, today, res, prev);
-  $('f-result').scrollIntoView({behavior:'smooth', block:'nearest'});
+  renderName(y, m, d);
+  showFortune(mine, today);
+  paintOmikuji();
+  paintAmulet(mine);
+
+  // 開くのは待たない。朔の表を取りに行っている間ずっとボタンが
+  // 押しっぱなしに見えるより、①②③⑤ を先に出して④だけ後から埋まる方がよい。
+  paintGilbang(mine, today).catch(() => {
+    $('gb-body').innerHTML = '<p class="s6-txt">今日の方位は出せませんでした。'
+      + '<a href="/gilbang">/gilbang</a> でお試しください。</p>';
+  });
+
+  $('gate').style.display = 'none';
+  $('stage2').classList.add('on');
+  $('stage2').scrollIntoView({behavior:'smooth', block:'start'});
   return true;
 }
 
@@ -2705,7 +2908,6 @@ async function runFortune(){
 function go(){ kdbReady.then(run); }
 
 fillFortuneInputs();
-$('f-go').addEventListener('click', runFortune);
 
 /* 単語カードのボタン。カードは押すたびに作り直すので、個々に付けず
    親でまとめて拾う。 */
@@ -2736,14 +2938,12 @@ $('f-result').addEventListener('click', e => {
     }
   }
 });
-['f-y','f-m','f-d'].forEach(id => {
-  $(id).addEventListener('keydown', e => { if (e.key === 'Enter') runFortune(); });
-});
 
 $('go').addEventListener('click', go);
 /* STEP 6 の干支は暦の年で出している。四柱では立春が年の境なので、
-   1〜2月生まれは食い違う。注記を出すために節気表を待つ。 */
-$('go2').addEventListener('click', () => loadSolarTerms().then(run2));
+   1〜2月生まれは食い違う。注記を出すために節気表を待つ ──
+   runStep6() の中で待っているので、ここでは呼ぶだけでよい。 */
+$('go2').addEventListener('click', runStep6);
 
 $('talk-again').addEventListener('click', renderScene);
 
@@ -2777,7 +2977,7 @@ $('again').addEventListener('click', () => {
   $(id).addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
 });
 ['y','m','d'].forEach(id => {
-  $(id).addEventListener('keydown', e => { if (e.key === 'Enter') run2(); });
+  $(id).addEventListener('keydown', e => { if (e.key === 'Enter') runStep6(); });
 });
 </script>
 </body>

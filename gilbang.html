@@ -80,29 +80,22 @@
 }
 .compass.warn i{background:var(--blue)}
 
-.gb-form{
+/* 生年月日をまだ入れていない人への案内。入力欄の代わりに置く。 */
+.gb-ask{
   border:1px solid var(--line); border-radius:16px; padding:22px;
-  background:var(--surface); margin:0 0 16px;
+  background:var(--surface); margin:0 0 16px; text-align:center;
 }
-.gb-form .row{display:flex; gap:12px; margin-bottom:14px}
-.gb-form .row > div{flex:1; min-width:0}
-.gb-form label{display:block; font-size:.78rem; font-weight:700; margin-bottom:5px; color:var(--text-dim)}
-.gb-form input, .gb-form select{
-  width:100%; padding:11px 12px; font-size:1rem; border:1px solid var(--line);
-  border-radius:10px; background:var(--bg); color:var(--text);
+.gb-ask p{font-size:.86rem; color:var(--text-dim); line-height:1.85; margin:0 0 16px}
+.gb-ask a.go{
+  display:inline-block; padding:13px 26px; font-size:.95rem; font-weight:700;
+  border-radius:11px; background:var(--accent); color:#fff; text-decoration:none;
 }
-.gb-form button{
-  width:100%; padding:13px; font-size:.95rem; font-weight:700; border:0;
-  border-radius:11px; background:var(--accent); color:#fff; cursor:pointer;
-}
-.gb-err{color:var(--accent); font-size:.82rem; margin:10px 0 0; display:none}
-.gb-err.on{display:block}
+.gb-ask a.go:focus-visible{outline:2px solid var(--accent); outline-offset:3px}
 .gb-el{display:flex; gap:6px; flex-wrap:wrap; margin-top:10px}
 .gb-el span{font-size:.74rem; background:var(--surface-2); border-radius:8px; padding:4px 9px}
 .gb-el b{color:var(--accent)}
 @media (max-width:480px){
   .gb-card{flex-direction:column; text-align:center; gap:14px}
-  .gb-form .row{flex-direction:column; gap:12px}
 }
 </style>
 </head>
@@ -130,25 +123,9 @@
 <h2>あなたの吉方</h2>
 <p>
   生年月日から四柱を出し、<strong>足りない五行の方位</strong>を出します。
-  入力は保存されません。
+  ここに入力欄はありません ── <a href="/">トップの占い</a>で一度入れた生年月日を
+  そのまま使います。同じことを 2 度訊かないためです。
 </p>
-
-<div class="gb-form" data-clarity-mask="true">
-  <div class="row">
-    <div><label for="g-y">年</label>
-      <input type="number" id="g-y" placeholder="1995" min="1930" max="2030" autocomplete="off"></div>
-    <div><label for="g-m">月</label>
-      <input type="number" id="g-m" placeholder="4" min="1" max="12" autocomplete="off"></div>
-    <div><label for="g-d">日</label>
-      <input type="number" id="g-d" placeholder="12" min="1" max="31" autocomplete="off"></div>
-  </div>
-  <div class="row">
-    <div><label for="g-h">生まれた時刻</label><select id="g-h"></select></div>
-    <div><label for="g-city">生まれた場所</label><select id="g-city"></select></div>
-  </div>
-  <button type="button" id="g-go">吉方を見る</button>
-  <p class="gb-err" id="g-err"></p>
-</div>
 
 <div id="gb-mine"></div>
 
@@ -234,6 +211,8 @@
 
 <script src="/saju.js"></script>
 <script src="/gilbang.js"></script>
+<!-- 生年月日はトップで入れたものを使う（同じタブの中だけ）。 -->
+<script src="/birth.js"></script>
 <script>
 "use strict";
 
@@ -320,40 +299,45 @@ async function renderToday(){
          <b class="ko">${esc(flow.element)}</b> で、その気が向く方角です。`);
 }
 
-function error(msg){
-  const e = $('g-err');
-  e.textContent = msg;
-  e.classList.toggle('on', !!msg);
-  return !msg;
+/* 生年月日はこのページでは訊かない。トップの占いで一度入れた値を
+   birth.js が同じタブの中に置いているので、それを読む。
+
+   以前はこのページにも入力欄があり、トップで入れた人にもう一度
+   入れさせていた ── 同じ人の同じ生年月日を 1 セッションで 3 回
+   （トップ・ここ・/amulet）訊いていたことになる。
+
+   まだ入れていない人には、欄の代わりにトップへの導線を出す。ここに
+   欄を残すと入口が 2 つになり、片方だけ直すことになる。            */
+function askForBirth(){
+  $('gb-mine').innerHTML = `
+    <div class="gb-ask">
+      <p>
+        あなたの吉方には、生まれた年・月・日と、できれば時刻・場所が要ります。<br>
+        トップの占いで一度入れていただくと、このページにも自動で出ます。
+      </p>
+      <a class="go" href="/">トップで占ってみる</a>
+    </div>`;
 }
 
-function fillInputs(){
-  $('g-h').innerHTML = '<option value="">わからない</option>' +
-    Array.from({length:24}, (_,i) =>
-      `<option value="${i}">${String(i).padStart(2,'0')}:00 〜 ${String(i).padStart(2,'0')}:59</option>`
-    ).join('');
-  $('g-city').innerHTML = Saju.CITIES.map(c =>
-    `<option value="${esc(c.id)}">${esc(c.ja)}（${esc(c.ko)}）</option>`).join('');
-  $('g-city').value = 'tokyo';
-}
+async function renderMine(){
+  const b = Birth.load();
+  if (!b) return askForBirth();
 
-async function runMine(){
-  error('');
-  const y = parseInt($('g-y').value,10), m = parseInt($('g-m').value,10),
-        d = parseInt($('g-d').value,10), hv = $('g-h').value;
-  if (!(y >= 1930 && y <= 2030)) return error('生まれた年を 1930〜2030 で入れてください');
-  if (!(m >= 1 && m <= 12))      return error('月を 1〜12 で入れてください');
-  if (!(d >= 1 && d <= 31))      return error('日を 1〜31 で入れてください');
-  const chk = new Date(Date.UTC(y, m-1, d));
-  if (chk.getUTCMonth()+1 !== m || chk.getUTCDate() !== d)
-    return error(`${y}年${m}月${d}日 は存在しない日付です`);
-  if (!await load()) return error('暦のデータを読み込めませんでした');
+  if (!await load()){
+    $('gb-mine').innerHTML =
+      `<p class="note">暦のデータを読み込めませんでした。通信環境をご確認ください。</p>`;
+    return;
+  }
 
   let me;
   try {
-    me = Saju.pillars({ y, m, d, hour: hv === '' ? null : parseInt(hv,10),
-                        city: $('g-city').value });
-  } catch (e) { return error('その生年月日では計算できませんでした'); }
+    me = Saju.pillars({ y:b.y, m:b.m, d:b.d, hour:b.hour, city:b.city });
+  } catch (e) {
+    // 範囲は birth.js が保存の時点で見ているので、ふつうはここへ来ない。
+    // 来たときは値の方を捨てる ── 直せない値を持ち回っても仕方がない。
+    Birth.clear();
+    return askForBirth();
+  }
 
   const r = Gilbang.mine(me);
   const bars = r.all.map(x =>
@@ -367,17 +351,13 @@ async function runMine(){
      五行のうち <b class="ko">${esc(r.element)}</b> がいちばん足りないので、
      その方角が補いになります。`)
     + `<div class="gb-el">${bars}</div>`
-    + (me.notes.length ? `<p class="note">${me.notes.map(esc).join('<br>')}</p>` : '');
-  $('gb-mine').scrollIntoView({behavior:'smooth', block:'nearest'});
-  return true;
+    + (me.notes.length ? `<p class="note">${me.notes.map(esc).join('<br>')}</p>` : '')
+    + `<p class="note">この生年月日は<a href="/">トップの占い</a>で入れたものです。
+         このタブを閉じると消えます。</p>`;
 }
 
-fillInputs();
-$('g-go').addEventListener('click', runMine);
-['g-y','g-m','g-d'].forEach(id => {
-  $(id).addEventListener('keydown', e => { if (e.key === 'Enter') runMine(); });
-});
 renderToday();
+renderMine();
 </script>
 </body>
 </html>

@@ -35,6 +35,7 @@ PUBLIC=(
   omikuji.js
   gilbang.js
   amulet.js
+  birth.js
   new-moons.json
   solar-terms.json
   ogp.png

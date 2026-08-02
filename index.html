@@ -312,8 +312,15 @@ h2{font-size:1.18rem; margin:0 0 18px; letter-spacing:-.01em}
 /* 時刻・場所の注記。gate は中央寄せだが、この長さの文は左寄せでないと
    行ごとに頭が動いて読みにくい。 */
 .gate-hint{text-align:left; margin:12px 0 0}
+/* 暦の出どころと、占いであることの断り。ボタンより下、押す前に読める位置。 */
+.gate-src{
+  text-align:left; font-size:.76rem; line-height:1.85; color:var(--text-dim);
+  margin:18px 0 0; padding-top:16px; border-top:1px dashed var(--line);
+}
+.gate-src b{color:var(--text)}
+.gate-src a{color:var(--accent)}
 
-/* ---- STEP 6 にまとめた 3 つ（おみくじ・吉方・부적） ----
+/* ---- 占いの三（おみくじ・吉方・부적） ----
    本体はそれぞれのページで、ここは今日の結論だけを出す枠。 */
 .s6-list{display:grid; gap:12px}
 .s6-item{
@@ -429,10 +436,6 @@ a.sns-btn{color:var(--text)}   /* リンクにしても見た目はボタンの�
 .sns-btn.dl .ic{background:var(--blue)}
 .sns-btn.cp .ic{background:var(--gold)}
 .sns-btn.cp{grid-column:1/-1}
-.ignote{
-  font-size:.78rem; color:var(--text-dim); margin:16px 0 0;
-  padding-top:14px; border-top:1px dashed var(--line);
-}
 .toast{
   position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(8px);
   background:var(--text); color:var(--bg); font-size:.88rem; font-weight:700;
@@ -741,11 +744,14 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
   </div>
 
   <p class="privacy">
-    ※ 入力されたお名前・生年月日は<b>保存されません</b>。
+    ※ 入力されたお名前は<b>どこにも保存されません</b>。
     診断はすべてお使いの端末（ブラウザ）の中だけで行われ、
     お名前・生年月日がサーバーや第三者に送信されることはありません。
     アクセス解析・利用状況の記録からも<b>除外</b>しています。
-    ページを閉じると完全に消去されます。
+    生年月日は、あとの占いで入れていただいたものを
+    <a href="/gilbang">吉方</a>・<a href="/amulet">부적</a>で入れ直さずに済むよう
+    <b>このタブを閉じるまで</b>だけ端末の中に置きます。
+    タブを閉じれば、どちらも完全に消去されます。
   </p>
 </div>
 
@@ -865,40 +871,34 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
         <span class="ic">⧉</span>テキストをコピー<small>貼り付け用</small>
       </button>
     </div>
-
-    <p class="ignote">
-      <b>スマートフォンの方へ</b> — 上の「アプリでシェア」を使うと、
-      端末に入っている X・LINE・Instagram などが一覧で出て、
-      <b>アプリのまま投稿できます</b>（ログインし直す必要がありません）。<br>
-      個別のボタンは、アプリが入っていればアプリが、入っていなければブラウザが開きます。<br>
-      なお <b>Instagram</b> は外部サイトから投稿文を渡す仕組みがないため、
-      個別ボタンでは<b>画像の保存</b>と<b>文章のコピー</b>のみ行います。
-      アプリに直接渡したい場合は「アプリでシェア」をお使いください。
-    </p>
   </div>
 
-  <!-- ============ STEP 6 ============
-       生年月日で開くものを 1 か所にまとめた。以前は 3 か所に散っていて、
-       同じ生年月日を同じ画面で 2 回訊いていた:
+  <!-- ============ ここから占い ============
+       名前の 5 STEP はここで終わり、以降は別の読みもの。番号を振らずに
+       表題で切り替えているのは、STEP 6 と書くと「名前診断の続き」に
+       見えて、生年月日を出す理由が伝わらないため。
+
+       生年月日で開くものはこの 1 か所にまとめてある。以前は 3 か所に
+       散っていて、同じ人の同じ生年月日を 1 セッションで 3 回訊いていた:
 
          韓国式ネーム診断  結果の途中（#gate の y/m/d）
          今日の運勢        ページ最上部の別セクション（f-y/f-m/f-d）
-         おみくじ/吉方/부적 運勢の結果の中に、点数で 1 本だけ出し分け
+         吉方・부적        /gilbang と /amulet のページにそれぞれ 1 組
 
-       入口はこの 1 つにして、シェアのあとへ置く。名前の 5 STEP が
-       このサイトの本体で、こちらはその先だから。年の範囲は狭いほう
-       （節気表のある 1930〜2030）に合わせてある ── 名前診断だけなら
-       1900〜2100 で出せるが、同じボタンで運勢まで出す以上、
-       片方だけ通って片方が落ちる入力を受け付ける意味がない。
+       ここで受けた値は Birth.save() でタブの中に置き、/gilbang と
+       /amulet がそれを読む。sessionStorage なのでタブを閉じれば消える ──
+       privacy.html の記載と対応させること。
 
        結果の中の「今日のあなたに勧める 1 本」はそのまま残してある。
        あちらは点数から選ぶ 1 本、こちらは 5 つ全部。                -->
   <div class="gate" id="gate">
-    <div class="step-no" style="justify-content:center">🌸 STEP 6</div>
-    <h2>生年月日を入れると、ここから 5 つ開きます</h2>
+    <div class="step-no" style="justify-content:center">🔮 ここから占い<small>사주 이야기</small></div>
+    <h2>韓国の名前で、占ってみませんか？</h2>
     <p>
-      韓国式ネーム診断・今日の運勢・おみくじ・今日の吉方・부적。<br>
-      入力はこの 1 か所だけです。こちらも保存されません。
+      生まれた年・月・日・時刻を干支に直した 4 本の柱 —— それが韓国でいう
+      <b class="ko">사주</b>（四柱）です。<br>
+      あなたの四柱で、<b>名前の五行・今日の運勢・おみくじ・吉方・부적</b>の
+      5 つをまとめてお出しします。
     </p>
     <div class="row">
       <div>
@@ -930,7 +930,20 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
       東京は約 19 分早い）。
     </p>
     <p class="err" id="err2"></p>
-    <button id="go2">STEP 6 をまとめて見る</button>
+    <button id="go2">占ってみる</button>
+
+    <!-- どこから来た数字なのかを、押す前に置いておく。四柱は入力を
+         そのまま並べ替えたものではなく暦の計算なので、根拠を書かないと
+         「それらしい漢字が出ただけ」と区別がつかない。
+         同時に、当たる当たらないの話ではないことも同じ場所で言う。 -->
+    <p class="gate-src">
+      暦は<b>万年暦</b>（<b class="ko">만세력</b>）と同じ立て方です。年柱は<b>立春</b>、
+      月柱は<b>十二節</b>で切り替え、時刻は生まれた場所の<b>真太陽時</b>に直します。
+      その節気と朔（新月）の時刻は<b>国立天文台 暦計算室</b>の公表値と突き合わせて
+      確かめたものを使っています。<br>
+      そのうえで —— ここから出るものは<b>占いを題材にした読みもの</b>です。
+      楽しんでいただくためのもので、鑑定ではありません。
+    </p>
   </div>
 
   <!-- STAGE 2 -->
@@ -938,8 +951,8 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 
     <!-- ① 韓国式ネーム診断 -->
     <div class="card">
-      <div class="step-no">🌸 STEP 6 ①<small>이름 풀이</small></div>
-      <h2>韓国式ネーム診断</h2>
+      <div class="step-no">🔮 その一<small>이름 풀이</small></div>
+      <h2>あなたの名前を、韓国式に読み解くと</h2>
       <div id="d-ohaeng"></div>
       <div id="d-zodiac"></div>
       <div id="d-birth"></div>
@@ -951,8 +964,8 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 
     <!-- ② 今日の運勢 -->
     <section class="card fortune" id="fortune" aria-labelledby="fortune-h">
-      <div class="step-no">🌸 STEP 6 ②<small>오늘의 운세</small></div>
-      <h2 id="fortune-h">今日の運勢を 6 項目で</h2>
+      <div class="step-no">🔮 その二<small>오늘의 운세</small></div>
+      <h2 id="fortune-h">今日のあなたは、どんな日？</h2>
       <p class="fortune-lead">
         韓国では占いを <b class="ko">사주</b>（四柱）と呼びます。生まれた年・月・日・時刻の
         4 つを干支に直したもので、日本の四柱推命と同じ考え方です。
@@ -961,7 +974,10 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
       </p>
       <div id="f-result" hidden></div>
       <p class="disclaim fortune-note">
-        ※ 入力された生年月日は<b>保存されません</b>。点数の履歴だけがお使いの端末に残り、
+        ※ 四柱（사주）の考え方をもとにした、エンターテインメント目的のコンテンツです。
+        生年月日は<b>このタブを閉じるまで</b>お使いの端末の中だけに置かれ、
+        <a href="/gilbang">吉方</a>と<a href="/amulet">부적</a>で入れ直さずに済むようにしています。
+        サーバーへ送られることはありません。点数の履歴だけが端末に残り、
         次に来たときの「前回と比べて」に使われます。
       </p>
     </section>
@@ -973,11 +989,11 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
          直すことになる（同じ理由で amulet.js は五行の判定を
          gilbang.js から呼んでいる）。                              -->
     <div class="card">
-      <div class="step-no">🌸 STEP 6 ③<small>오늘의 세 가지</small></div>
-      <h2>今日のぶんを、ここで</h2>
+      <div class="step-no">🔮 その三<small>오늘의 세 가지</small></div>
+      <h2>今日はもう 3 つ、あなたに</h2>
       <p class="hint" style="margin:-8px 0 18px">
-        どれも生年月日が無くても遊べるものです。ここでは今日の結論だけを出し、
-        続きはそれぞれのページでどうぞ。
+        くじを 1 本、向かうとよい方角を 1 つ、お守りを 1 枚。
+        ここには今日の結論だけを出します —— 読み方や作り直しは、それぞれのページで。
       </p>
 
       <div class="s6-list">
@@ -985,7 +1001,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
           <div class="s6-head">
             <span class="s6-emo" aria-hidden="true">🎋</span>
             <span class="s6-ttl">おみくじ<small>오미쿠지</small></span>
-            <a class="s6-go" href="/omikuji">全部見る →</a>
+            <a class="s6-go" href="/omikuji">もっと見る</a>
           </div>
           <p class="s6-txt">計算ではなく、くじ引き。韓国のことわざが 1 つ出ます。1 日 1 回。</p>
           <div class="s6-body" id="om-body"></div>
@@ -995,7 +1011,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
           <div class="s6-head">
             <span class="s6-emo" aria-hidden="true">🧭</span>
             <span class="s6-ttl">今日の吉方<small>오늘의 길방</small></span>
-            <a class="s6-go" href="/gilbang">全部見る →</a>
+            <a class="s6-go" href="/gilbang">もっと見る</a>
           </div>
           <p class="s6-txt">日本の恵方と韓国の<b class="ko">손없는 날</b>、そしてあなたの命式に足りない五行の方位。</p>
           <div class="s6-body" id="gb-body"></div>
@@ -1005,7 +1021,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
           <div class="s6-head">
             <span class="s6-emo" aria-hidden="true">🪄</span>
             <span class="s6-ttl">부적メーカー<small>韓国のお守り</small></span>
-            <a class="s6-go" href="/amulet">全部見る →</a>
+            <a class="s6-go" href="/amulet">もっと見る</a>
           </div>
           <p class="s6-txt">願いの漢字を 1 字書いた 1 枚。画像で保存できます。</p>
           <div class="s6-body" id="am-body"></div>
@@ -1268,7 +1284,10 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     <p class="body-p">
       保存されません。変換も判定もすべてブラウザの中だけで行われ、
       名前や生年月日がサーバーへ送信されることはありません。
-      ページを閉じれば消えます。詳しくは<a href="/privacy">プライバシーポリシー</a>をご覧ください。
+      生年月日だけは、吉方や부적のページで入れ直さずに済むよう、
+      <strong>そのタブを閉じるまで</strong>お使いの端末の中に置いています
+      （年・月・日・時刻・出生地の 5 つだけで、お名前は含みません）。
+      タブを閉じれば消えます。詳しくは<a href="/privacy">プライバシーポリシー</a>をご覧ください。
     </p>
 
     <h3 class="sub-h">本名を入れたくないのですが</h3>
@@ -1293,7 +1312,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
   </div>
 
   <!-- 生年月日なしで入れる入口。
-       STEP 6 の一覧は #result の中にあり、名前を入れるまで display:none。
+       占いの一覧は #result の中にあり、名前を入れるまで display:none。
        クローラーには空に見えるし、名前を入れない人にとっては存在しないのと
        同じになる（中身を全部 JS で作って、AdSense の審査で一度これに
        当たっている）。静的な入口はこちらへ置き、本文と一緒に読める形にする。 -->
@@ -1301,7 +1320,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     <h2>生年月日を入れなくても、今すぐ見られるページ</h2>
     <p class="body-p">
       韓国では占いを <b class="ko">사주</b>（四柱）と呼びます。生まれた年・月・日・時刻の
-      4 つを干支に直したもので、日本の四柱推命と同じ考え方です。STEP 6 では今日の
+      4 つを干支に直したもので、日本の四柱推命と同じ考え方です。ページ後半の占いでは今日の
       <b>日辰</b>（その日の干支）とあなたの四柱を照らして、
       総合・金・恋愛・仕事・健康・<b>学習</b>の 6 項目を出します。
       下の 3 つは生年月日が要らないので、名前を入れる前でもそのままご覧いただけます。
@@ -1333,7 +1352,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 </article>
 
 <nav class="pagenav" aria-label="サイト内リンク">
-  <!-- 「今日の運勢」は STEP 6 の中に入り、名前を入れるまで表示されない。
+  <!-- 「今日の運勢」は占いの中に入り、名前を入れるまで表示されない。
        隠れている要素へのアンカーは押しても何も起きないので、
        入口である名前の欄を指す。 -->
   <a href="#form-card">✍️ 名前を入れて診断する</a>
@@ -1371,10 +1390,12 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 <script src="/fortune.js"></script>
 <script src="/study.js"></script>
 <script src="/omikuji.js"></script>
-<!-- STEP 6 の吉方と부적。amulet.js の五行判定は gilbang.js を呼ぶので、
+<!-- 吉方と부적。amulet.js の五行判定は gilbang.js を呼ぶので、
      順序を入れ替えないこと。 -->
 <script src="/gilbang.js"></script>
 <script src="/amulet.js"></script>
+<!-- 生年月日を /gilbang・/amulet へ渡す（同じタブの中だけ）。 -->
+<script src="/birth.js"></script>
 
 <script>
 "use strict";
@@ -2121,8 +2142,8 @@ function run(){
   $('result').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
-/* STEP 6 ① 韓国式ネーム診断。
-   入力の検証と画面の出し入れは runStep6() が持つ ── ここは渡された
+/* 占いの一 — 韓国式ネーム診断。
+   入力の検証と画面の出し入れは runSaju() が持つ ── ここは渡された
    生年月日を描くだけにしてある。同じ生年月日で ①〜⑤ を続けて出すので、
    途中の 1 つが自前で検証をやり直すと、通る範囲が場所ごとに変わる。 */
 function renderName(y, m, d){
@@ -2397,7 +2418,7 @@ function buildCard(){
   g.fillText(trans, CX, y + 124);
   y += H_PHRASE + G6;
 
-  /* 干支・五行（STEP 6 まで進んだ場合のみ） */
+  /* 干支・五行（占いまで進んだ場合のみ） */
   if (hasPills){
     const pills = [`${state.zodiac}띠`, `五行 ${state.ohaengKo}`];
     setFont(g, 700, 32);
@@ -2568,6 +2589,15 @@ function fillFortuneInputs(){
   $('f-city').innerHTML = Saju.CITIES.map(c =>
     `<option value="${esc(c.id)}">${esc(c.ja)}（${esc(c.ko)}）</option>`).join('');
   $('f-city').value = 'tokyo';   // 利用者の多くは日本在住
+
+  // /gilbang や /amulet から戻ってきた人の分。同じタブで一度入れた値が
+  // 残っていれば入れておく ── 戻るたびに空欄では、持ち回っている意味がない。
+  const b = Birth.load();
+  if (b){
+    $('y').value = b.y; $('m').value = b.m; $('d').value = b.d;
+    $('f-h').value = b.hour === null ? '' : String(b.hour);
+    $('f-city').value = b.city;
+  }
 }
 
 /* 「今日」は端末の暦日で決める。日柱は真太陽時 23 時で翌日に送るが、
@@ -2734,7 +2764,7 @@ function renderFortune(mine, today, res, prev){
   $('f-result').hidden = false;
 }
 
-/* STEP 6 ② 今日の運勢。四柱は runStep6() が一度だけ立てて渡す。 */
+/* 占いの二 — 今日の運勢。四柱は runSaju() が一度だけ立てて渡す。 */
 function showFortune(mine, today){
   const res  = Fortune.of(mine, today);
   const prev = Fortune.save(iso(todayParts()), res.scores);
@@ -2742,7 +2772,7 @@ function showFortune(mine, today){
 }
 
 /* ==================================================================
-   8. STEP 6 ③④⑤ おみくじ・吉方・부적
+   8. 占いの三 — おみくじ・吉方・부적
 
    3 つとも独立したページがあり、そちらが本体。ここに出すのは今日ぶんの
    結論だけで、続きは各ページへ渡す。表示を丸ごと持ってくると同じ
@@ -2750,7 +2780,7 @@ function showFortune(mine, today){
    ================================================================== */
 
 /* 朔の表。吉方の「손없는 날」だけが使う（1.6KB）。節気表と同じで、
-   STEP 6 に触れたときに初めて落とし、失敗しても resolve する ──
+   占いに触れたときに初めて落とし、失敗しても resolve する ──
    손없는 날 が出せないことと、恵方も吉方も出せないことは別。 */
 let moonReady = null;
 function loadNewMoons(){
@@ -2846,13 +2876,13 @@ function paintAmulet(mine){
 }
 
 /* ==================================================================
-   9. STEP 6 のまとめ役
+   9. 占いのまとめ役
 
    ①〜⑤ を 1 つの生年月日で開く。以前は名前診断（y/m/d）と
    今日の運勢（f-y/f-m/f-d）で 2 回訊いていたので、四柱も 2 回立てて
    いた。受け口をここ 1 つにして、四柱も 1 度だけ立てて配る。
    ================================================================== */
-async function runStep6(){
+async function runSaju(){
   const err = $('err2');
   const bad = msg => { err.textContent = msg; err.classList.add('on'); return false; };
 
@@ -2884,6 +2914,10 @@ async function runStep6(){
   } catch (e) {
     return bad('その生年月日では計算できませんでした。');
   }
+
+  // /gilbang と /amulet が同じ値で開けるように、タブの中に置いておく。
+  // 保存できない端末でも下は続ける ── 持ち回れないだけで、ここでは使える。
+  Birth.save({ y, m, d, hour: hv === '' ? null : parseInt(hv, 10), city });
 
   renderName(y, m, d);
   showFortune(mine, today);
@@ -2940,10 +2974,10 @@ $('f-result').addEventListener('click', e => {
 });
 
 $('go').addEventListener('click', go);
-/* STEP 6 の干支は暦の年で出している。四柱では立春が年の境なので、
+/* 干支は暦の年で出している。四柱では立春が年の境なので、
    1〜2月生まれは食い違う。注記を出すために節気表を待つ ──
-   runStep6() の中で待っているので、ここでは呼ぶだけでよい。 */
-$('go2').addEventListener('click', runStep6);
+   runSaju() の中で待っているので、ここでは呼ぶだけでよい。 */
+$('go2').addEventListener('click', runSaju);
 
 $('talk-again').addEventListener('click', renderScene);
 
@@ -2967,6 +3001,9 @@ if (typeof navigator !== 'undefined' && w1(navigator.share)){
 }
 $('again').addEventListener('click', () => {
   ['sei-k','mei-k','sei-f','mei-f','y','m','d'].forEach(id => { $(id).value = ''; });
+  // 持ち回っている値も捨てる。欄が空なのに /gilbang だけ前の人の吉方が
+  // 出ていると、画面と中身が食い違う。別の名前で試すなら、生年月日も別。
+  Birth.clear();
   $('result').classList.remove('on');
   $('stage2').classList.remove('on');
   state = null;
@@ -2977,7 +3014,7 @@ $('again').addEventListener('click', () => {
   $(id).addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
 });
 ['y','m','d'].forEach(id => {
-  $(id).addEventListener('keydown', e => { if (e.key === 'Enter') runStep6(); });
+  $(id).addEventListener('keydown', e => { if (e.key === 'Enter') runSaju(); });
 });
 </script>
 </body>

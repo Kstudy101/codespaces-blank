@@ -136,7 +136,15 @@ export function renderDay(template, user = {}) {
     const kr = fillSlots(row.kr, name);
     if (kr === null) return null;              /* 名前が要るのに無い */
     const ja  = row.ja ? fillSlots(row.ja, name) : "";
-    const who = row.who ? `${fillSlots(row.who, name) ?? row.who}：` : "";
+
+    /* 話者の札。名前が無い人には「あなた」を置く。
+       ここに既定を置くのは、名前に既定を置くのとは別のこと ──
+       札は役どころで、本文の「저는 ○○입니다」とは違う。
+       置かないと {NAME_JP} という 9 文字がそのまま画面に出る。 */
+    const label = row.who
+      ? (fillSlots(row.who, name) ?? String(row.who).replace(/\{NAME(_[A-Z]+)?\}/g, "あなた"))
+      : "";
+    const who = label ? `${label}：` : "";
     body.push(ja ? `${who}${kr}\n${ja}` : `${who}${kr}`);
   }
   if (body.length) head.push("", body.join("\n\n"));

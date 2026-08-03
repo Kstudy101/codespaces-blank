@@ -253,6 +253,29 @@ check("話者（who）は任意で、付ければ頭に出る", () => {
   return "who あり / なし 両方";
 });
 
+check("名前が無い人の話者札は「あなた」になる", () => {
+  /* {NAME_JP} を札に使った日を、名前の無い人へ配ったときに
+     「{NAME_JP}：」という文字がそのまま出ていた。
+     札は名前ではなく役どころなので、既定を置いてよい ──
+     置かないと差し込み口が画面に出る。 */
+  const withWho = { ...TPL, requires_name_slot: false,
+    dialogue_template: [{ who: "{NAME_JP}", kr: "학교에 가요.", ja: "学校に行きます。" }] };
+  const m = renderDay(withWho, {});
+  assert(m, "名前が無いだけで組み立てられませんでした");
+  assert(!/\{NAME/.test(m[0].text), `差し込み口が出ました: ${m[0].text}`);
+  assert(m[0].text.includes("あなた：学校に行きます。".slice(0,4)), m[0].text);
+  return "あなた：";
+});
+
+check("名前がある人の話者札は、その人の呼び名になる", () => {
+  const withWho = { ...TPL, requires_name_slot: false,
+    dialogue_template: [{ who: "{NAME_JP}", kr: "학교에 가요.", ja: "学校に行きます。" }] };
+  const m = renderDay(withWho, { name_kr: "켄", name_reading: "けん" });
+  assert(m[0].text.includes("けん："), m[0].text);
+  assert(!m[0].text.includes("あなた"), "名前があるのに あなた になりました");
+  return "けん：";
+});
+
 check("組み立てた文に名前が二重に出ない", () => {
   for (const [kr, jp] of [["아이", "あい"], ["켄", "けん"], ["사쿠라", "さくら"]]) {
     const m = renderDay(TPL, { name_kr: kr, name_reading: jp });

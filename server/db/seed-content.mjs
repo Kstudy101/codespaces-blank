@@ -1,0 +1,119 @@
+/* ==================================================================
+   seed-content.mjs — 原稿を content_templates へ入れる
+
+     node db/seed-content.mjs                     content/ 全部
+     node db/seed-content.mjs content/semester-1.json
+     node db/seed-content.mjs --check             入れずに検査だけ
+     node db/with-env.mjs db/seed-content.mjs     ChemiCloud ではこちら
+
+   SQL の INSERT を手で書かない。原稿は人が何度も直すもので、
+   直すたびに SQL を書き換えるのは間違えやすい。JSON に置いて、
+   入れるところは 1 か所にする。upsertTemplate は
+   ON DUPLICATE KEY UPDATE なので、何度流しても同じ結果になる。
+
+   【入れる前に全部見る】
+   1 日ぶんずつ検査して入れる、はしない。20 日目で落ちると
+   1〜19 日目だけ入った半端な状態が残り、次に流すときに
+   どこから直すのかが分からなくなる。全部通ってから、入れる。
+
+   検査の中身は lib/content-check.mjs にある。原稿そのものは
+   公開リポジトリに置いていないが、受け入れ条件は置いてある。
+   ================================================================== */
+import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import { getPool, closePool } from "../lib/db.mjs";
+import { learning } from "../lib/repo/index.mjs";
+import { checkAll } from "../lib/content-check.mjs";
+
+const SERVER_DIR  = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const CONTENT_DIR = path.join(SERVER_DIR, "content");
+
+const argv  = process.argv.slice(2);
+const CHECK = argv.includes("--check");
+const files = argv.filter((a) => !a.startsWith("--"));
+
+/* ---- 原稿を読む --------------------------------------------------- */
+function load() {
+  let list = files.map((f) => path.resolve(f));
+  if (!list.length) {
+    if (!existsSync(CONTENT_DIR)) {
+      console.error(`✗ ${CONTENT_DIR} がありません。`);
+      console.error("  原稿は公開リポジトリに置いていないので、別に用意してください。");
+      process.exit(1);
+    }
+    list = readdirSync(CONTENT_DIR).filter((f) => f.endsWith(".json"))
+      .sort().map((f) => path.join(CONTENT_DIR, f));
+  }
+  if (!list.length) { console.error("✗ 読める原稿がありません"); process.exit(1); }
+
+  const days = [];
+  for (const f of list) {
+    let parsed;
+    try {
+      parsed = JSON.parse(readFileSync(f, "utf8"));
+    } catch (e) {
+      console.error(`✗ ${path.basename(f)} が JSON として読めません: ${e.message}`);
+      process.exit(1);
+    }
+    const got = Array.isArray(parsed) ? parsed : parsed.days;
+    if (!Array.isArray(got)) {
+      console.error(`✗ ${path.basename(f)}: days が配列ではありません`);
+      process.exit(1);
+    }
+    console.log(`  ${path.basename(f)} — ${got.length} 日ぶん`);
+    days.push(...got);
+  }
+  return days;
+}
+
+console.log("原稿を読みます");
+const days = load();
+
+/* ---- 検査。ここを通らなければ 1 件も入れない --------------------- */
+console.log("\n検査します");
+const { ok, problems, count } = checkAll(days);
+if (!ok) {
+  console.error(`✗ ${problems.length} 件あります。1 件も入れていません。\n`);
+  for (const p of problems) console.error(`  ・${p}`);
+  process.exit(1);
+}
+console.log(`  ✓ ${count} 日ぶん、問題なし`);
+
+if (CHECK) { console.log("\n--check なので、ここで終わります"); process.exit(0); }
+
+/* ---- 入れる ------------------------------------------------------- */
+const pool = await getPool();
+let done = 0;
+for (const d of days) {
+  await learning.upsertTemplate(pool, {
+    dayNumber:        d.day_number,
+    grammarPoint:     d.grammar_point,
+    grammarTipKr:     d.grammar_tip_kr,
+    dialogueTemplate: d.dialogue_template,
+    vocab3:           d.vocab_3,
+    /* semester は渡さない。upsertTemplate が day_number から決める ──
+       原稿にも書くと、学期の切れ目が 2 か所に生まれる。 */
+    requiresNameSlot: !!d.requires_name_slot
+  });
+  done++;
+}
+console.log(`\n✓ ${done} 日ぶん入れました`);
+
+/* ---- 残りを数える ------------------------------------------------- */
+const missing = await learning.findMissingTemplateDays(pool);
+if (!missing.length) {
+  console.log("  101 日ぶん、すべて揃っています");
+} else {
+  /* 連番はまとめて出す。「31,32,33,…,101」を全部並べても読めない。 */
+  const ranges = [];
+  for (const n of missing) {
+    const last = ranges[ranges.length - 1];
+    if (last && last[1] === n - 1) last[1] = n;
+    else ranges.push([n, n]);
+  }
+  const shown = ranges.map(([a, b]) => (a === b ? `${a}` : `${a}〜${b}`)).join(", ");
+  console.log(`  未入稿 ${missing.length} 日: ${shown}`);
+}
+
+await closePool();

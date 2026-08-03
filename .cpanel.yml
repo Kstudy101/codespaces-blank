@@ -46,6 +46,15 @@ deployment:
     - export RSYNC=$(command -v rsync || true)
     - if [ -n "$RSYNC" ]; then "$RSYNC" -a --delete --exclude=node_modules --exclude=.env --exclude=.env.local --exclude=content --exclude=stderr.log "$SRC/" "$APP/"; else find "$APP" -mindepth 1 -maxdepth 1 ! -name node_modules ! -name .env ! -name .env.local ! -name content ! -name tmp ! -name public ! -name stderr.log -exec rm -rf {} + && cp -a "$SRC/." "$APP/"; fi
 
+    # --- 運勢エンジンを写す -------------------------------------
+    # saju.js / fortune.js / solar-terms.json はサイト本体のもので、
+    # リポジトリに 1 部しか無い。server/ に複製を置くと、直したつもりが
+    # 片方だけになり、ウェブと LINE で違う運勢が出る ── どちらも
+    # それらしい数字を出すので、並べて見るまで気づけない。
+    # 配置のたびに、その 1 部から写す。
+    - /bin/mkdir -p "$APP/engine"
+    - /bin/cp -f "$PWD/saju.js" "$PWD/fortune.js" "$PWD/solar-terms.json" "$APP/engine/"
+
     # --- 依存を入れる -------------------------------------------
     # activate の場所は Node の版でディレクトリ名が変わる。決め打ちに
     # せず毎回探す。10 と 24 が並んでいるので sort -V で新しい方を取る

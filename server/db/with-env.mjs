@@ -62,4 +62,17 @@ for (const [k, v] of Object.entries(vars)) {
 }
 console.log(`[with-env] 渡した設定: ${names.sort().join(", ")}`);
 
-await import(pathToFileURL(path.resolve(target)).href);
+/* 呼ばれる側から見て、自分が直接呼ばれたのと同じ形にしてから渡す。
+
+   直さないと argv はこうなっている:
+     [0] node  [1] db/with-env.mjs  [2] db/seed-content.mjs  [3..] 本来の引数
+
+   seed-content.mjs は argv.slice(2) を「読む原稿」と見るので、
+   自分自身のファイル名を原稿として読み、JSON ではないと言って
+   落ちる。実際そうなった。
+   引数を取らない migrate.mjs では起きないので、道具が増えるまで
+   気づけない類い。 */
+const resolved = path.resolve(target);
+process.argv = [process.argv[0], resolved, ...process.argv.slice(3)];
+
+await import(pathToFileURL(resolved).href);

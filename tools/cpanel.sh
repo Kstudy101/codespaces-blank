@@ -64,7 +64,13 @@ for kv in "$@"; do args+=(--data-urlencode "$kv"); done
 
 # 証明書は検証する（-k を付けない）。api.kstudy101.jp の証明書は
 # 2083 でも有効なので、切る理由が無い。
-resp=$(curl -sS -m 60 -G \
+# 既定は GET。原稿のようにまとまった中身を送るときは POST にする
+# ── URL に載せると長さの上限に当たり、切れた所から先が黙って消える。
+#    CPANEL_POST=1 bash tools/cpanel.sh Fileman/save_file_content …
+METHOD=()
+[ "${CPANEL_POST:-}" = "1" ] || METHOD=(-G)
+
+resp=$(curl -sS -m 120 "${METHOD[@]}" \
         -H "Authorization: cpanel ${CP_USER}:${TOKEN}" \
         "${args[@]}" \
         "https://${CP_HOST}:${CP_PORT}/execute/${CALL}") || {

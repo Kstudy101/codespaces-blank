@@ -76,6 +76,15 @@ deployment:
     # 置くのは Fileman API から ── SSH が無くても合図を送れる。
     - if [ -f "$HOME/.run-smoke" ]; then /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node db/with-env.mjs db/smoke.mjs' && /bin/rm -f "$HOME/.run-smoke"; else echo "smoke は流しません（~/.run-smoke がありません）"; fi
 
+    # --- 頼まれたときだけ、配信の下見をする ---------------------
+    # --dry-run は誰にも送らない。対象を引いて、原稿を組み立てて、
+    # 何日目が誰へ行くかを数えるところまでで止まる。
+    #
+    # 送らないのに流す意味は、本番の DB と本番の原稿を通したときに
+    # だけ出る不具合があるため ── 手元の偽の接続では、SQL の形は
+    # 見られても、実際の列や文字コードまでは分からない。
+    - if [ -f "$HOME/.run-push-dry" ]; then /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node db/with-env.mjs db/push-daily.mjs --dry-run' && /bin/rm -f "$HOME/.run-push-dry"; else echo "配信の下見はしません（~/.run-push-dry がありません）"; fi
+
     # --- 入れ替える ---------------------------------------------
     # Passenger は動いているプロセスを抱えたままなので、置いただけでは
     # 古いコードが応え続ける。restart.txt に触れて初めて入れ替わる。

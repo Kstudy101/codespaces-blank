@@ -54,9 +54,19 @@ for f in "${PUBLIC[@]}"; do
 done
 
 # --- 公開してはいけないものが混ざっていないか ------------------------
-if find "$OUT" \( -name '*.db' -o -name '*.py' -o -name '*.sh' -o -name '*.md' \) | grep -q .; then
+#
+# PUBLIC は許可リストなので、足したものが勝手に入ることは無い。
+# それでもここで見るのは、PUBLIC に書き足す側が間違えたときの網。
+#
+# *.sql / *.env は LINE 配信システム（server/）を足したときに加えた。
+# server/db/schema.sql は表の作り方そのもので、server/.env には
+# DB のパスワードと Stripe の秘密鍵が入る。1 度でも配ってしまえば、
+# 消しても取り返せない類いのもの。
+NOPUB=( -name '*.db' -o -name '*.py' -o -name '*.sh' -o -name '*.md'
+        -o -name '*.sql' -o -name '*.env' -o -name '.env*' )
+if find "$OUT" \( "${NOPUB[@]}" \) | grep -q .; then
   echo "✗ 非公開ファイルが dist に含まれています" >&2
-  find "$OUT" \( -name '*.db' -o -name '*.py' -o -name '*.sh' -o -name '*.md' \) >&2
+  find "$OUT" \( "${NOPUB[@]}" \) >&2
   exit 1
 fi
 
@@ -81,13 +91,21 @@ done
 #    「許可リストに無いホスト」を疑う書き方にしていたが、外部サービスを
 #    足すたびにリストを直す必要があり、実際 Clarity を入れた時に正常なURLを
 #    大量に警告した。探したいのは自分の古いホストなので、そちらを直接見る。
-#    自サイトのホストは canonical で一意に決まり、それ以外で "kstudy" を
-#    含むホストは移行の取りこぼしとみなせる。
+#
+#    探しているのは 2 種類だけ:
+#      ・移転前の置き場（pages.dev / github.io）
+#      ・www の付け忘れ（apex そのもの。/ へ 301 されるので canonical に使えない）
+#
+#    同じドメインの別サブドメイン（api.kstudy101.jp など）は対象外。
+#    "kstudy" を含むもの全部を疑う書き方にしていたため、配信サーバーの
+#    URL を書いた時点でビルドが落ちた。別サービスの正当な宛先まで
+#    巻き込むのは、Clarity のときと同じ失敗の繰り返しだった。
 host=$(grep -o 'rel="canonical" href="https://[^/"]*' "$OUT/index.html" | sed 's|.*https://||')
+apex=${host#www.}
 if [ -n "$host" ]; then
   for f in "$OUT"/*.html "$OUT"/sitemap.xml "$OUT"/robots.txt; do
     stale=$(grep -oE 'https://[A-Za-z0-9.-]+' "$f" | sed 's|https://||' | sort -u \
-            | grep -iE 'kstudy|pages\.dev|github\.io' | grep -vx "$host" || true)
+            | grep -iE "(pages\.dev|github\.io)\$|^${apex}\$" | grep -vx "$host" || true)
     if [ -n "$stale" ]; then
       echo "✗ $(basename "$f"): 旧ホストが残っています（正: $host）" >&2
       echo "$stale" | sed 's/^/    /' >&2

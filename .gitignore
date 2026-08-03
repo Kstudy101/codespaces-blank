@@ -7,3 +7,9 @@ dist/
 # JPL の暦（de421.bsp、約 17MB）。tools/build-solar-terms.py が
 # 初回に落としてくる中間物で、成果物は solar-terms.json の方。
 .ephem/
+
+# LINE 配信システムの接続情報と鍵（DB パスワード・チャネルシークレット・
+# Stripe の秘密鍵）。空欄の server/.env.example の方はコミットする ──
+# 設置に何が要るかの一覧が、リポジトリから消えないように。
+.env
+server/.env.local

@@ -10,13 +10,16 @@
 # 対象は server/ だけ。リポジトリにはサイト本体も入っているが、
 # そちらは Xserver へ別に配っているので、ここでは触らない。
 #
-# 触ってはいけないものが 2 つ、送り先の中に同居している:
+# 触ってはいけないものが 3 つ、送り先の中に同居している:
 #   .env          本番の接続情報と鍵。リポジトリには無いので、
 #                 消すと次の再起動で二度と上がらない
 #   node_modules  CloudLinux の Node.js Selector は実体を
 #                 ~/nodevenv/ 側に置き、アプリには symlink で見せる。
 #                 上から被せると Selector が壊れ、cPanel の画面からは
 #                 直せなくなる
+#   content       101 日ぶんの原稿。公開リポジトリに置いていないので
+#                 サーバーのここにしか無い。消すと配信が止まり、
+#                 手元から上げ直すまで戻らない
 # ===================================================================
 deployment:
   tasks:
@@ -37,7 +40,7 @@ deployment:
     # 消す手を残しているのは、消えたはずのファイルが向こうに残ると、
     # もう無いはずの経路が生き続けるため。
     - export RSYNC=$(command -v rsync || true)
-    - if [ -n "$RSYNC" ]; then "$RSYNC" -a --delete --exclude=node_modules --exclude=.env --exclude=.env.local "$SRC/" "$APP/"; else find "$APP" -mindepth 1 -maxdepth 1 ! -name node_modules ! -name .env ! -name .env.local ! -name tmp ! -name public -exec rm -rf {} + && cp -a "$SRC/." "$APP/"; fi
+    - if [ -n "$RSYNC" ]; then "$RSYNC" -a --delete --exclude=node_modules --exclude=.env --exclude=.env.local --exclude=content "$SRC/" "$APP/"; else find "$APP" -mindepth 1 -maxdepth 1 ! -name node_modules ! -name .env ! -name .env.local ! -name content ! -name tmp ! -name public -exec rm -rf {} + && cp -a "$SRC/." "$APP/"; fi
 
     # --- 依存を入れる -------------------------------------------
     # activate の場所は Node の版でディレクトリ名が変わる。決め打ちに
@@ -55,6 +58,14 @@ deployment:
     # 再起動より前に置く。ここで落ちたら古いコードが動き続ける ──
     # 新しいコードが古い表に向かって動き出すより、そのほうが安全。
     - /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node db/with-env.mjs db/migrate.mjs'
+
+    # --- 原稿を入れ直す -----------------------------------------
+    # content/ があるときだけ。upsertTemplate は何度流しても同じ
+    # 結果になるので、配置のたびに通してよい。
+    #
+    # seed 側が全部検査してから 1 件目を入れる。20 日目で落ちて
+    # 19 日ぶんだけ入った状態が残る、が起きない。
+    - if [ -d "$APP/content" ]; then /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node db/with-env.mjs db/seed-content.mjs'; else echo "原稿がまだありません（content/ なし）"; fi
 
     # --- 頼まれたときだけ、実物で一周する -----------------------
     # smoke は決済の再送・バッチの二重起動・退会の連鎖削除まで実際に

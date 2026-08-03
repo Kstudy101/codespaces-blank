@@ -16,7 +16,7 @@
    約束なので、偽物を渡して SQL を読む。LINE も偽物を渡し、
    呼ばれた瞬間に DB が何をされていたかを覗く。
    ================================================================== */
-import { deliverOne, retryKey } from "../server/db/push-daily.mjs";
+import { deliverOne, retryKey, tooEarly } from "../server/db/push-daily.mjs";
 import { LineApiError } from "../server/lib/line.mjs";
 
 let pass = 0;
@@ -236,6 +236,38 @@ await check("ふつうの障害では、対象から外さない", async () => {
   assert(!conn.sql().some((s) => /UPDATE users/i.test(s) && /unfollowed/.test(s)),
     "500 で配信対象から外しました");
   return "500 → 残す";
+});
+
+console.log("\n[配る時刻]  cron ではなく、こちらで日本時間を見る");
+
+await check("日本の指定時刻より前なら、何もしない", () => {
+  assert(tooEarly(6, 7) === true,  "6 時に走ってしまいます");
+  assert(tooEarly(0, 7) === true,  "0 時に走ってしまいます");
+  return "6時 / 0時 → 走らない";
+});
+
+await check("指定時刻ちょうど、およびそれ以降は走る", () => {
+  /* 「7 時ちょうどだけ」にすると、7 時の回が落ちた日は
+     その日ぶんが誰にも届かない。以降なら 8 時が拾える。
+     二度送らないのは sentToday が見ている。 */
+  assert(tooEarly(7, 7)  === false, "7 時ちょうどに走りません");
+  assert(tooEarly(8, 7)  === false, "8 時に拾えません");
+  assert(tooEarly(23, 7) === false, "23 時に拾えません");
+  return "7時 / 8時 / 23時 → 走る";
+});
+
+await check("指定が無ければ、いつでも走る", () => {
+  assert(tooEarly(3, null) === false && tooEarly(3, undefined) === false, "止まりました");
+  return "--not-before なし";
+});
+
+await check("0〜23 でない指定は、黙って通さない", () => {
+  for (const bad of [24, -1, "朝", 7.5]) {
+    let threw = false;
+    try { tooEarly(10, bad); } catch { threw = true; }
+    assert(threw, `${bad} を受け取ってしまいました`);
+  }
+  return "4 通り";
 });
 
 console.log("\n[重複防止キー]");

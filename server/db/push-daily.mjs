@@ -5,6 +5,7 @@
      node db/push-daily.mjs --dry-run      誰に何日目が行くかだけ出す
      node db/push-daily.mjs --date=2026-08-04   その日として動かす
      node db/push-daily.mjs --limit=10     先頭 10 人だけ
+     node db/push-daily.mjs --not-before=7 日本の 7 時より前なら何もしない
 
    cron が呼ぶ。app.mjs の経路にはしない ── HTTP に出すと外から
    配信を起こせてしまい、そのための認証をもう一つ作ることになる。
@@ -38,7 +39,7 @@ import { createHash } from "node:crypto";
 import { getPool, closePool } from "../lib/db.mjs";
 import { users, learning, pushlogs } from "../lib/repo/index.mjs";
 import { pushMessage, isUnreachable } from "../lib/line.mjs";
-import { jstDate } from "../lib/jst.mjs";
+import { jstDate, jstDateTime } from "../lib/jst.mjs";
 import { renderDay, nameMissingNotice } from "../lib/render.mjs";
 import { TOTAL_DAYS } from "../lib/repo/learning.mjs";
 
@@ -51,6 +52,7 @@ const value = (name, fallback = null) => {
 };
 
 const DRY   = flag("dry-run");
+const NOT_BEFORE = value("not-before", null);
 const DATE  = value("date", jstDate());
 const LIMIT = Number(value("limit", 0)) || 0;
 const PAGE  = 200;
@@ -65,6 +67,37 @@ const DISABLED = process.env.PUSH_DISABLED === "1";
 if (!/^\d{4}-\d{2}-\d{2}$/.test(DATE)) {
   console.error(`✗ --date は YYYY-MM-DD で渡してください: ${DATE}`);
   process.exit(1);
+}
+
+/* 何時に配るかを、cron ではなくこちらで決める。
+   共用サーバーの cron はサーバーの地方時で動くが、その地方時が
+   何かは借りている側から確かめにくく、移設や夏時間で黙って
+   ずれる。日本の 7 時に配りたいのであって、この機械の 7 時に
+   配りたいのではない。
+   cron は 1 時間ごとに呼び、日本の時刻はここで見る。
+
+   「7 時ちょうどだけ」ではなく「7 時以降」にしてあるのは、
+   7 時の回が落ちたときに 8 時の回が拾えるようにするため。
+   二度送らないのは push_logs の sentToday が見ている。 */
+export function tooEarly(jstHour, notBefore) {
+  if (notBefore === null || notBefore === undefined || notBefore === "") return false;
+  const want = Number(notBefore);
+  if (!Number.isInteger(want) || want < 0 || want > 23) {
+    throw new Error(`--not-before は 0〜23 で渡してください: ${notBefore}`);
+  }
+  return Number(jstHour) < want;
+}
+
+if (NOT_BEFORE !== null) {
+  const hour = Number(jstDateTime().slice(11, 13));
+  let early;
+  try {
+    early = tooEarly(hour, NOT_BEFORE);
+  } catch (e) { console.error(`✗ ${e.message}`); process.exit(1); }
+  if (early) {
+    console.log(`日本時間 ${String(hour).padStart(2, "0")} 時。${NOT_BEFORE} 時前なので何もしません。`);
+    process.exit(0);
+  }
 }
 
 /* LINE の重複防止キー。無作為な UUID ではなく、誰の何日目かから

@@ -152,6 +152,15 @@ button.ghost{
   background:transparent; color:var(--accent);
   border:1.5px solid var(--accent);
 }
+/* LINE 連携カードの「何を送るか」。目立たせるのではなく、
+   押す前に必ず目に入る位置に置くためだけの枠。 */
+.line-note{
+  font-size:.82rem; line-height:1.75; color:var(--text-dim);
+  background:var(--surface-2); border:1px solid var(--line);
+  border-radius:10px; padding:12px 14px; margin:0 0 16px;
+}
+.line-note b{color:var(--text)}
+.line-note ul{margin:6px 0 0; padding-left:1.15em}
 .privacy{
   font-size:.78rem; color:var(--text-dim); margin:16px 0 0;
   padding-top:14px; border-top:1px dashed var(--line);
@@ -1174,6 +1183,35 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
         気に入ったものだけ単語帳に保存してください。
       </p>
       <div id="d-words"></div>
+    </div>
+
+    <!-- LINE で続ける。既定では出ない。
+         出す条件は LINE_LINK_API に配信サーバーの URL が入っていること
+         （下のスクリプト参照）。空のまま置いてあるのは、ホストが
+         決まっていないからだけではない ── このカードのボタンだけが、
+         このサイトで唯一「入力した内容をサーバーへ送る」動作をする。
+         privacy.html は今「サーバーに送信されず、保存もされません」と
+         書いてあるので、そちらを直すまでは出してはいけない。
+         URL を入れた時点で出る作りにしてあるので、順番を間違えない。 -->
+    <div class="card" id="s-line" hidden>
+      <div class="step-no">💬 つづける<small>매일 아침 7시 ＝ 毎朝 7 時</small></div>
+      <h2>明日の朝から、LINE で 101 日</h2>
+      <p class="hint" style="margin:-8px 0 18px">
+        今日出した診断結果をそのまま引き継いで、あなたの名前が出てくる韓国語を
+        毎朝 7 時にお届けします。まずは 3 日間、無料でお試しいただけます。
+      </p>
+
+      <!-- 何が送られるかを、押す前に置く。折りたたみにしない ──
+           この 1 か所だけが送信を伴うので、読まなくても目に入る所に要る。 -->
+      <div class="line-note" id="s-line-what"></div>
+
+      <button id="line-go">LINE で続きを受け取る</button>
+      <p class="hint" id="line-msg" role="status" aria-live="polite" style="margin-top:10px"></p>
+      <p class="privacy" style="margin-top:14px">
+        送信するのは上に挙げたものだけです。ボタンを押さなければ、
+        これまでどおり何も送信されません。
+        くわしくは<a href="/privacy">プライバシーポリシー</a>をご確認ください。
+      </p>
     </div>
   </div>
 
@@ -3174,6 +3212,9 @@ async function runSaju(){
   paintAmulet(mine);
   /* まとめは今日の 3 語まで引き写すので、①②が出そろってから描く。 */
   renderRecap();
+  /* 「何を送るか」は名前と五行が決まってからでないと書けないので、
+     renderName() より後に呼ぶ。URL 未設定なら中で何もしない。 */
+  paintLineCta();
 
   // 開くのは待たない。朔の表を取りに行っている間ずっとボタンが
   // 押しっぱなしに見えるより、①②③⑤ を先に出して④だけ後から埋まる方がよい。
@@ -3186,6 +3227,116 @@ async function runSaju(){
   $('stage2').classList.add('on');
   $('stage2').scrollIntoView({behavior:'smooth', block:'start'});
   return true;
+}
+
+/* ============ LINE で続ける（配信サーバーへの引き継ぎ）============
+   このサイトで唯一、入力した内容がサーバーへ出ていく所。
+
+   LINE_LINK_API が空のあいだ、カードは出ない。空のまま置いてあるのは
+   ホストが未定だからだけではなく、privacy.html が今
+   「サーバーに送信されず、保存もされません」と書いているため。
+   先に文言を直し、そのあとで URL を入れる ── 逆順にすると、
+   書いてあることと動きが食い違ったまま公開されることになる。
+
+   入れるときは配信サーバーの生成元（scheme + host）だけを書く。
+   末尾のスラッシュは付けない。
+     例: const LINE_LINK_API = 'https://api.kstudy101.jp';               */
+const LINE_LINK_API = '';
+
+/* 送るものは 1 か所にだけ書く。
+   画面に出す文（何を送るか）と、実際に送る本文は、どちらもこの表から
+   作る ── 別々に書くと、片方だけ足したときに「書いていないものを
+   送る」状態になり、しかも画面上は何も変わらないので気づけない。
+   表から両方が出るようにしておけば、その食い違い自体が起こらない。
+
+   label が null の行は画面に出さない（値も送らない、または
+   訊いていないもの）。tools/verify-onboarding.mjs が
+   「送る値はすべて label を持つか」を見ている。 */
+function linkFields(b){
+  const pad2  = (n) => String(n).padStart(2, '0');
+  const kanji = [state.seiK, state.meiK].filter(Boolean).join(' ') || null;
+  const kana  = [state.seiF, state.meiF].filter(Boolean).join(' ') || null;
+  const city  = (Saju.CITIES.find(c => c.id === b.city) || {}).ja || b.city || null;
+  const hasH  = !(b.hour === null || b.hour === undefined);
+
+  return [
+    { key:'nameKanji',   label:'お名前（漢字）',   value:kanji,      shown:kanji },
+    { key:'nameReading', label:'ふりがな',         value:kana,       shown:kana },
+    { key:'nameKr',      label:'韓国語表記',       value:state.fullH || null,
+      shown:state.fullH || null },
+    /* サーバーは YYYY-MM-DD しか受け取らない。日時つきの文字列を渡すと
+       UTC の夜が翌日に化けて日柱がずれる（サーバー側で弾かれる）。 */
+    { key:'birthDate',   label:'生年月日',
+      value:`${b.y}-${pad2(b.m)}-${pad2(b.d)}`,
+      shown:`${b.y}年${b.m}月${b.d}日` },
+    { key:'birthTime',   label:'生まれた時刻',
+      value:hasH ? `${pad2(b.hour)}:00:00` : null,
+      shown:hasH ? `${b.hour}時ごろ` : null },
+    { key:'ohaengMain',  label:'名前の五行',       value:state.ohaengKo || null,
+      shown:state.ohaengKo || null },
+    { key:'rawResult',   label:'今日の診断結果',
+      value:{ zodiac: state.zodiac || null, ohaeng: state.ohaengKo || null,
+              city: b.city || null, hanjaEum: state.hanjaEum || null },
+      shown:`干支・五行・出生地（${city || '未選択'}）・漢字の読み` },
+    /* この画面は性別を訊いていない。訊いていないものは送らないので、
+       画面にも出さない（label を持たせない）。 */
+    { key:'gender',      label:null,               value:'U',        shown:null }
+  ];
+}
+
+function describeLinkPayload(b){
+  const items = linkFields(b)
+    .filter((f) => f.label && f.shown)
+    .map((f) => `<li>${esc(f.label)} … <b>${esc(f.shown)}</b></li>`);
+  return `<b>連携すると、次の内容が配信サーバーへ送信されます。</b>
+    <ul>${items.join('')}</ul>`;
+}
+
+function buildLinkPayload(b){
+  const out = {};
+  for (const f of linkFields(b)) out[f.key] = f.value;
+  return out;
+}
+
+function paintLineCta(){
+  const card = $('s-line');
+  if (!card) return;
+  const b = Birth.load();
+  /* 名前も生年月日も無ければ送るものが無い。URL 未設定なら出さない。 */
+  if (!LINE_LINK_API || !b || !state || !state.fullH){ card.hidden = true; return; }
+  $('s-line-what').innerHTML = describeLinkPayload(b);
+  $('line-msg').textContent = '';
+  $('line-go').disabled = false;
+  card.hidden = false;
+}
+
+async function startLineLink(){
+  const btn = $('line-go'), msg = $('line-msg');
+  const b = Birth.load();
+  if (!b){ msg.textContent = '生年月日をもう一度入れてから、お試しください。'; return; }
+
+  btn.disabled = true;
+  msg.textContent = 'LINE の画面をひらいています…';
+
+  try{
+    const res = await fetch(`${LINE_LINK_API}/line/link/start`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(buildLinkPayload(b))
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || !data.ok || !data.authorizeUrl){
+      throw new Error((data && data.reason) || `HTTP ${res.status}`);
+    }
+    /* 認証画面へ出る。戻り先はサーバー側の /line/callback なので、
+       ここへは帰ってこない。 */
+    location.href = data.authorizeUrl;
+  }catch(e){
+    /* 失敗しても診断結果は画面に残っている。やり直せると伝える。 */
+    msg.textContent = 'いま連携できませんでした。'
+      + '通信環境を確かめて、もう一度お試しください。';
+    btn.disabled = false;
+  }
 }
 
 /* 漢字DBの読み込みを待ってから診断する。ふつうは入力中に読み終わっているので
@@ -3259,9 +3410,17 @@ $('again').addEventListener('click', () => {
   $('result').classList.remove('on');
   $('stage2').classList.remove('on');
   state = null;
+  /* 前の人の名前が「送るもの」の欄に残ったままにしない。
+     stage2 ごと伏せるので見えはしないが、次の診断まで DOM に残る。 */
+  $('s-line').hidden = true;
+  $('s-line-what').innerHTML = '';
   $('form-card').scrollIntoView({behavior:'smooth', block:'start'});
   $('sei-f').focus();
 });
+
+/* 連携ボタン。押した瞬間に外へ出るので、他のボタンと違って
+   まとめて拾わず単独で結ぶ。 */
+$('line-go').addEventListener('click', startLineLink);
 ['sei-k','mei-k','sei-f','mei-f'].forEach(id => {
   $(id).addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
 });

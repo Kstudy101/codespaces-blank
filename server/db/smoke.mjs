@@ -1,0 +1,299 @@
+#!/usr/bin/env node
+/* ==================================================================
+   smoke.mjs — 本物の MySQL に対して repo/ を一通り動かす
+
+     node server/db/smoke.mjs
+
+   tools/verify-server.mjs は偽の接続を渡して「どんな SQL を投げるか」を
+   見る。install も DB も要らない代わりに、その SQL が本当に通るか、
+   ドライバと MySQL が想定どおりの値を返すかまでは分からない。
+
+   ここが確かめるのはそちら。実際、最初にこれを流して 2 つ見つかった:
+
+     ・ON DUPLICATE KEY UPDATE の affectedRows で「新規か重複か」を
+       見分けていたが、mysql2 は CLIENT_FOUND_ROWS を既定で立てるため
+       どちらも 1 が返っていた ── 決済の再送で保有日数が二度足される
+     ・SELECT の式の先頭に置いた ? を MySQL が 1064 で撥ねる
+
+   どちらも偽の接続では出ない。置いたサーバーの上で一度流しておく。
+
+   本番の DB に対して流しても安全。触るのは専用の試験アカウント
+   1 件だけで、始めと終わりに消す。
+   ================================================================== */
+import { getPool, closePool } from "../lib/db.mjs";
+import { users, billing, learning, pushlogs } from "../lib/repo/index.mjs";
+import { jstDate } from "../lib/jst.mjs";
+
+const TEST_LINE_ID = "U_smoke_test_kstudy101";
+/* 原稿は day_number が主キーなので、本物の 1〜101 とぶつからない
+   番号が要る…が、範囲は 1〜101 に縛ってある。101 番を使って
+   終わったら消す（P4 の入稿前なのでまだ空）。 */
+const TEST_DAY = 101;
+
+let failed = 0, passed = 0;
+const check = (label, fn) => {
+  try { const d = fn(); passed++; console.log(`  ✓ ${label}${d ? "  " + d : ""}`); }
+  catch (e) { failed++; console.log(`  ✗ ${label}\n      ${e.message}`); }
+};
+const assert = (c, m) => { if (!c) throw new Error(m); };
+const head = (s) => console.log(`\n${s}`);
+
+const pool = await getPool();
+
+async function cleanup() {
+  const u = await users.findByLineUserId(pool, TEST_LINE_ID);
+  if (u) await users.deleteUser(pool, u.id);
+  await pool.execute("DELETE FROM content_templates WHERE day_number = ?", [TEST_DAY]);
+}
+
+await cleanup();
+
+try {
+  /* ---- 友だち追加 -------------------------------------------------- */
+  head("[友だち追加]");
+
+  const first = await users.upsertOnFollow(pool, {
+    lineUserId: TEST_LINE_ID, displayName: "たなか"
+  });
+  const uid = first.user.id;
+  check("新規は created=true", () => {
+    assert(first.created === true, "false でした");
+    return `user_id=${uid}`;
+  });
+
+  await users.setStatus(pool, uid, "active");
+  const again = await users.upsertOnFollow(pool, { lineUserId: TEST_LINE_ID });
+  check("再追加で created=false、status も落ちない", () => {
+    assert(again.created === false, "2 件目が入りました（UNIQUE が効いていません）");
+    assert(again.user.status === "active",
+      `status が ${again.user.status} に戻りました。払った人が体験に落ちます`);
+    assert(again.user.display_name === "たなか",
+      `表示名が ${again.user.display_name} になりました`);
+    return "active のまま / 表示名も残る";
+  });
+
+  /* ---- 文字化け ---------------------------------------------------- */
+  head("[utf8mb4]  日本語・韓国語・絵文字が往復するか");
+
+  await users.updateName(pool, uid, {
+    nameKanji: "武田 花子", nameReading: "タケダ ハナコ", nameKr: "다케다 하나코"
+  });
+  await users.upsertSajuProfile(pool, uid, {
+    birthDate: "1995-04-12", birthTime: "09:30:00", gender: "F", ohaengMain: "목",
+    rawResult: { pillars: ["을해", "경진", "정묘", "을사"], note: "🌸 테스트" }
+  });
+  const saju = await users.getSajuProfile(pool, uid);
+  const named = await users.findById(pool, uid);
+  check("漢字・カナ・ハングルがそのまま戻る", () => {
+    assert(named.name_kanji === "武田 花子", named.name_kanji);
+    assert(named.name_kr === "다케다 하나코", named.name_kr);
+    assert(saju.ohaeng_main === "목", saju.ohaeng_main);
+    return `${named.name_kanji} / ${named.name_kr} / ${saju.ohaeng_main}`;
+  });
+  check("JSON 列と絵文字も往復する", () => {
+    assert(saju.raw_result_json.pillars[0] === "을해", JSON.stringify(saju.raw_result_json));
+    assert(saju.raw_result_json.note === "🌸 테스트",
+      `絵文字が壊れました: ${saju.raw_result_json.note}（utf8mb4 でないと 4 バイト文字が落ちます）`);
+    return "配列 / 絵文字";
+  });
+  check("日付・時刻が文字列で返る（Date に化けない）", () => {
+    assert(saju.birth_date === "1995-04-12", `${typeof saju.birth_date}: ${saju.birth_date}`);
+    assert(saju.birth_time === "09:30:00", saju.birth_time);
+    return "1995-04-12 09:30:00";
+  });
+
+  /* ---- 体験と購入 -------------------------------------------------- */
+  head("[金額]  再送で保有日数を二度足さない ── MySQL の返し方に依存する所");
+
+  const t1 = await billing.startTrial(pool, uid, jstDate());
+  check("体験は 3 日", () => {
+    assert(t1.created === true, "既にありました");
+    assert(t1.subscription.total_days_entitled === 3, `${t1.subscription.total_days_entitled} 日`);
+    return "3 日";
+  });
+
+  const t2 = await billing.startTrial(pool, uid);
+  check("体験は延びない", () => {
+    assert(t2.created === false, "2 度目が通りました");
+    assert(t2.subscription.total_days_entitled === 3,
+      `${t2.subscription.total_days_entitled} 日になりました`);
+    return "3 日のまま";
+  });
+
+  const p1 = await billing.creditPurchase(pool, uid, "30days", { paymentRef: "pi_smoke_1" });
+  check("初回の決済で +30 日", () => {
+    assert(p1.created === true, "created=false でした");
+    assert(p1.daysGranted === 30, `${p1.daysGranted} 日`);
+    assert(p1.subscription.total_days_entitled === 33,
+      `${p1.subscription.total_days_entitled} 日（3+30=33 のはず）`);
+    assert(p1.subscription.payment_status === "paid", p1.subscription.payment_status);
+    return "33 日 / paid";
+  });
+
+  const p2 = await billing.creditPurchase(pool, uid, "30days", { paymentRef: "pi_smoke_1" });
+  check("同じ取引 ID の再送は加算しない ← ここが本番で効く", () => {
+    assert(p2.created === false,
+      "created=true でした。一意制約違反（1062）を捕まえられていません");
+    assert(p2.daysGranted === 0, `${p2.daysGranted} 日足しました`);
+    assert(p2.subscription.total_days_entitled === 33,
+      `${p2.subscription.total_days_entitled} 日に増えました。決済 1 件で二重に付与されています`);
+    return "33 日のまま";
+  });
+
+  const p3 = await billing.creditPurchase(pool, uid, "7days", { paymentRef: "pi_smoke_2" });
+  check("別の取引 ID なら積み上がる", () => {
+    assert(p3.created === true, "created=false でした");
+    assert(p3.subscription.total_days_entitled === 40,
+      `${p3.subscription.total_days_entitled} 日（33+7=40 のはず）`);
+    return "40 日";
+  });
+
+  const purchases = await billing.listPurchases(pool, uid);
+  check("台帳は 2 件（再送のぶんは増えない）", () => {
+    assert(purchases.length === 2, `${purchases.length} 件`);
+    return purchases.map((p) => p.package_type).join(" + ");
+  });
+
+  const drift = await billing.recountEntitledDays(pool, uid);
+  check("合計の写しと台帳が一致する", () => {
+    assert(drift.drift === 0, `${drift.stored} と ${drift.expected} がずれています`);
+    return `${drift.stored} 日`;
+  });
+
+  /* ---- 進み -------------------------------------------------------- */
+  head("[進み]  二重起動しても同じ日を二度送らない");
+
+  await learning.ensureProgress(pool, uid);
+  const a1 = await learning.advanceDay(pool, uid, 0);
+  check("0 → 1 日目を取れる", () => {
+    assert(a1.claimed === true && a1.day === 1, JSON.stringify(a1));
+    return "claimed";
+  });
+
+  const a2 = await learning.advanceDay(pool, uid, 0);
+  check("同じ値で二度目は取れない ← 二重起動の防ぎ方そのもの", () => {
+    assert(a2.claimed === false,
+      "二度目も通りました。バッチが重なると同じ日が二度届き、次の日が飛びます");
+    return "claimed=false";
+  });
+
+  const prog = await learning.getProgress(pool, uid);
+  check("進みは 1 日ぶんだけ動いた", () => {
+    assert(prog.current_day === 1, `${prog.current_day} 日目`);
+    assert(prog.last_sent_at && prog.last_sent_at.startsWith(jstDate()),
+      `last_sent_at が ${prog.last_sent_at}（今日の JST で入るはず）`);
+    return `current_day=1 / ${prog.last_sent_at}`;
+  });
+
+  await learning.setQuizResult(pool, uid, 1, true);
+  await learning.setQuizResult(pool, uid, 2, false);
+  const q = await learning.getProgress(pool, uid);
+  check("学期ごとに積める。合否は boolean で入る（前の結果を消さない）", () => {
+    assert(q.quiz_pass_log.semester1 === true,
+      `${JSON.stringify(q.quiz_pass_log)} ── 1/0 なら JSON の boolean になっていません`);
+    assert(q.quiz_pass_log.semester2 === false, JSON.stringify(q.quiz_pass_log));
+    assert(q.current_day === 1, `クイズで current_day が ${q.current_day} に動きました`);
+    return JSON.stringify(q.quiz_pass_log);
+  });
+
+  /* ---- 配信ログ ---------------------------------------------------- */
+  head("[配信ログ]  今日もう送ったか / 夕方の対象");
+
+  const before = await pushlogs.sentToday(pool, uid, "learning");
+  check("送る前は「今日は未送信」", () => {
+    assert(before === false, "送っていないのに true でした");
+    return "false";
+  });
+
+  await pushlogs.logSent(pool, uid, { dayNumber: 1, pushType: "learning" });
+  const after = await pushlogs.sentToday(pool, uid, "learning");
+  const otherType = await pushlogs.sentToday(pool, uid, "review");
+  check("送った後は true。種類が違えば false", () => {
+    assert(after === true, "記録したのに false でした（JST の境目がずれています）");
+    assert(otherType === false, "review まで送信済みになりました");
+    return "learning=true / review=false";
+  });
+
+  await pushlogs.logFailed(pool, uid, { dayNumber: 1, pushType: "quiz", error: new Error("429 rate limit") });
+  const quizSent = await pushlogs.sentToday(pool, uid, "quiz");
+  check("失敗は「送った」に数えない", () => {
+    assert(quizSent === false, "失敗した配信が送信済みになりました");
+    return "false";
+  });
+
+  const day = await pushlogs.todaysLearningDay(pool, uid);
+  check("今朝どの日を送ったかを引ける（夕方の復習が使う）", () => {
+    assert(day === 1, `${day} が返りました`);
+    return "1 日目";
+  });
+
+  const targets = await pushlogs.listReviewTargets(pool);
+  check("夕方の対象に入っている", () => {
+    const me = targets.find((t) => Number(t.user_id) === uid);
+    assert(me, `対象 ${targets.length} 件の中にいません`);
+    assert(Number(me.day_number) === 1, `day_number=${me.day_number}`);
+    assert(me.name_kr === "다케다 하나코", me.name_kr);
+    return `${targets.length} 件中に自分あり`;
+  });
+
+  /* ---- 原稿 -------------------------------------------------------- */
+  head("[原稿]");
+
+  await learning.upsertTemplate(pool, {
+    dayNumber: TEST_DAY,
+    grammarPoint: "-습니다 / -습니까?",
+    grammarTipKr: "정중한 종결어미입니다。ていねいな文末。",
+    dialogueTemplate: [{ kr: "{NAME}입니다.", ja: "{NAME_JP}です。" }],
+    vocab3: [{ kr: "사랑", meaning: "愛" }, { kr: "하늘", meaning: "空" }, { kr: "바다", meaning: "海" }],
+    requiresNameSlot: true
+  });
+  const tpl = await learning.getTemplate(pool, TEST_DAY);
+  check("原稿が往復する。学期は day_number から決まる", () => {
+    assert(tpl.semester === 4, `${TEST_DAY} 日目が ${tpl.semester} 学期になりました`);
+    assert(tpl.requires_name_slot === true, `${typeof tpl.requires_name_slot}`);
+    assert(tpl.dialogue_template[0].kr === "{NAME}입니다.", JSON.stringify(tpl.dialogue_template));
+    assert(tpl.vocab_3.length === 3, JSON.stringify(tpl.vocab_3));
+    return "4 学期 / 名前スロットあり / 単語 3 語";
+  });
+
+  const missing = await learning.findMissingTemplateDays(pool);
+  check("欠けている日を数えられる", () => {
+    assert(!missing.includes(TEST_DAY), `${TEST_DAY} が欠けている扱いです`);
+    return `残り ${missing.length} 日ぶん未入稿`;
+  });
+
+  /* ---- 退会 -------------------------------------------------------- */
+  head("[退会]  外部キーで一緒に消えるか ── privacy の約束になる所");
+
+  const [[b]] = await pool.query(
+    `SELECT (SELECT COUNT(*) FROM saju_profiles     WHERE user_id=${uid}) s,
+            (SELECT COUNT(*) FROM purchases         WHERE user_id=${uid}) p,
+            (SELECT COUNT(*) FROM subscriptions     WHERE user_id=${uid}) b,
+            (SELECT COUNT(*) FROM learning_progress WHERE user_id=${uid}) g,
+            (SELECT COUNT(*) FROM push_logs         WHERE user_id=${uid}) l`);
+  check("消す前は 5 つの表に行がある", () => {
+    assert(b.s === 1 && b.p === 2 && b.b === 1 && b.g === 1 && b.l === 2,
+      JSON.stringify(b));
+    return `saju1 / purchases2 / subs1 / progress1 / logs2`;
+  });
+
+  await users.deleteUser(pool, uid);
+  const [[a]] = await pool.query(
+    `SELECT (SELECT COUNT(*) FROM saju_profiles     WHERE user_id=${uid}) s,
+            (SELECT COUNT(*) FROM purchases         WHERE user_id=${uid}) p,
+            (SELECT COUNT(*) FROM subscriptions     WHERE user_id=${uid}) b,
+            (SELECT COUNT(*) FROM learning_progress WHERE user_id=${uid}) g,
+            (SELECT COUNT(*) FROM push_logs         WHERE user_id=${uid}) l`);
+  check("users を消すと 5 つとも消える", () => {
+    assert(a.s + a.p + a.b + a.g + a.l === 0, `残っています: ${JSON.stringify(a)}`);
+    return "全部 0";
+  });
+
+} finally {
+  await cleanup();
+  console.log(`\n${failed ? "✗" : "✓"} ${passed + failed} 項目中 ${passed} 件成功`
+    + (failed ? ` / ${failed} 件失敗` : "") + "（試験データは消しました）");
+  await closePool();
+}
+
+process.exit(failed ? 1 : 0);

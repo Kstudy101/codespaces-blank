@@ -60,10 +60,33 @@
 | `tools/build-solar-terms.py` | 절기 시각 계산 → `solar-terms.json` |
 | `tools/build-new-moons.py` | 삭 계산 → `new-moons.json` |
 | `tools/fetch-naoj-reference.py` | 국립천문대에서 기준값 취득 → `data/naoj-reference.json` |
-| `tools/verify-*.mjs` | 배포 관문 9종 (아래 「검증」) |
+| `tools/verify-*.mjs` | 배포 관문 12종 (아래 「검증」) |
 | `tools/build-site.sh` | 공개 파일만 `dist/` 로 모음 + 6종 점검 (내부 링크·canonical·구 호스트·sitemap 망라·**CSS 토큰**) |
 | `tools/set-site-url.py` | 절대 URL 일괄 교체 (도메인 이전용) |
-| `.github/workflows/deploy.yml` | push → 검증 9종 → Xserver rsync 배포 |
+| `.github/workflows/deploy.yml` | push → 검증 12종 → Xserver rsync 배포 |
+
+**`server/`** — LINE 발송 시스템. **이 사이트와 같은 서버에서 돌지 않습니다**
+
+| 파일 | 역할 |
+|---|---|
+| `server/app.js` → `app.mjs` | HTTP 수신부. 경로 3개(`/line/webhook`·`/health`·`/line/callback`) |
+| `server/lib/signature.mjs` | **LINE 서명 검증.** 시스템 전체의 경계 |
+| `server/lib/webhook.mjs` | 이벤트 4종 분배 |
+| `server/lib/handlers/*.mjs` | `follow` / `message` / `postback` / `link` |
+| `server/lib/linelogin.mjs` | LINE Login (OAuth). **Messaging API 와 다른 채널** |
+| `server/lib/token.mjs` | `state` 생성·해시 |
+| `server/lib/pages.mjs` | 연동 결과 화면 (HTML) |
+| `server/lib/line.mjs` | Messaging API 클라이언트 (fetch, SDK 없음) |
+| `server/db/schema.sql` | 테이블 9개. 계획서에서 고친 6곳을 그 자리에 적어 둠 |
+| `server/db/migrate.mjs` | 스키마 적용 + 「있어야 할 9개가 정말 있는지」 확인 |
+| `server/db/smoke.mjs` | **진짜 DB 에 리포지토리를 한 바퀴 돌림** (25항목). 본번에 돌려도 안전 |
+| `server/lib/db.mjs` | MySQL 접속. **외부 패키지를 읽는 유일한 파일** |
+| `server/lib/jst.mjs` | 일본 시간의 벽시계. 서버 시계가 UTC 여도 어긋나지 않음 |
+| `server/lib/env.mjs` | `.env` 읽기. 빠진 값을 **이름으로 전부 나열**하고 멈춤 |
+| `server/lib/sqlfile.mjs` | `.sql` 을 문장 단위로 자름 (`ENUM('7days',…)` 중간에서 안 끊음) |
+| `server/lib/repo/*.mjs` | 리포지토리 5개 — `users` / `billing` / `learning` / `pushlogs` / `links` |
+
+자세한 것은 아래 [LINE 발송 시스템 (`server/`)](#line-발송-시스템-server) 참고.
 
 ### `index.html` 의 「자체 완결」은 이제 깨졌습니다
 
@@ -648,15 +671,315 @@ DB는 **상용한자만** 수록합니다. 일본 인명에는 人名用漢字(8
 
 ---
 
+## LINE 발송 시스템 (`server/`)
+
+친구추가 이후를 담당하는 백엔드입니다. **웹사이트와 같은 서버에서 돌지 않습니다** —
+사이트는 Xserver 로 정적 파일만 rsync 하고, 이쪽은 **ChemiCloud** 의 Node.js
+앱으로 돕니다. 저장소만 같습니다.
+
+실행계획서 v3 의 **P3 (스키마 + 리포지토리 + Webhook + LINE Login 온보딩)** 까지 되어 있습니다.
+P4 이후(원고 입고·렌더링·배치·결제)는 아직입니다.
+
+### 왜 저장소를 나누지 않았나
+
+같은 도메인의 같은 서비스이고, 무엇보다 **가격표와 커리큘럼이 양쪽에 나옵니다.**
+`server/lib/repo/billing.mjs` 의 `PACKAGES` 와 결제 페이지가 따로 있으면,
+한쪽만 가격을 올렸을 때 「낸 금액과 늘어난 일수가 안 맞는」 상태가 됩니다.
+청구는 정상으로 통과하므로 알아채지 못합니다.
+
+`server/` 는 `build-site.sh` 의 `PUBLIC` (허용 리스트) 에 없으므로 `dist/` 에
+들어가지 않고, 따라서 Xserver 로 올라가지 않습니다. 실수로 넣었을 때를 위해
+`*.sql`·`*.env` 도 따로 걸러냅니다.
+
+### 의존성은 `mysql2` 하나. 그것도 파일 하나에 가둡니다
+
+이 저장소에 npm 의존성이 없다는 것은 원래의 약속이고 위에도 그렇게 써 두었습니다.
+여기서 하나만 넣는 이유는, MySQL 의 접속 프로토콜(인증 플러그인·TLS)을 직접
+쓰는 것이 수지에 맞지 않기 때문입니다 — 틀리면 「연결이 안 된다」가 아니라
+「가끔 안 된다」가 됩니다.
+
+대신 **`server/lib/db.mjs` 한 곳에 가둡니다.** `repo/` 아래는 `mysql2` 를 읽지 않고,
+넘겨받은 `conn` 의 `.execute()` 만 씁니다.
+
+```js
+// 진짜 접속을 넘기면 돌아가고
+const pool = await getPool();
+await billing.creditPurchase(pool, userId, '30days', { paymentRef: 'pi_...' });
+
+// 가짜를 넘기면 「어떤 SQL 을 던지는가」를 그대로 볼 수 있습니다
+const conn = { async execute(sql, params) { calls.push({ sql, params }); return [[], []]; } };
+```
+
+덕분에 `tools/verify-server.mjs` 는 **DB 없이, `npm install` 없이** 돕니다 —
+기존 9종이 가진 「설치가 필요 없다」는 성질이 그대로 이어집니다.
+그 약속이 지켜지는지도 검증 자신이 봅니다(`mysql2` 를 읽는 파일이 1개인가).
+
+### 계획서에서 고친 6곳
+
+계획서 §2 의 SQL 을 그대로 옮기면 깨지는 곳이 있어, 이유를 `schema.sql`
+그 자리에 적고 고쳤습니다.
+
+| # | 고친 것 | 그대로 두면 |
+|---|---|---|
+| 1 | **utf8mb4** 로 전 테이블 지정 | 기본값(latin1)이라 일본어·한국어가 안 들어감. 테이블은 만들어지므로 **첫 사용자에서야** 드러남 |
+| 2 | `users.status` 에 **`completed`** 추가 | 계획서 5-5 가 쓰는 값이 ENUM 에 없음(계획서 본문도 「추가 필요」라고만 적어둠) |
+| 3 | `purchases.payment_ref` 에 **UNIQUE** | 결제 웹훅의 **재전송은 정상 동작**입니다. 없으면 같은 결제로 보유일수가 두 번 늘어남 |
+| 4 | `saju_profiles`·`subscriptions`·`learning_progress` 의 `user_id` 에 UNIQUE | 콜백이 두 번 돌면 2장이 생기고, 어느 쪽을 읽느냐로 결과가 달라짐 |
+| 5 | `push_logs` 에 **인덱스** `(user_id, push_type, sent_at)` | 「오늘 이미 보냈나」를 하루 2번 전원분 조회. 인덱스 없이 쌓이면 아침 발송 자체가 늦어짐 |
+| 6 | 외부키 **5개 CASCADE** | 탈퇴 시 지울 범위가 코드 쪽 절차에만 있으면, 테이블 하나만 빠뜨려도 「지웠습니다」가 거짓말이 됨 |
+
+### 시각은 전부 JST. 서버 시계에 기대지 않습니다
+
+빌린 서버의 시계가 JST 라는 보장이 없습니다(cPanel 공유 환경은 UTC 인 경우가 많음).
+`DATETIME` 은 시차를 갖지 않는 타입이라, 넣는 쪽과 읽는 쪽의 해석이 어긋나면
+**아침 7시 발송이 정확히 그 창에 들어갑니다** — 전날분으로 세어져 두 번 갑니다.
+
+```
+2026-08-02 21:55 UTC  =  2026-08-03 06:55 JST
+                ↑ UTC 로 날짜를 뽑으면 08-02. 매일 아침 어긋남
+```
+
+`server/lib/jst.mjs` 가 시차를 스스로 더합니다(`getTime() + 9h` → `getUTC*`).
+서버의 TZ 설정에 맞추는 방식을 안 쓴 것은, 환경에 의존하기 때문입니다.
+접속할 때 DB 쪽 `time_zone` 도 `+09:00` 으로 고정하므로(`lib/db.mjs`),
+앱에서 넣든 `NOW()` 로 넣든 같은 것이 들어갑니다.
+
+검증은 `TZ` 를 UTC·New_York·Tokyo·Kiritimati 4개로 바꿔가며 **같은 값이 나오는지**
+봅니다. 한 곳에서 서버 시계를 읽으면 이 검사에서 걸립니다.
+
+### 리포지토리를 테이블별이 아니라 「함께 움직이는 단위」로 나눴습니다
+
+| 파일 | 다루는 테이블 | 왜 함께인가 |
+|---|---|---|
+| `users.mjs` | `users` + `saju_profiles` | 함께 태어남 — 친구추가와 사주 인계는 계획서 5-1 의 한 줄기 |
+| `billing.mjs` | `purchases` + `subscriptions` | 함께 늘어남 — 한쪽만 성공한 상태는 「냈는데 안 늘어남」이거나 그 반대 |
+| `learning.mjs` | `learning_progress` + `content_templates` + `quiz_checkpoints` | 「다음에 뭘 보낼까」를 셋이 함께 정함 |
+| `pushlogs.mjs` | `push_logs` | 남기기만 함 |
+
+`billing.creditPurchase()` 가 구매 기록과 일수 가산을 **한 함수 안에서** 하는 것이
+이 분할의 이유입니다. 호출하는 쪽이 2번 부르는 형태로 두면 언젠가 한쪽을 잊습니다.
+
+### 검증은 두 층입니다 — 가짜 접속과 진짜 DB
+
+| | 무엇을 보는가 | 무엇이 필요한가 |
+|---|---|---|
+| `tools/verify-server.mjs` (73항목) | **어떤 SQL 을 던지는가** | 아무것도. 배포 관문에 포함 |
+| `server/db/smoke.mjs` (25항목) | **그 SQL 이 실제로 통하는가** | 진짜 MySQL. 설치 후 1회 |
+
+가짜 접속만으로는 "SQL 의 모양"까지밖에 못 봅니다. 실제로 MySQL 8.0 과
+MariaDB 10.11 양쪽에 돌려보니 **가짜로는 안 나오는 버그가 4개** 나왔습니다.
+
+| 발견 | 증상 |
+|---|---|
+| `timezone` 옵션은 세션 시각을 안 바꿈 | mysql2 의 `timezone` 은 드라이버 변환 설정. `@@session.time_zone` 은 `SYSTEM` 인 채로 `NOW()` 가 UTC. `SET time_zone` 을 접속마다 실제로 내보내야 함 |
+| `ON DUPLICATE KEY` 의 `affectedRows` 로 신규/중복을 못 가림 | mysql2 가 `CLIENT_FOUND_ROWS` 를 기본으로 켜서 **신규도 중복도 1**. 그대로 뒀으면 **결제 재전송 때 보유일수가 두 번 늘어남** |
+| `AS stored` 가 1064 | `STORED` 는 MySQL 8.0 예약어(`GENERATED … STORED`). 에러가 다음 줄을 가리켜서 별명이 원인이라고 못 읽음 |
+| `JSON_SET(…, ?)` 에 boolean 을 넘기면 `1`/`0` | 드라이버가 JS `true` 를 정수로 보냄. `CAST(? AS JSON)` 은 **MariaDB 에 없음** → `JSON_MERGE_PATCH` 로 통일 |
+
+전부 「돌려보면 정상으로 보이는」 것들입니다. 두 번째 것은 결제가 정상 통과하므로
+사용자가 말해 주기 전까지 알 수 없습니다. 고친 뒤 각 항목을 관문에 넣어 두었습니다.
+
+### 검증이 지키는 3가지 (돌려봐도 안 보이는 것들)
+
+`tools/verify-server.mjs` **73항목**. 이 중 핵심은 셋입니다.
+
+**1. 결제 재전송으로 일수가 두 번 늘지 않는가**
+`payment_ref` UNIQUE + `INSERT … ON DUPLICATE KEY UPDATE` 로, **행이 실제로
+늘었을 때만** 일수를 더합니다. 「먼저 SELECT 해서 없으면 INSERT」는 웹훅이 동시에
+2개 오면 양쪽 다 「없음」을 보므로 막지 못합니다 — DB 의 제약만이 확실합니다.
+
+**2. 배치가 두 번 돌아도 같은 날을 두 번 안 보내는가**
+`advanceDay(conn, userId, fromDay)` 는 **읽었을 때의 값**을 `WHERE` 에 넣습니다.
+
+```sql
+UPDATE learning_progress SET current_day = ?  WHERE user_id = ? AND current_day = ?
+```
+
+`current_day + 1` 만 쓰면 두 프로세스가 모두 5를 읽고 모두 6을 보낸 뒤 7까지
+올라갑니다 — 6일차가 두 번 가고 7일차는 아무도 못 봅니다. 조건을 붙이면
+한쪽만 이기고, 진 쪽은 `claimed: false` 를 받아 보내지 않고 내려옵니다.
+
+**3. 복습·퀴즈가 보유일수를 깎지 않는가** (계획서 1-2 의 약속 그 자체)
+검증이 소스를 읽어서, `current_day` 를 쓰는 함수가 2개(`advanceDay`·`resetProgress`)뿐인지,
+`total_days_entitled` 를 더하는 곳이 `creditPurchase` 한 군데뿐인지 봅니다.
+
+### P2 — Webhook 수신부
+
+경로는 셋뿐이라 프레임워크를 넣지 않았습니다(`node:http`). Express 를 넣으면
+의존이 60개쯤 늘고, "검증은 설치 없이 돈다"는 성질이 무너집니다.
+
+| 경로 | 하는 일 |
+|---|---|
+| `POST /line/webhook` | LINE 이벤트 4종 수신 |
+| `GET /health` | 프로세스 + **DB 까지** 확인 (DB 가 죽으면 발송이 멈추므로) |
+| `GET /line/callback` | LINE Login 의 착지점. 지금은 503, P3 에서 채움 |
+
+**서명 검증이 시스템 전체의 경계입니다.** webhook URL 은 공개돼 있어 누구나 POST 할 수
+있습니다. 여기가 통과하면 이후는 전부 진짜로 취급하므로, 실수하기 쉬운 세 곳을
+`tools/verify-webhook.mjs` 가 지킵니다.
+
+- **생바이트로 계산** — `JSON.parse` 한 것을 다시 `JSON.stringify` 하면 키 순서·공백에 따라
+  다른 바이트열이 됩니다. 그래서 파싱은 **검증 이후에만** 하도록 순서까지 검사합니다
+- **`timingSafeEqual`** — `===` 로 비교하면 몇 번째 글자에서 틀렸는지가 소요 시간에 드러납니다
+- **base64** (hex 아님), 길이가 다르면 예외 대신 `false`
+
+**200 을 먼저 돌려주고 처리는 뒤로 넘깁니다.** DB 와 프로필 조회를 기다렸다 응답하면
+아침 혼잡 시간에 LINE 의 재전송이 걸립니다. 실측 응답 **1.3ms**.
+
+**재전송 대응은 표를 만들지 않고 핸들러를 멱등하게** 썼습니다 — `follow` 는 1062 를 버리고,
+`unfollow`·`postback` 은 값을 대입할 뿐입니다. 처리한 이벤트 목록 표를 두면 그걸 지우는
+장치까지 필요해지므로, 「몇 번 해도 같은 결과」로 충분한 동안은 부품이 적은 쪽이 낫습니다.
+
+**postback 의 `data` 는 믿지 않습니다.** `data` 는 사용자 단말을 거쳐 돌아오므로,
+정답 번호를 넣어두면 **누르기 전에 고치면 반드시 정답**이 됩니다. 화면에는 「정답입니다」
+로만 보여서 아무도 눈치채지 못합니다. 정답은 서버에서만 조회하고, 「30일차 퀴즈」라고
+주장해도 체크포인트 표로 다시 확인합니다.
+
+**해지는 문면으로 처리하지 않습니다.** 「해약하고 싶다」에는 안내만 하고, 실제 중단은
+사용자가 블록해서 `unfollow` 가 올 때만 일어납니다 — 말투를 잘못 읽어 결제한 사람을
+멈추지 않기 위해서입니다.
+
+#### 재추가 처리 — 계획서를 그대로 따르면 깨지는 곳
+
+계획서 5-1 은 「재추가 시 기존 유저 status 를 trial 로 갱신」이라고 돼 있는데,
+그대로 쓰면 **101일치를 산 사람이 한 번 블록했다 돌아오면 체험으로 떨어집니다.**
+보유일수는 `subscriptions` 에 남아 있는데 발송만 체험 취급이 되는, 고치기 어려운
+고장입니다. 결제 이력을 보고 정하도록 했고, 실제로 확인했습니다.
+
+```
+구매 후     status=active      days=104  current_day=42
+블록 후     status=unfollowed  days=104  current_day=42
+재추가 후   status=active      days=104  current_day=42   ← 유지
+미결제 재추가는 trial 로 복귀 / 체험 기간도 연장되지 않음
+```
+
+#### 로컬에서 돌려보기
+
+```bash
+cd server && npm install
+cp .env.example .env      # DB_* 와 LINE_CHANNEL_SECRET 을 채움
+node db/migrate.mjs
+node app.js               # PORT 기본 3000
+
+# 서명 붙여서 쏘기
+BODY='{"events":[{"type":"follow","source":{"userId":"U_test"}}]}'
+SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$LINE_CHANNEL_SECRET" -binary | base64)
+curl -X POST localhost:3000/line/webhook -H "X-Line-Signature: $SIG" --data-raw "$BODY"
+```
+
+외부에 노출하려면 ngrok 등으로 터널을 열고, 그 URL 을 LINE Developers →
+Messaging API → Webhook URL 에 넣습니다. 콘솔의 **검증** 버튼은 `events` 가 빈
+요청을 보내므로 200 이 돌아옵니다.
+
+### P3 — 웹의 사주를 LINE 계정에 잇기 (LINE Login)
+
+점은 웹에서 먼저 끝납니다. 그 시점에 아는 건 이름과 생년월일뿐이고,
+**LINE 의 누구인지는 인증에서 돌아온 뒤**에야 알 수 있습니다. 둘이 갖춰져야
+어느 행에 쓸지 정해지므로, 먼저 온 쪽을 `pending_links` 에 맡겨 둡니다.
+
+```
+1  POST /line/link/start   사주 결과를 맡기고 → state + 인증 URL 을 받음
+   (브라우저가 LINE 인증 화면으로 나감)
+2  GET  /line/callback     state 로 맡긴 것을 찾아 → code 를 userId 로 바꿔 저장
+```
+
+**순서는 어느 쪽이든 됩니다.** 친구추가가 먼저인 사람(webhook 의 `follow` 가 먼저)도,
+연동이 먼저인 사람도 있습니다. `users` 쓰기는 전부 `upsertOnFollow` 를 지나므로
+두 명이 되지 않습니다 — 실제로 확인했습니다.
+
+#### `state` — 이게 뚫리면 남의 사주를 자기 LINE 에 붙일 수 있습니다
+
+| | |
+|---|---|
+| 생성 | `randomBytes(32)` → base64url 43자. `Math.random` 아님 |
+| 저장 | **SHA-256 해시로만.** 생값이 새면 아직 안 넘어간 사주를 가로챌 수 있음 |
+| 사용 | **1회.** `UPDATE … WHERE consumed_at IS NULL` 이 이긴 쪽만 진행 |
+| 순서 | `consume` → `exchangeCode`. 확인 전에 LINE 을 두드리면 무차별 대입의 상대를 우리가 대신 서 줌 |
+| 실패 문면 | 만료·재사용·형식오류를 **전부 같은 화면**으로. 어디서 걸렸는지 알려주면 단서가 됨 |
+
+#### 채널 프로바이더 불일치 — 등록은 성공하는데 발송만 영원히 안 옴
+
+Login 채널과 Messaging API 채널이 LINE Developers 의 **같은 프로바이더**에
+있지 않으면 돌아오는 `userId` 가 다른 값이 됩니다. 그 `userId` 로 push 를 보내면
+안 갑니다 — **등록도 저장도 성공하고, 에러도 안 납니다.** 발송이 시작되는
+아침까지 아무도 모릅니다.
+
+확인할 방법이 하나 있어서 넣어 뒀습니다. 연동이 끝난 시점에 그 `userId` 를
+**Messaging API 쪽** `getProfile` 에 넣어 봅니다. 같은 프로바이더면 통하고,
+다르면 404 입니다. 그래서 완료 화면이 둘로 갈립니다.
+
+```
+통과   → 이미 친구.       「連携が完了しました」
+404    → 아직 친구가 아님. 「あと一歩です」 + 친구추가 버튼
+         (설치 직후 이게 반드시 404 라면, 먼저 프로바이더를 의심할 것)
+```
+
+#### 그 밖에 지켜둔 것
+
+- **CORS 는 `*` 가 아닙니다.** 사이트는 Xserver, 이 API 는 ChemiCloud 라 다른
+  오리진입니다. 생년월일을 받는 입구라 `ALLOWED_ORIGINS` 로 좁히고 `Vary: Origin`
+  을 붙였습니다. 쿠키를 안 쓰므로 credentials 는 허용하지 않습니다
+- **이름을 그대로 HTML 에 안 냅니다.** 결과 화면에 나오는 건 사용자가 입력한 이름입니다
+- **`"1995-04-12T23:00:00Z"` 를 날짜로 받지 않습니다.** 10자로 자르면 통과하는데,
+  UTC 밤은 JST 로는 다음 날이라 **일주가 하루 어긋난 사주**가 저장됩니다.
+  값은 「그럴듯한 날짜」 그대로라 나중에 대조해도 못 찾습니다
+- **테스트용 엔드포인트가 남아 있으면 기동을 멈춥니다.** `LINE_API_BASE` 를
+  덮어쓴 채로 뜨면 액세스 토큰과 채널 시크릿을 엉뚱한 호스트로 계속 보내게 됩니다 —
+  상대가 200 만 주면 화면상으로는 정상입니다. `ALLOW_FAKE_LINE=1` 을 같이 둘 때만 허용
+- **`pending_links` 는 30분 만료 + `purgeExpired`.** 생년월일이 들어 있으므로
+  안 쓰인 걸 계속 갖고 있을 이유가 없습니다
+
+### 설치 (ChemiCloud)
+
+```bash
+# 1. cPanel → MySQL® Databases 에서 DB·사용자 생성
+#    (이름·사용자명 앞에 cPanel 계정 접두사가 자동으로 붙습니다.
+#     생성 화면에 나온 이름을 그대로 옮겨 적을 것)
+#    권한은 ALL PRIVILEGES. 외부키·JSON 을 쓰므로 MySQL 5.7+ / MariaDB 10.2+ 필요
+# 2. server/.env.example → server/.env 로 복사 후 채우기
+cd server && npm install
+
+# 3. 스키마 적용. 몇 번 돌려도 같은 결과가 됩니다
+node db/migrate.mjs
+
+# 4. 리포지토리를 실제로 한 바퀴 돌려 확인 (25항목)
+#    전용 시험 계정 1건만 건드리고 시작·끝에 지우므로 본번에 돌려도 안전합니다
+node db/smoke.mjs
+```
+
+`migrate.mjs` 는 「에러가 안 났다」로 끝내지 않고 **8개가 정말 있는지·utf8mb4 인지·
+세션 `time_zone` 이 `+09:00` 인지**를 다시 셉니다. `smoke.mjs` 는 그 위에서
+결제 재전송·배치 이중기동·탈퇴 CASCADE 까지 실제로 돌려 봅니다 — 위 표의 버그 4개가
+전부 여기서 나왔으므로, 서버를 옮기면 다시 돌리는 편이 좋습니다.
+
+본번은 `.env` 대신 **cPanel → Setup Node.js App → Environment variables** 에
+같은 이름으로 넣습니다. 이미 있는 환경변수가 `.env` 보다 우선합니다 —
+올려둔 채 잊은 `.env` 가 본번 설정을 이기는 사고를 막기 위해서입니다.
+
+### 아직 정하지 않은 것
+
+- **개인정보 방침의 개정이 필요합니다.** `privacy.html` 과 `verify-birth.mjs` 는
+  「생년월일은 서버로 가지 않는다」를 약속으로 못박아 두었는데,
+  `saju_profiles.birth_date` 는 그것을 저장합니다. 웹사이트 쪽(`sessionStorage` 만 씀)은
+  그대로지만, **LINE 연동에 동의한 사람의 분은 서버에 남습니다.** P3(온보딩) 착수 전에
+  문안을 고쳐야 합니다 — 저장 범위·보관 기간·삭제 요청 경로
+- `content_templates` 는 아직 0건입니다 (P4 입고 대상, 101일분)
+- 도메인. LINE 웹훅과 로그인 콜백 URL 을 `www.kstudy101.jp` (Xserver) 아래에 둘지,
+  ChemiCloud 쪽 별도 호스트로 할지
+
+---
+
 ## 검증
 
 두 가지가 있고, **성격이 다릅니다.**
 
 ### 1. 배포 관문 — 저장소에 있고, push 할 때마다 돌아갑니다
 
-`tools/verify-*.mjs` 9종 **174항목**. `.github/workflows/deploy.yml` 이 rsync 앞에
-세워 두었으므로, 하나라도 실패하면 배포가 멈춥니다. `package.json` 이 없으므로
+`tools/verify-*.mjs` 12종 **332항목**. `.github/workflows/deploy.yml` 이 rsync 앞에
+세워 두었으므로, 하나라도 실패하면 배포가 멈춥니다. 루트에 `package.json` 이 없으므로
 의존 패키지도 없습니다 — 각 스크립트가 `vm` 으로 대상 `.js` 를 그대로 읽어 실행합니다.
+`server/` 만 `mysql2` 를 쓰지만 `lib/db.mjs` 한 곳에 갇혀 있어, `verify-server.mjs`
+역시 설치 없이 돕니다.
 
 | 스크립트 | 항목 | 무엇과 대조하는가 |
 |---|---|---|
@@ -669,6 +992,9 @@ DB는 **상용한자만** 수록합니다. 일본 인명에는 人名用漢字(8
 | `verify-amulet.mjs` | 28 | **`kanji.json` 2,136자** — 부적 한자의 한국음·훈음 12자 |
 | `verify-birth.mjs` | 17 | **약속 그 자체** — `sessionStorage` 만 씀 / 이름이 안 섞임 / 절기표와 같은 1930〜2030 |
 | `verify-pages.mjs` | 14 | 9페이지를 **가로로 늘어놓고** 대조 — 메타·링크·읽어주기 |
+| `verify-server.mjs` | 73 | **DB 없이 SQL 을 읽음** — JST 경계·결제 재전송·배치 이중기동·보유일수를 깎지 않는 약속 |
+| `verify-webhook.mjs` | 38 | **서명이 유일한 경계** — 생바이트·timingSafeEqual·검증 전 파싱 금지·postback data 불신 |
+| `verify-onboarding.mjs` | 47 | **OAuth 는 틀려도 성공처럼 보인다** — state 예측·재사용·CORS·XSS·채널 프로바이더 불일치 |
 
 여기서 잡은 것 중 화면으로는 절대 못 봤을 것들:
 
@@ -732,9 +1058,11 @@ python3 -m http.server 8000
 검증만 돌리려면 서버도 필요 없습니다:
 
 ```bash
-for t in name saju fortune study omikuji gilbang amulet pages; do node tools/verify-$t.mjs; done
+for t in name saju fortune study omikuji gilbang amulet birth pages server webhook onboarding; do node tools/verify-$t.mjs; done
 bash tools/build-site.sh    # dist/ 를 만들고 링크·canonical·구 호스트를 점검
 ```
+
+`server`·`webhook`·`onboarding` 도 여기에 들어 있습니다 — MySQL 도 `npm install` 도 필요 없습니다.
 
 ---
 
@@ -752,8 +1080,38 @@ bash tools/build-site.sh    # dist/ 를 만들고 링크·canonical·구 호스�
 - [x] **"나 자신"을 소재로 확장** — 생년월일 → 사주 → 오늘의 운세·길방·부적.
       단, 이름·생년월일은 저장하지 않습니다(계획서 §4)
 - [x] 한자 데이터 — 참조 DB 는 2,136자 (손수 작성 층은 아래 그대로 과제)
+- [x] **LINE 발송 시스템 P1** — 테이블 8개 + 리포지토리 4개 + 검증 73항목.
+      MySQL 8.0·MariaDB 10.11 양쪽에서 마이그레이션과 스모크 25항목 통과 확인
+- [x] **LINE 발송 시스템 P2** — Webhook 수신부. 서명 검증·이벤트 4종 분배·검증 38항목.
+      실제로 서버를 띄워 4종 수신·재전송 멱등·결제자 재추가까지 확인
+- [x] **LINE 발송 시스템 P3** — LINE Login 온보딩. `state` 1회성·해시 저장,
+      채널 프로바이더 불일치 감지, CORS·XSS, 검증 47항목.
+      가짜 LINE 서버로 성공/재사용/만료/취소/미친구/순서역전까지 통과 확인
+      의존은 `mysql2` 하나이고 `server/lib/db.mjs` 안에 갇혀 있어,
+      검증은 DB·`npm install` 없이 돕니다
 
 ### 남음
+
+**LINE 발송 시스템** (실행계획서 v3 의 P4〜P10)
+
+- [ ] **개인정보 방침 개정 — 공개 전 필수.** `privacy.html` 과 `verify-birth.mjs` 가
+      「생년월일은 서버로 가지 않는다」를 약속으로 걸어 두었는데, P3 에서 만든
+      `saju_profiles.birth_date`·`pending_links.birth_date` 가 그것을 저장합니다.
+      웹사이트 단독 이용은 그대로지만 **LINE 연동에 동의한 사람의 분은 서버에 남습니다.**
+      저장 범위·보관 기간(`pending_links` 는 30분)·삭제 요청 경로를 문안에 넣어야 합니다.
+      코드는 이미 그렇게 동작하므로, 남은 것은 문안입니다
+- [ ] P4 — 101일치 원고 입고 (`content_templates` 현재 0건).
+      퀴즈 정답을 어디에 둘지도 여기서 결정 (지금 `postback` 은 `pending` 을 돌려줌)
+- [ ] P5 — 메시지 렌더링 (이름 치환 + 복습용 축약)
+- [ ] P6 — 아침 7시·저녁 6시 배치 + Stripe 연동
+- [ ] P7〜P10 — 무료체험 전환 / 체크포인트 퀴즈 / 관리자 입고 도구 / 모니터링
+- [ ] **사이트 쪽 연동 버튼** — `index.html` 의 사주 결과 화면에서
+      `POST /line/link/start` 를 부르고 `authorizeUrl` 로 보내는 부분.
+      서버 쪽은 준비됐고, 프론트는 아직 (이 문서 범위 밖이었음)
+- [ ] 웹훅과 로그인 콜백 URL 을 어느 호스트에 둘지
+      (`www.kstudy101.jp`=Xserver 인데 백엔드는 ChemiCloud)
+
+**웹사이트**
 
 - [ ] **광고 유닛 배치** — 지금은 로더만(`<ins class="adsbygoogle">` 0개).
       위치를 직접 정하려면 STEP 사이보다 결과 하단·공유 섹션 위가 학습 흐름을 덜 끊음

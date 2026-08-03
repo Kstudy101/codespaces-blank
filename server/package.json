@@ -1,0 +1,20 @@
+{
+  "name": "kstudy101-line",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LINE 配信システム。サイト本体（静的）とは別に ChemiCloud で動く",
+  "main": "app.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node app.js",
+    "migrate": "node db/migrate.mjs",
+    "migrate:check": "node db/migrate.mjs --check",
+    "smoke": "node db/smoke.mjs",
+    "verify": "node ../tools/verify-server.mjs && node ../tools/verify-webhook.mjs"
+  },
+  "dependencies": {
+    "mysql2": "^3.11.0"
+  }
+}

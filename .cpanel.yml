@@ -89,6 +89,9 @@ deployment:
     # 置くのは Fileman API から ── SSH が無くても合図を送れる。
     - if [ -f "$HOME/.run-smoke" ]; then /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node db/with-env.mjs db/smoke.mjs' && /bin/rm -f "$HOME/.run-smoke"; else echo "smoke は流しません（~/.run-smoke がありません）"; fi
 
+    # --- 頼まれたときだけ、対象の状態を見る ---------------------
+    - if [ -f "$HOME/.run-who" ]; then /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node db/with-env.mjs db/who.mjs' && /bin/rm -f "$HOME/.run-who"; else echo "対象の確認はしません"; fi
+
     # --- 頼まれたときだけ、配信の下見をする ---------------------
     # --dry-run は誰にも送らない。対象を引いて、原稿を組み立てて、
     # 何日目が誰へ行くかを数えるところまでで止まる。

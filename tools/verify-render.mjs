@@ -91,16 +91,16 @@ const RULE = {
 check("パッチムのある名前に、あり側の助詞が付く", () => {
   for (const n of WITH_JONG)
     for (const [slot, r] of Object.entries(RULE))
-      assert(fillSlots(`{${slot}}`, { nameKr: n }) === n + r.yes,
-        `${n} + ${slot} → ${fillSlots(`{${slot}}`, { nameKr: n })}（期待 ${n + r.yes}）`);
+      assert(fillSlots(`{${slot}}`, { name_kr: n }) === n + r.yes,
+        `${n} + ${slot} → ${fillSlots(`{${slot}}`, { name_kr: n })}（期待 ${n + r.yes}）`);
   return `${WITH_JONG.length} 名 × ${Object.keys(RULE).length} 助詞`;
 });
 
 check("パッチムのない名前に、なし側の助詞が付く", () => {
   for (const n of WITHOUT_JONG)
     for (const [slot, r] of Object.entries(RULE))
-      assert(fillSlots(`{${slot}}`, { nameKr: n }) === n + r.no,
-        `${n} + ${slot} → ${fillSlots(`{${slot}}`, { nameKr: n })}（期待 ${n + r.no}）`);
+      assert(fillSlots(`{${slot}}`, { name_kr: n }) === n + r.no,
+        `${n} + ${slot} → ${fillSlots(`{${slot}}`, { name_kr: n })}（期待 ${n + r.no}）`);
   return `${WITHOUT_JONG.length} 名 × ${Object.keys(RULE).length} 助詞`;
 });
 
@@ -110,13 +110,68 @@ check("逆側の助詞が付かない", () => {
   for (const n of [...WITH_JONG, ...WITHOUT_JONG]) {
     const j = hasJong(n);
     for (const [slot, r] of Object.entries(RULE)) {
-      const got   = fillSlots(`{${slot}}`, { nameKr: n });
+      const got   = fillSlots(`{${slot}}`, { name_kr: n });
       const wrong = n + (j ? r.no : r.yes);      /* 逆側 */
       assert(got !== wrong, `${n} + ${slot} → ${got}（逆側が付きました）`);
     }
   }
   const pairs = WITH_JONG.length + WITHOUT_JONG.length;
   return `${pairs} 名 × ${Object.keys(RULE).length} 助詞の逆形`;
+});
+
+console.log("\n[四柱の差し込み]  この講座は四柱で韓国語を教える");
+
+/* 五行と干支にも助詞が付く。値ごとに받침が違うので、
+   名前と同じ規則が要る ── 목은 / 화는、돼지는 / 닭은。 */
+const SAJU = { name_kr: "켄", name_reading: "けん",
+               ohaeng_main: "목", raw_result_json: { zodiac: "돼지" } };
+
+check("五行に助詞が付く（목=받침あり / 화=なし）", () => {
+  assert(fillSlots("{OHAENG_EUN}", SAJU) === "목은", fillSlots("{OHAENG_EUN}", SAJU));
+  const hwa = { ...SAJU, ohaeng_main: "화" };
+  assert(fillSlots("{OHAENG_EUN}", hwa) === "화는", fillSlots("{OHAENG_EUN}", hwa));
+  assert(fillSlots("{OHAENG_IEYO}", SAJU) === "목이에요", fillSlots("{OHAENG_IEYO}", SAJU));
+  return "목은 / 화는 / 목이에요";
+});
+
+check("五行 5 つすべてで規則どおり", () => {
+  /* 목·금 は받침あり、화·토·수 はなし。 */
+  for (const [o, want] of [["목","목은"],["화","화는"],["토","토는"],["금","금은"],["수","수는"]]) {
+    const got = fillSlots("{OHAENG_EUN}", { ...SAJU, ohaeng_main: o });
+    assert(got === want, `${o} → ${got}（期待 ${want}）`);
+  }
+  return "목·금 は은 / 화·토·수 は는";
+});
+
+check("干支 12 すべてで規則どおり", () => {
+  const want = { "쥐":"쥐가","소":"소가","호랑이":"호랑이가","토끼":"토끼가","용":"용이",
+                 "뱀":"뱀이","말":"말이","양":"양이","원숭이":"원숭이가","닭":"닭이",
+                 "개":"개가","돼지":"돼지가" };
+  for (const [z, w] of Object.entries(want)) {
+    const got = fillSlots("{ZODIAC_GA}", { ...SAJU, raw_result_json: { zodiac: z } });
+    assert(got === w, `${z} → ${got}（期待 ${w}）`);
+  }
+  return "12 支";
+});
+
+check("日本語版はサーバーの表から出る（サイトは韓国語しか送らない）", () => {
+  assert(fillSlots("{OHAENG_JP}", SAJU) === "木", fillSlots("{OHAENG_JP}", SAJU));
+  assert(fillSlots("{ZODIAC_JP}", SAJU) === "いのしし", fillSlots("{ZODIAC_JP}", SAJU));
+  return "목→木 / 돼지→いのしし";
+});
+
+check("四柱が無い人には組み立てない（既定の五行を入れない）", () => {
+  /* 入れてしまうと、全員が同じ五行で占われる。 */
+  assert(fillSlots("{OHAENG_EUN} 나무예요", { name_kr: "켄" }) === null, "既定を入れました");
+  assert(fillSlots("{ZODIAC_GA} 좋아요", { name_kr: "켄" }) === null, "既定を入れました");
+  return "null を返す";
+});
+
+check("五行・干支でも二重書きを見つける", () => {
+  assert(findMisplacedSlot("{OHAENG}{OHAENG_EUN}"), "見逃しました");
+  assert(findMisplacedSlot("{ZODIAC}{ZODIAC_GA}"), "見逃しました");
+  assert(findMisplacedSlot("{OHAENG_EUN} 나무예요") === null, "正しい書き方を誤りとしました");
+  return "OHAENG / ZODIAC";
 });
 
 console.log("\n[サイト本体との一致]");
@@ -154,10 +209,12 @@ check("名前が二重になる書き方を見つける", () => {
   return "二重・씨 挟み を検出";
 });
 
-check("二重になる書き方は実際に名前が重なる（検出の根拠）", () => {
-  const got = fillSlots("{NAME}{NAME_EUN}", { nameKr: "아이" });
-  assert(got === "아이아이는", got);
-  return `아이 → ${got}`;
+check("二重になる書き方は実際に値が重なる（検出の根拠）", () => {
+  const got = fillSlots("{NAME}{NAME_EUN}", { name_kr: "아이" });
+  assert(got === "아이아이는", String(got));
+  const o = fillSlots("{OHAENG}{OHAENG_EUN}", { ohaeng_main: "목" });
+  assert(o === "목목은", String(o));
+  return `아이 → ${got} / 목 → ${o}`;
 });
 
 check("差し込み口の一覧が実装と合っている", () => {

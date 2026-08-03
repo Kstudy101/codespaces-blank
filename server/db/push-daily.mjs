@@ -157,9 +157,10 @@ export async function deliverOne(conn, u, { send = pushMessage } = {}) {
     return "原稿なし";
   }
 
-  /* 文面を先に組む。既定の名前は入れない（全員が同じ名前で呼ばれる）。 */
-  const user = { name_kr: u.name_kr, name_reading: u.name_kanji };
-  let messages = renderDay(tpl, user);
+  /* 文面を先に組む。利用者の行をそのまま渡す ── 名前も四柱も
+     render 側が要るものだけ拾う。既定は入れない（全員が同じ名前・
+     同じ五行で占われる）。 */
+  let messages = renderDay(tpl, u);
 
   /* ---- 名前が要る日に、名前が無い人 -------------------------------
      はじめは「登録のお願いに差し替えて、日は進める」にしていた。

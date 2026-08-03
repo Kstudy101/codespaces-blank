@@ -55,8 +55,12 @@ function fakeConn(rows = {}) {
 
 /* 3 日目まで進んでいて、101 日ぶん買っている人 */
 const USER = {
-  id: 7, line_user_id: "U_test", name_kanji: "田中", name_kr: "다나카",
-  status: "active", total_days_entitled: 101, current_day: 3, current_semester: 1
+  id: 7, line_user_id: "U_test",
+  name_kanji: "田中", name_reading: "たなか", name_kr: "다나카",
+  status: "active", total_days_entitled: 101, current_day: 3, current_semester: 1,
+  /* この講座は四柱で韓国語を教えるので、配信の対象を引くところから
+     五行と干支が付いてくる（repo/users.mjs の listDeliverable）。 */
+  ohaeng_main: "목", raw_result_json: { zodiac: "돼지" }
 };
 
 const TPL = [{
@@ -173,6 +177,49 @@ await check("原稿が無いことは failed で残る", async () => {
   assert(log.params.some((x) => typeof x === "string" && /未入稿/.test(x)),
     "理由が残っていません");
   return "問い合わせより先に気づける";
+});
+
+console.log("\n[四柱]  講座の中身が四柱に依っている");
+
+await check("五行と干支が本文まで届く", async () => {
+  const tpl = [{ ...TPL[0],
+    dialogue_template: JSON.stringify([
+      { kr: "{NAME_EUN} {OHAENG_IEYO}.", ja: "{NAME_JP}は{OHAENG_JP}です。" },
+      { kr: "{ZODIAC_GA} 좋아요.", ja: "{ZODIAC_JP}がいいです。" }]) }];
+  const conn = fakeConn({ ...READY, "FROM content_templates": tpl });
+  let msgs = null;
+  await deliverOne(conn, USER, { send: async (_t, m) => { msgs = m; return {}; } });
+  assert(msgs, "送信が呼ばれていません");
+  const t = msgs[0].text;
+  assert(t.includes("다나카는 목이에요"), t);
+  assert(t.includes("돼지가 좋아요"), t);
+  assert(t.includes("たなかは木です"), t);
+  assert(t.includes("いのししがいいです"), t);
+  return "다나카는 목이에요 / 돼지가 좋아요";
+});
+
+await check("ふりがなの列を渡している（漢字ではない）", async () => {
+  /* 以前は name_reading を引いておらず、日本語の行に漢字が出ていた。 */
+  const tpl = [{ ...TPL[0],
+    dialogue_template: JSON.stringify([{ kr: "{NAME}입니다.", ja: "{NAME_JP}です。" }]) }];
+  const conn = fakeConn({ ...READY, "FROM content_templates": tpl });
+  let msgs = null;
+  await deliverOne(conn, USER, { send: async (_t, m) => { msgs = m; return {}; } });
+  assert(msgs[0].text.includes("たなかです"), msgs[0].text);
+  assert(!msgs[0].text.includes("田中です"), `漢字が出ました: ${msgs[0].text}`);
+  return "たなか（name_reading）";
+});
+
+await check("四柱が無い人は、その日を待つ（既定の五行を入れない）", async () => {
+  const tpl = [{ ...TPL[0], requires_name_slot: 1,
+    dialogue_template: JSON.stringify([{ kr: "{OHAENG_IEYO}.", ja: "{OHAENG_JP}です。" }]) }];
+  const conn = fakeConn({ ...READY, "FROM content_templates": tpl });
+  let msgs = null;
+  const r = await deliverOne(conn, { ...USER, ohaeng_main: null, raw_result_json: null },
+    { send: async (_t, m) => { msgs = m; return {}; } });
+  assert(r === "名前の案内", r);
+  assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)), "日が進みました");
+  return "名前と四柱は同時にしか入らない";
 });
 
 console.log("\n[名前が無い人]");

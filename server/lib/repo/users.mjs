@@ -106,18 +106,34 @@ function int(v, fallback) {
 
 /* 朝夕の配信バッチがひく本体。status で絞ってから join する。
    LIMIT / OFFSET を持たせているのは、人数が増えたときに
-   全員ぶんを一度にメモリへ載せないため。 */
+   全員ぶんを一度にメモリへ載せないため。
+
+   四柱も一緒に取る。この講座は四柱で韓国語を教えるので、本文に
+   五行と干支が出る（lib/render.mjs）。1 人ずつ引き直すと人数ぶんの
+   往復になるので、ここで一度に取る。
+
+   LEFT JOIN にしてあるのは、友だち追加だけで四柱がまだ無い人が
+   いるため。INNER にすると、その人たちが対象から丸ごと消えて、
+   「登録したのに何も来ない」になる ── しかも一覧に出ないので
+   運営者からも見えない。
+
+   name_reading（ふりがな）も取る。日本語の行に出すのはこちらで、
+   name_kanji ではない。取っていなかったので、バッチが漢字を
+   ふりがなとして渡していた。 */
 export async function listDeliverable(conn, { limit = 500, offset = 0 } = {}) {
   return all(conn,
-    `SELECT u.id, u.line_user_id, u.name_kanji, u.name_kr, u.status,
+    `SELECT u.id, u.line_user_id, u.name_kanji, u.name_reading, u.name_kr, u.status,
             s.total_days_entitled, s.trial_end, s.payment_status,
-            p.current_day, p.current_semester
+            p.current_day, p.current_semester,
+            j.ohaeng_main, j.raw_result_json, j.birth_date, j.lucky_hour_display
        FROM users u
        JOIN subscriptions     s ON s.user_id = u.id
        JOIN learning_progress p ON p.user_id = u.id
+       LEFT JOIN saju_profiles j ON j.user_id = u.id
       WHERE u.status IN ('trial', 'active')
       ORDER BY u.id
-      LIMIT ${int(limit, 500)} OFFSET ${int(offset, 0)}`);
+      LIMIT ${int(limit, 500)} OFFSET ${int(offset, 0)}`)
+    .then((rows) => rows.map((r) => ({ ...r, raw_result_json: fromJson(r.raw_result_json) })));
 }
 
 /* 退会。外部キーが CASCADE なので、四柱・購入・進捗・ログも一緒に消える。

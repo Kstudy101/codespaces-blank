@@ -29,8 +29,12 @@ const ANY_SLOT = /\{(NAME(?:_[A-Z]+)?)\}/g;
 /* パッチムのある名前と無い名前。両方で組み立ててみる ──
    片方でしか試さないと、助詞の分岐の片側が一度も動かない。 */
 const PROBES = [
-  { name_kr: "켄",     name_reading: "けん"   },   /* 받침あり */
-  { name_kr: "사쿠라", name_reading: "さくら" }    /* 받침なし */
+  /* 名前も五行も干支も、받침のある側と無い側を 1 つずつ通す。
+     片側でしか試さないと、助詞の分岐の半分が一度も動かない。 */
+  { name_kr: "켄", name_reading: "けん",
+    ohaeng_main: "목", raw_result_json: { zodiac: "닭" } },      /* 받침あり */
+  { name_kr: "사쿠라", name_reading: "さくら",
+    ohaeng_main: "화", raw_result_json: { zodiac: "돼지" } }      /* 받침なし */
 ];
 
 /* ハングル・ひらがな・カタカナ・漢字・記号のどれでもない文字を探す。

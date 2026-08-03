@@ -45,30 +45,56 @@ export function hasJong(word) {
 }
 
 /* ---- 差し込み口 ----------------------------------------------------
-   値は「パッチムあり, パッチムなし」の順。
-   NAME / NAME_JP だけは助詞を伴わないので別扱い。 */
+   はじめは名前だけだったが、この講座は「四柱で韓国語を学ぶ」ものなので、
+   五行と干支も本文に出す。どれも助詞が付くと받침で形が変わるので、
+   名前と同じ仕組みをそのまま広げる。
+
+     {NAME}    다나카      {NAME_JP}    たなか
+     {OHAENG}  목          {OHAENG_JP}  木
+     {ZODIAC}  돼지        {ZODIAC_JP}  いのしし
+
+   助詞付きは {OHAENG_EUN} → 목은 / {ZODIAC_EUN} → 돼지는 のように、
+   値ごと置き換わる（名前と同じ規則）。
+
+   日本語版はサーバーで対応表を持つ。サイトは韓国語しか送ってこないので
+   ── 送らせるようにすると、同じ表がウェブとサーバーの 2 か所になる。 */
 const PARTICLES = Object.freeze({
-  NAME_IEYO: ["이에요", "예요"],   /* 〜です（打ち解けた丁寧） */
-  NAME_EUN:  ["은", "는"],         /* 〜は */
-  NAME_GA:   ["이", "가"],         /* 〜が */
-  NAME_EUL:  ["을", "를"],         /* 〜を */
-  NAME_WA:   ["과", "와"],         /* 〜と */
-  NAME_VOC:  ["아", "야"]          /* 呼びかけ */
+  IEYO: ["이에요", "예요"],   /* 〜です（打ち解けた丁寧） */
+  EUN:  ["은", "는"],         /* 〜は */
+  GA:   ["이", "가"],         /* 〜が */
+  EUL:  ["을", "를"],         /* 〜を */
+  WA:   ["과", "와"],         /* 〜と */
+  VOC:  ["아", "야"]          /* 呼びかけ */
 });
 
-export const SLOTS = Object.freeze(["NAME", "NAME_JP", ...Object.keys(PARTICLES)]);
+/* 差し込める値。kr は韓国語の行に、jp は日本語の行に出す。 */
+const BASES = Object.freeze(["NAME", "OHAENG", "ZODIAC"]);
 
-/* 助詞スロットは名前を含めて置き換わる（{NAME_EUN} → 켄은）。
-   なので {NAME} と続けて書くと名前が二重になる。
+const OHAENG_JP = Object.freeze({
+  "목": "木", "화": "火", "토": "土", "금": "金", "수": "水"
+});
 
-     {NAME}{NAME_EUN}     → 아이아이는     二重
-     {NAME} 씨{NAME_EUN}  → 아이 씨아이는  二重、しかも助詞は 씨 に従うべき
-     {NAME_EUN}           → 아이는         これが正しい
+/* 干支。サイトは韓国語（쥐・소…）で送ってくる。 */
+const ZODIAC_JP = Object.freeze({
+  "쥐": "ねずみ", "소": "うし", "호랑이": "とら", "토끼": "うさぎ",
+  "용": "たつ", "뱀": "へび", "말": "うま", "양": "ひつじ",
+  "원숭이": "さる", "닭": "とり", "개": "いぬ", "돼지": "いのしし"
+});
+
+export const SLOTS = Object.freeze(
+  BASES.flatMap((b) => [b, `${b}_JP`, ...Object.keys(PARTICLES).map((p) => `${b}_${p}`)]));
+
+/* 助詞スロットは値を含めて置き換わる（{OHAENG_EUN} → 목은）。
+   なので {OHAENG} と続けて書くと値が二重になる。
+
+     {NAME}{NAME_EUN}       → 아이아이는     二重
+     {NAME} 씨{NAME_EUN}    → 아이 씨아이는  二重、しかも助詞は 씨 に従うべき
+     {NAME_EUN}             → 아이는         これが正しい
 
    「씨」を付けたい日は助詞スロットを使わず「{NAME} 씨는」と literal で書く。
-   씨 は母音終わりなので、名前に関係なく 는 で固定できる。 */
+   씨 は母音終わりなので、値に関係なく 는 で固定できる。 */
 const MISPLACED = new RegExp(
-  `\\{NAME\\}[^{]*?\\{(${Object.keys(PARTICLES).join("|")})\\}`
+  `\\{(${BASES.join("|")})\\}[^{]*?\\{(?:${BASES.join("|")})_(?:${Object.keys(PARTICLES).join("|")})\\}`
 );
 
 export function findMisplacedSlot(text) {
@@ -76,27 +102,47 @@ export function findMisplacedSlot(text) {
   return m ? m[0] : null;
 }
 
+/* 利用者の 1 行から、差し込む値を取り出す。
+   四柱は名前と同時にしか入らない（handlers/link.mjs が同じ往復で
+   両方書き、follow だけの人はどちらも空）。だから「名前が無い日」の
+   扱いがそのまま四柱にも効く ── 別の分岐を増やさない。 */
+function valuesOf(user = {}) {
+  const raw = user.raw_result_json && typeof user.raw_result_json === "object"
+    ? user.raw_result_json : {};
+  const ohaeng = user.ohaeng_main || raw.ohaeng || null;
+  const zodiac = raw.zodiac || null;
+  return {
+    NAME:   { kr: user.name_kr || null,  jp: user.name_reading || user.name_kr || null },
+    OHAENG: { kr: ohaeng, jp: ohaeng ? (OHAENG_JP[ohaeng] || ohaeng) : null },
+    ZODIAC: { kr: zodiac, jp: zodiac ? (ZODIAC_JP[zodiac] || zodiac) : null }
+  };
+}
+
 /* ---- 差し込み ------------------------------------------------------
-   nameKr が無いときは null を返す。呼ぶ側が代替文へ切り替える。
-   ここで勝手に既定の名前を入れると、全員が同じ名前で呼ばれる。 */
-export function fillSlots(text, { nameKr, nameJp } = {}) {
+   要る値が無いときは null を返す。呼ぶ側が代替文へ切り替える。
+   ここで勝手に既定を入れると、全員が同じ名前・同じ五行になる。 */
+export function fillSlots(text, user = {}) {
   const t = String(text ?? "");
   if (!t) return "";
 
-  const needsName = /\{NAME(_[A-Z]+)?\}/.test(t);
-  if (needsName && !nameKr) return null;
-
-  const j = hasJong(nameKr);
-  /* ハングルでない名前（英字など）が来たら、助詞は選べない。
-     パッチムなし側に寄せる ── 母音終わりとして扱うのが無難。 */
-  const jong = j === null ? false : j;
-
+  const v = valuesOf(user);
   let out = t;
-  for (const [slot, [withJong, without]] of Object.entries(PARTICLES)) {
-    out = out.split(`{${slot}}`).join(nameKr + (jong ? withJong : without));
+
+  for (const base of BASES) {
+    const { kr, jp } = v[base];
+    const used = new RegExp(`\\{${base}(_[A-Z]+)?\\}`).test(out);
+    if (!used) continue;
+    if (!kr) return null;                       /* 要るのに無い */
+
+    const j = hasJong(kr);
+    const jong = j === null ? false : j;        /* ハングルでなければ母音終わり扱い */
+
+    for (const [p, [withJong, without]] of Object.entries(PARTICLES)) {
+      out = out.split(`{${base}_${p}}`).join(kr + (jong ? withJong : without));
+    }
+    out = out.split(`{${base}_JP}`).join(jp || kr);
+    out = out.split(`{${base}}`).join(kr);
   }
-  out = out.split("{NAME_JP}").join(nameJp || nameKr);
-  out = out.split("{NAME}").join(nameKr);
   return out;
 }
 
@@ -115,7 +161,6 @@ export function renderDay(template, user = {}) {
   if (!template) throw new Error("template がありません");
 
   const day  = Number(template.day_number);
-  const name = { nameKr: user.name_kr || null, nameJp: user.name_reading || null };
   const lines = [];
 
   /* --- 1 通目 --- */
@@ -133,16 +178,16 @@ export function renderDay(template, user = {}) {
   const dialogue = Array.isArray(template.dialogue_template) ? template.dialogue_template : [];
   const body = [];
   for (const row of dialogue) {
-    const kr = fillSlots(row.kr, name);
+    const kr = fillSlots(row.kr, user);
     if (kr === null) return null;              /* 名前が要るのに無い */
-    const ja  = row.ja ? fillSlots(row.ja, name) : "";
+    const ja  = row.ja ? fillSlots(row.ja, user) : "";
 
     /* 話者の札。名前が無い人には「あなた」を置く。
        ここに既定を置くのは、名前に既定を置くのとは別のこと ──
        札は役どころで、本文の「저는 ○○입니다」とは違う。
        置かないと {NAME_JP} という 9 文字がそのまま画面に出る。 */
     const label = row.who
-      ? (fillSlots(row.who, name) ?? String(row.who).replace(/\{NAME(_[A-Z]+)?\}/g, "あなた"))
+      ? (fillSlots(row.who, user) ?? String(row.who).replace(/\{[A-Z_]+\}/g, "あなた"))
       : "";
     const who = label ? `${label}：` : "";
     body.push(ja ? `${who}${kr}\n${ja}` : `${who}${kr}`);

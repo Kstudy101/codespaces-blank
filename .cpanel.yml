@@ -20,6 +20,10 @@
 #   content       101 日ぶんの原稿。公開リポジトリに置いていないので
 #                 サーバーのここにしか無い。消すと配信が止まり、
 #                 手元から上げ直すまで戻らない
+#   stderr.log    アプリが落ちた理由。消していたので、配置するたびに
+#                 「配置前に何が起きていたか」が消えていた ── 調べたい
+#                 のはたいてい配置の直前なので、いちばん要るものを
+#                 いちばん要るときに捨てていた
 # ===================================================================
 deployment:
   tasks:
@@ -40,7 +44,7 @@ deployment:
     # 消す手を残しているのは、消えたはずのファイルが向こうに残ると、
     # もう無いはずの経路が生き続けるため。
     - export RSYNC=$(command -v rsync || true)
-    - if [ -n "$RSYNC" ]; then "$RSYNC" -a --delete --exclude=node_modules --exclude=.env --exclude=.env.local --exclude=content "$SRC/" "$APP/"; else find "$APP" -mindepth 1 -maxdepth 1 ! -name node_modules ! -name .env ! -name .env.local ! -name content ! -name tmp ! -name public -exec rm -rf {} + && cp -a "$SRC/." "$APP/"; fi
+    - if [ -n "$RSYNC" ]; then "$RSYNC" -a --delete --exclude=node_modules --exclude=.env --exclude=.env.local --exclude=content --exclude=stderr.log "$SRC/" "$APP/"; else find "$APP" -mindepth 1 -maxdepth 1 ! -name node_modules ! -name .env ! -name .env.local ! -name content ! -name tmp ! -name public ! -name stderr.log -exec rm -rf {} + && cp -a "$SRC/." "$APP/"; fi
 
     # --- 依存を入れる -------------------------------------------
     # activate の場所は Node の版でディレクトリ名が変わる。決め打ちに
@@ -75,6 +79,13 @@ deployment:
     # ~/.run-smoke を置いた回だけ走り、走ったら自分で消す。
     # 置くのは Fileman API から ── SSH が無くても合図を送れる。
     - if [ -f "$HOME/.run-smoke" ]; then /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node db/with-env.mjs db/smoke.mjs' && /bin/rm -f "$HOME/.run-smoke"; else echo "smoke は流しません（~/.run-smoke がありません）"; fi
+
+    # --- 頼まれたときだけ、LINE 側の設定を訊く -------------------
+    # webhook が登録されたかどうかは、こちらからは見えない。
+    # 「まだ登録していない」「Use webhook が切れている」「こちらが
+    # 弾いている」のどれも、ログの上では「何も来ない」に見える。
+    # LINE の API に直接訊いて分ける。
+    - if [ -f "$HOME/.run-check-line" ]; then /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node db/with-env.mjs db/check-line.mjs' && /bin/rm -f "$HOME/.run-check-line"; else echo "LINE 側の確認はしません（~/.run-check-line がありません）"; fi
 
     # --- 頼まれたときだけ、配信の下見をする ---------------------
     # --dry-run は誰にも送らない。対象を引いて、原稿を組み立てて、

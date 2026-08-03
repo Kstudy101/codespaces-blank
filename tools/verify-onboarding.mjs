@@ -495,21 +495,58 @@ const apiSet = (() => {
   return m[1].trim();
 })();
 
-const privacyStillSaysNever =
-  /サーバーに送信されず、保存もされません/.test(PRIVACY) ||
-  /入力内容の送信は行いません/.test(PRIVACY);
+/* 以前ここは「サーバーに送信されず」という一文が残っていたら止める、
+   という見方をしていた。文言を直した今は、それでは荒すぎる ──
+   その一文は診断機能については今も本当で、消すほうが嘘になる。
+   実際に守りたいのは「送るなら、送ると書いてあること」なので、
+   そちらを見る。
 
-check("privacy.html が「送信しない」と書いている間は、連携先を設定しない", () => {
-  if (!apiSet) {
-    assert(privacyStillSaysNever || true, "");
-    return "LINE_LINK_API 未設定 → カードは出ない";
-  }
-  assert(!privacyStillSaysNever,
-    "LINE_LINK_API が設定されているのに、privacy.html はまだ\n"
-    + "      「サーバーに送信されず、保存もされません」と書いています。\n"
-    + "      先に文言を直してください（順番を逆にすると、書いてあることと\n"
-    + "      動きが食い違ったまま公開されます）");
-  return `連携先 ${apiSet} / 文言も更新済み`;
+   ボタンを押すまで送信は起きないので、第1項の約束は
+   「押さない人」には最後まで当てはまる。だから第1項は残したまま、
+   例外への案内と、第2項の中身を要求する。 */
+const LINE_SECTION = /<h2>\d+\.\s*LINE 配信サービスについて<\/h2>/;
+
+check("連携先を設定するなら、privacy.html が保存すると書いてある", () => {
+  if (!apiSet) return "LINE_LINK_API 未設定 → カードは出ない";
+
+  assert(LINE_SECTION.test(PRIVACY),
+    "LINE_LINK_API が設定されているのに、privacy.html に\n"
+    + "      「LINE 配信サービスについて」の項がありません");
+
+  assert(/サーバーに保存します/.test(PRIVACY),
+    "LINE の項はあるのに、保存すると書いていません");
+
+  /* 第1項の「送信されず」を読んだ人が、例外に気づけること。
+     気づけないなら、書いてあっても読まれない場所にあるのと同じ。 */
+  const claim = PRIVACY.indexOf("サーバーに送信されず、保存もされません");
+  const note  = PRIVACY.indexOf("ひとつだけ例外があります");
+  const sect  = PRIVACY.search(LINE_SECTION);
+  assert(claim >= 0 && note > claim && note < sect,
+    "第1項の「送信されず」と第2項のあいだに、例外への案内がありません");
+
+  /* 消し方が書いていない保存は、預かりっぱなしになる。 */
+  assert(/すべて消したい場合/.test(PRIVACY) && /\/contact/.test(PRIVACY),
+    "削除の求め方が書かれていません");
+
+  return `連携先 ${apiSet} / 第2項・例外案内・削除経路あり`;
+});
+
+check("LINE の項は、保存するものを 1 つずつ挙げている", () => {
+  if (!LINE_SECTION.test(PRIVACY)) return "第2項なし（連携も未設定）";
+  /* schema にある個人的な列は、名前で挙げてあること。
+     「等」でまとめると、何が残るのか読んだ人には分からない。 */
+  for (const [what, re] of [
+    ["名前",       /お名前・ふりがな・韓国語表記/],
+    ["生年月日",   /生年月日・生まれた時刻/],
+    ["LINE の ID", /LINE の利用者 ID・表示名/],
+    ["学習の進み", /学習の進み/],
+    ["配信の記録", /お届けの記録/],
+    ["購入の記録", /ご購入の記録/]
+  ]) assert(re.test(PRIVACY), `${what} が挙がっていません`);
+
+  /* 訊いていないものは送らない、と書いてあること（gender は 'U' 固定）。 */
+  assert(/性別はお訊きしていない/.test(PRIVACY), "性別の扱いが書かれていません");
+  return "7 種を名指し";
 });
 
 check("カードは既定で伏せてある", () => {

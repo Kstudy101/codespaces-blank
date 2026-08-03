@@ -12,7 +12,8 @@
     "migrate": "node db/migrate.mjs",
     "migrate:check": "node db/migrate.mjs --check",
     "smoke": "node db/smoke.mjs",
-    "verify": "node ../tools/verify-server.mjs && node ../tools/verify-webhook.mjs"
+    "verify": "node ../tools/verify-server.mjs && node ../tools/verify-webhook.mjs",
+    "push": "node db/push-daily.mjs"
   },
   "dependencies": {
     "mysql2": "^3.11.0"

@@ -17,6 +17,20 @@
    /channel/webhook/test は LINE から実際に 1 回叩かせる。
    自分で curl しても分からないこと（LINE から見て到達するか）が
    ここで分かる。テスト用のイベントなので、利用者には何も届かない。
+
+   【cPanel の配置手順からは呼べない】
+   .cpanel.yml のタスクとして走らせると fetch がこう言って落ちる:
+
+     RangeError: WebAssembly.Instance(): Out of memory:
+                 Cannot allocate Wasm memory for new instance
+
+   Node の fetch（undici）は HTTP の解析に WebAssembly を使う。
+   その割り当てぶんが、cPanel のタスク実行が置かれている枠に
+   収まらない。cron から走らせれば同じコードが通るので、
+   コードではなく走らせる場所の問題。
+
+   配信バッチが動くのは cron の側なので、発信そのものには影響しない。
+   ただし「配置のついでに外の API を叩く」は、この環境ではできない。
    ================================================================== */
 const BASE = process.env.LINE_API_BASE || "https://api.line.me/v2/bot";
 const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;

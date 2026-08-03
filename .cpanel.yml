@@ -83,7 +83,10 @@ deployment:
     # 送らないのに流す意味は、本番の DB と本番の原稿を通したときに
     # だけ出る不具合があるため ── 手元の偽の接続では、SQL の形は
     # 見られても、実際の列や文字コードまでは分からない。
-    - if [ -f "$HOME/.run-push-dry" ]; then /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node db/with-env.mjs db/push-daily.mjs --dry-run' && /bin/rm -f "$HOME/.run-push-dry"; else echo "配信の下見はしません（~/.run-push-dry がありません）"; fi
+    #
+    # cron が呼ぶのと同じ push-cron.sh を通す。直接 push-daily.mjs を
+    # 呼ぶと、cron の道（activate を探すところ）だけが試されない。
+    - if [ -f "$HOME/.run-push-dry" ]; then /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; bash db/push-cron.sh --dry-run' && /bin/rm -f "$HOME/.run-push-dry"; else echo "配信の下見はしません（~/.run-push-dry がありません）"; fi
 
     # --- 入れ替える ---------------------------------------------
     # Passenger は動いているプロセスを抱えたままなので、置いただけでは

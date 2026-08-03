@@ -39,4 +39,7 @@ fi
 cd "$APP" || exit 1
 
 echo "───── $(date -u '+%F %T')Z (UTC) ─────"
-node db/with-env.mjs db/push-daily.mjs --not-before=7
+# 追加の引数はそのまま渡す。--dry-run を付けて呼べば、cron が
+# 実際に通る道（activate を探す・パスを組む）を、誰にも送らずに
+# 確かめられる。cron の行を直接叩いて試すと本当に送ってしまう。
+node db/with-env.mjs db/push-daily.mjs --not-before=7 "$@"

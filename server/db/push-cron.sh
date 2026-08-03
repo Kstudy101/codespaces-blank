@@ -34,8 +34,18 @@ if [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 5242880 ]; then
   tail -c 1048576 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 fi
 
+# CloudLinux の activate は未定義の CL_VIRTUAL_ENV を読む。
+# set -u のまま読み込むと、そこで落ちて node まで届かない。
+#
+# これは cron から呼んだときにだけ出た。配置の下見では、外側の
+# シェルが先に activate を済ませていたので通ってしまう ──
+# 「試した道」と「本番で通る道」が違っていた。
+# 読み込むあいだだけ外す。
 # shellcheck disable=SC1090
+set +u
 . "$ACT"
+set -u
+
 cd "$APP" || exit 1
 
 echo "───── $(date -u '+%F %T')Z (UTC) ─────"

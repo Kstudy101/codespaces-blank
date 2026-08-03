@@ -56,6 +56,15 @@ deployment:
     # 新しいコードが古い表に向かって動き出すより、そのほうが安全。
     - /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node db/with-env.mjs db/migrate.mjs'
 
+    # --- 頼まれたときだけ、実物で一周する -----------------------
+    # smoke は決済の再送・バッチの二重起動・退会の連鎖削除まで実際に
+    # 書いて消す。専用の試験用 1 件しか触らず前後で消すので本番でも
+    # 流せるが、配置のたびに書き込む理由は無い。
+    #
+    # ~/.run-smoke を置いた回だけ走り、走ったら自分で消す。
+    # 置くのは Fileman API から ── SSH が無くても合図を送れる。
+    - if [ -f "$HOME/.run-smoke" ]; then /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node db/with-env.mjs db/smoke.mjs' && /bin/rm -f "$HOME/.run-smoke"; else echo "smoke は流しません（~/.run-smoke がありません）"; fi
+
     # --- 入れ替える ---------------------------------------------
     # Passenger は動いているプロセスを抱えたままなので、置いただけでは
     # 古いコードが応え続ける。restart.txt に触れて初めて入れ替わる。

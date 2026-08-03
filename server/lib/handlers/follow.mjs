@@ -16,25 +16,60 @@
    repo とここの 2 箇所に散る。
    ================================================================== */
 import { users, billing, learning } from "../repo/index.mjs";
-import { getProfile } from "../line.mjs";
+import { getProfile, replyMessage } from "../line.mjs";
+
+/* 診断ページの場所。LINE から案内するのはここだけ。 */
+const SITE_URL = process.env.SITE_URL || "https://www.kstudy101.jp";
+
+/* 友だち追加しただけの人には、名前がまだ無い。
+   この講座は名前で進むので、1 日目から名前を使う ── 名前が
+   入るまで進まない（db/push-daily.mjs）。黙っていると、
+   翌朝いきなり「お名前を登録してください」だけが届いて、
+   何のことか分からないまま終わる。ここで先に伝える。
+
+   サイトを通ってきた人には送らない。その人はもう名前がある。 */
+function welcomeForNameless() {
+  return {
+    type: "text",
+    text: [
+      "ご登録ありがとうございます。",
+      "101日間の韓国語レッスンを、毎朝おとどけします。",
+      "",
+      "このレッスンは、あなたのお名前を使って進みます。",
+      "たとえば「다나카는 일본에서 왔어요」のように、",
+      "ご自身の名前で例文が出てきます。",
+      "",
+      "▼ はじめに、こちらでお名前を入れてください（1分ほど）",
+      SITE_URL,
+      "診断のあと「LINEで受け取る」を押すと、ここに繋がります。",
+      "",
+      "お名前が登録された翌朝から、1日目をおとどけします。"
+    ].join("\n")
+  };
+}
 
 /* 表示名は LINE から取れるが、取れなくても止めない。
    プロフィール取得は追加の 1 往復で、ここが 5xx を返しただけで
    友だち追加そのものが失敗するのは割に合わない。 */
-async function displayNameOf(lineUserId) {
+async function displayNameOf(lineUserId, profile) {
   try {
-    const p = await getProfile(lineUserId);
+    const p = await profile(lineUserId);
     return p && p.displayName ? String(p.displayName).slice(0, 100) : null;
   } catch {
     return null;
   }
 }
 
-export async function handleFollow(conn, event) {
+/* reply / profile を差し替えられるようにしてある。この関数で
+   一番間違えたくないのが「名前がある人に案内を送らない」で、
+   それは本物の LINE へ送ってみても、送ってしまったあとにしか
+   分からない。偽物を渡して、呼ばれたかどうかを見る。 */
+export async function handleFollow(conn, event,
+  { reply = replyMessage, profile = getProfile } = {}) {
   const lineUserId = event?.source?.userId;
   if (!lineUserId) return { skipped: "userId がありません" };
 
-  const displayName = await displayNameOf(lineUserId);
+  const displayName = await displayNameOf(lineUserId, profile);
   const { user, created } = await users.upsertOnFollow(conn, { lineUserId, displayName });
 
   /* 体験と進捗の器を用意する。どちらも既にあれば何もしない。
@@ -55,11 +90,26 @@ export async function handleFollow(conn, event) {
     await users.setStatus(conn, user.id, paid ? "active" : "trial");
   }
 
+  /* 名前がまだ無い人にだけ、診断への案内を返す。
+     返信に失敗しても友だち追加そのものは成立させる ── ここで
+     throw すると LINE が webhook を失敗とみなして掛け直し、
+     同じ人の追加処理が何度も走る。 */
+  let welcomed = false;
+  if (!user.name_kr && event?.replyToken) {
+    try {
+      await reply(event.replyToken, [welcomeForNameless()]);
+      welcomed = true;
+    } catch {
+      /* 返信できなくても、翌朝の案内で拾える。 */
+    }
+  }
+
   return {
     userId: user.id,
     created,
     trialStarted: trial.created,
-    displayName
+    displayName,
+    welcomed
   };
 }
 

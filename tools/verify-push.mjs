@@ -69,6 +69,10 @@ const TPL = [{
 /* 「まだ送っていない・原稿はある」を既定にする。
    個々の検査は、そこから 1 つだけ崩して違いを見る。 */
 const READY = {
+  /* sentToday は SELECT id、countForDay は SELECT COUNT(*)。
+     同じ表を引くので、SQL の形で見分ける。並び順が先勝ちなので
+     COUNT を先に置く。 */
+  "SELECT COUNT\\(\\*\\) AS n FROM push_logs": [{ n: 0 }],
   "FROM push_logs":         [],   /* sentToday → 未送信 */
   "FROM content_templates": TPL,
   "UPDATE learning_progress": { affectedRows: 1 }
@@ -180,14 +184,51 @@ await check("名前が要る日に名前が無ければ、登録のお願いに�
     { send: async (to, m) => { msgs = m; return {}; } });
   assert(msgs, "送信が呼ばれていません");
   assert(msgs.length === 1 && /お名前/.test(msgs[0].text), JSON.stringify(msgs));
-  return "飛ばさずに促す（101 日の数が崩れない）";
+  return "本文の代わりに登録のお願い";
 });
 
-await check("差し替えた日も、日は進む", async () => {
+await check("名前が無い日は、日を進めない", async () => {
+  /* 進めると、その日の内容が二度と届かない。1〜5 日目は全部
+     名前を使うので、サイトを通らずに友だち追加だけした人は
+     体験の 3 日間で本文を 1 度も見ないまま終わっていた。 */
+  const conn = fakeConn(READY);
+  const r = await deliverOne(conn, { ...USER, name_kr: null, name_kanji: null },
+    { send: sendOK() });
+  assert(r === "名前の案内", r);
+  assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)),
+    "日を進めました（その日の内容が届かなくなります）");
+  return "同じ日に留まる";
+});
+
+await check("案内は日付つきで残る（それが促した回数になる）", async () => {
   const conn = fakeConn(READY);
   await deliverOne(conn, { ...USER, name_kr: null, name_kanji: null }, { send: sendOK() });
-  assert(conn.sql().some((s) => /UPDATE learning_progress/i.test(s)), "進んでいません");
-  return "止まらない";
+  const log = conn.calls.find((c) => /INSERT INTO push_logs/i.test(c.sql));
+  assert(log, "記録が残っていません");
+  assert(log.params.includes(4), `day_number が入っていません: ${JSON.stringify(log.params)}`);
+  return "day_number=4";
+});
+
+await check("3 回目からは黙る（ブロックは取り消せない）", async () => {
+  const conn = fakeConn({ ...READY,
+    "SELECT COUNT\\(\\*\\) AS n FROM push_logs": [{ n: 2 }] });
+  let sent = false;
+  const r = await deliverOne(conn, { ...USER, name_kr: null, name_kanji: null },
+    { send: async () => { sent = true; return {}; } });
+  assert(!sent, "3 回目を送りました");
+  assert(r === "名前待ち", r);
+  assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)), "日が進みました");
+  return "2 回で止める / 進みは止めたまま";
+});
+
+await check("2 回目までは送る（1 回で諦めない）", async () => {
+  const conn = fakeConn({ ...READY,
+    "SELECT COUNT\\(\\*\\) AS n FROM push_logs": [{ n: 1 }] });
+  let sent = false;
+  await deliverOne(conn, { ...USER, name_kr: null, name_kanji: null },
+    { send: async () => { sent = true; return {}; } });
+  assert(sent, "2 回目が送られません");
+  return "n=1 → 送る";
 });
 
 console.log("\n[届かなかったとき]");

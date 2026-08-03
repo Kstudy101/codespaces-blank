@@ -64,6 +64,9 @@ const PAGE  = 200;
    「確保もしない」と読む。 */
 const DISABLED = process.env.PUSH_DISABLED === "1";
 
+/* 名前の登録を促す回数。3 回目からは黙る。 */
+const NAME_NOTICE_MAX = 2;
+
 if (!/^\d{4}-\d{2}-\d{2}$/.test(DATE)) {
   console.error(`✗ --date は YYYY-MM-DD で渡してください: ${DATE}`);
   process.exit(1);
@@ -154,11 +157,41 @@ export async function deliverOne(conn, u, { send = pushMessage } = {}) {
     return "原稿なし";
   }
 
-  /* 文面を先に組む。名前が要るのに無ければ、その日は登録のお願いに
-     差し替える ── 飛ばすと 101 日の数が合わなくなる。
-     既定の名前は入れない（全員が同じ名前で呼ばれる）。 */
+  /* 文面を先に組む。既定の名前は入れない（全員が同じ名前で呼ばれる）。 */
   const user = { name_kr: u.name_kr, name_reading: u.name_kanji };
-  const messages = renderDay(tpl, user) ?? [nameMissingNotice(next)];
+  let messages = renderDay(tpl, user);
+
+  /* ---- 名前が要る日に、名前が無い人 -------------------------------
+     はじめは「登録のお願いに差し替えて、日は進める」にしていた。
+     101 日の数は保てるが、進めた日の内容は二度と届かない。
+     1〜5 日目はどれも名前を使うので、サイトを通らずに友だち追加
+     だけした人は、体験の 3 日間で本文を 1 度も見ないまま終わる。
+
+     進めない。同じ日に留めて、名前が入った日にその日から始める。
+
+     ただし毎朝お願いを送るとブロックされる。ブロックは取り消せず、
+     あとで直しても届かない。2 回まで送って、あとは黙る ──
+     黙っているあいだも進みは止まったままなので、名前が入れば
+     翌朝そこから続く。 */
+  if (messages === null) {
+    const asked = await pushlogs.countForDay(conn, u.id, next, "learning");
+    if (asked >= NAME_NOTICE_MAX) return "名前待ち";
+    if (DRY || DISABLED) return `名前の案内:${next}日目`;
+
+    try {
+      await send(u.line_user_id, [nameMissingNotice(next)],
+        { retryKey: retryKey(u.id, next, `name${asked}`) });
+      /* 日は進めないので、この記録が「何回促したか」になる。 */
+      await pushlogs.logSent(conn, u.id, { dayNumber: next, pushType: "learning" });
+      return "名前の案内";
+    } catch (e) {
+      const gone = isUnreachable(e);
+      if (gone) await users.markUnfollowed(conn, u.line_user_id);
+      await pushlogs.logFailed(conn, u.id,
+        { dayNumber: next, pushType: "learning", error: String(e.message || e).slice(0, 500) });
+      return gone ? "届かない" : "送信失敗";
+    }
+  }
 
   if (DRY || DISABLED) return `${DRY ? "予定" : "停止中"}:${next}日目`;
 

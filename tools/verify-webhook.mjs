@@ -407,6 +407,52 @@ await acheck("心当たりの無い文面には返さない（通知を増やさ
 
 
 /* ================================================================== */
+head("[友だち追加]  名前が無い人を、そのまま放り出さない");
+
+const NAMELESS = [{ id: 7, line_user_id: "U_new", status: "trial", name_kr: null }];
+const NAMED    = [{ id: 8, line_user_id: "U_old", status: "active", name_kr: "다나카" }];
+
+async function follow(rows, extra = {}) {
+  const conn = fakeConn({ "FROM users": rows });
+  const { handleFollow } = await import("../server/lib/handlers/follow.mjs");
+  let sent = null;
+  const r = await handleFollow(conn,
+    { source: { userId: rows[0].line_user_id }, replyToken: "t" },
+    { reply: async (_t, m) => { sent = m; return {}; },
+      profile: async () => ({ displayName: "テスト" }), ...extra });
+  return { r, sent, conn };
+}
+
+await acheck("名前が無い人には、診断への案内を返す", async () => {
+  /* 1 日目から名前を使うので、名前が入るまで講座は進まない。
+     黙っていると、翌朝いきなり「お名前を登録してください」だけが
+     届いて、何のことか分からないまま体験が終わる。 */
+  const { r, sent } = await follow(NAMELESS);
+  assert(sent, "何も返していません");
+  assert(/kstudy101/.test(sent[0].text), "診断ページの場所が入っていません");
+  assert(/お名前/.test(sent[0].text), "名前のことに触れていません");
+  assert(r.welcomed === true, JSON.stringify(r));
+  return "サイトへ案内";
+});
+
+await acheck("名前がある人には返さない（サイトから来た人）", async () => {
+  const { r, sent } = await follow(NAMED);
+  assert(sent === null, `送ってしまいました: ${JSON.stringify(sent)}`);
+  assert(r.welcomed === false, JSON.stringify(r));
+  return "重ねて案内しない";
+});
+
+await acheck("返信できなくても、友だち追加は成立する", async () => {
+  /* ここで throw すると LINE が webhook を失敗とみなして掛け直し、
+     同じ人の追加処理が何度も走る。 */
+  const { r } = await follow(NAMELESS, { reply: async () => { throw new Error("落ちた"); } });
+  assert(r.userId, "利用者が作られていません");
+  assert(r.welcomed === false, JSON.stringify(r));
+  return "体験と進捗は用意される";
+});
+
+
+/* ================================================================== */
 head("[依存]  P1 の約束を崩していない");
 
 check("外部パッケージを読むのは lib/db.mjs だけのまま", () => {

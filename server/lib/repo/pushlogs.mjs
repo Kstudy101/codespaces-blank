@@ -68,6 +68,24 @@ export async function sentToday(conn, userId, pushType, date = null) {
   return row !== null;
 }
 
+/* その人に、その日ぶんを何回送ったか。ふつうは 0 か 1 で、
+   2 以上になるのは進みが止まっているときだけ。
+
+   名前がまだ無い人がそうなる。名前を使う日に当たると、その日は
+   本文の代わりに登録のお願いを送り、進みは止めたままにする ──
+   進めてしまうとその日の内容が二度と届かない。止めた結果、
+   翌朝も同じ日に当たるので、ここが 1 ずつ増えていく。
+   何回まで促すかを決めるのに使う。毎朝送り続ければブロックされ、
+   ブロックは取り消せない。 */
+export async function countForDay(conn, userId, dayNumber, pushType = "learning") {
+  assertType(pushType);
+  const row = await one(conn,
+    `SELECT COUNT(*) AS n FROM push_logs
+      WHERE user_id = ? AND day_number = ? AND push_type = ? AND status = 'sent'`,
+    [userId, dayNumber, pushType]);
+  return row ? Number(row.n) : 0;
+}
+
 /* 今朝の学習配信で、その人に何日目を送ったか。夕方の復習が使う。
    届いていない人には null が返り、対象から外れる（計画書 5-6）。 */
 export async function todaysLearningDay(conn, userId, date = null) {

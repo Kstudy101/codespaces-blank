@@ -5,44 +5,51 @@
 # SSH の口がこちらの IP に対して閉じているので、cPanel の
 # Git Version Control を通り道にする。cPanel はこのファイルの
 # tasks を、複製したリポジトリの中で、アカウントの権限で走らせる。
+# tasks は 1 つのシェルで続けて走るので、export はあとの行にも届く。
 #
 # 対象は server/ だけ。リポジトリにはサイト本体も入っているが、
 # そちらは Xserver へ別に配っているので、ここでは触らない。
 #
-# 注意していること:
-#   ・.env を消さない   本番の接続情報と鍵はここにしか無い。
-#                       リポジトリには存在しないので、消すと
-#                       次の再起動で上がらなくなる
-#   ・node_modules を上書きしない
-#                       CloudLinux の Node.js Selector は実体を
-#                       ~/nodevenv/ 側に置き、アプリからは symlink で
-#                       見せている。上から被せると Selector が壊れ、
-#                       cPanel の画面からは直せなくなる
-#   ・最後に必ず再起動   Passenger は動いているプロセスを抱えたまま
-#                       なので、置いただけでは古いコードが応え続ける
+# 触ってはいけないものが 2 つ、送り先の中に同居している:
+#   .env          本番の接続情報と鍵。リポジトリには無いので、
+#                 消すと次の再起動で二度と上がらない
+#   node_modules  CloudLinux の Node.js Selector は実体を
+#                 ~/nodevenv/ 側に置き、アプリには symlink で見せる。
+#                 上から被せると Selector が壊れ、cPanel の画面からは
+#                 直せなくなる
 # ===================================================================
 deployment:
   tasks:
-    # --- 送り先を確かめる ---------------------------------------
-    # アプリがまだ作られていなければ、ここで止める。
-    # 作らずに進むと、ファイルだけ置かれて動かない状態になり、
-    # 「配置は成功、なぜか動かない」という一番読みにくい形になる。
     - export APP="$HOME/kstudy101-line"
-    - test -d "$APP" || (echo "✗ $APP がありません。cPanel → Setup Node.js App でアプリを作ってください" && false)
+    - export SRC="$PWD/server"
+
+    # --- 送り先を確かめる ---------------------------------------
+    # アプリがまだ無いのに置くと、ファイルだけあって動かない状態に
+    # なる。「配置は成功、なぜか動かない」は一番読みにくい失敗なので、
+    # 進まずここで止める。
+    - test -d "$APP" || (echo "NG - $APP がありません。cPanel の Setup Node.js App でアプリを作ってください" && false)
 
     # --- コードを置く -------------------------------------------
-    # .env と node_modules は --exclude で守る。--delete は付ける
-    # ── 消したファイルが向こうに残ると、消したはずの古い経路が
-    # 生き続ける。
-    - /usr/bin/rsync -a --delete --exclude=node_modules --exclude=.env --exclude=.env.local server/ "$APP/"
+    # この共用サーバーに rsync は入っていない（初回の配置で 127 で
+    # 落ちて分かった）。あるなら使い、無ければ「守るものを避けて
+    # 消してから写す」で同じことをする。
+    #
+    # 消す手を残しているのは、消えたはずのファイルが向こうに残ると、
+    # もう無いはずの経路が生き続けるため。
+    - export RSYNC=$(command -v rsync || true)
+    - if [ -n "$RSYNC" ]; then "$RSYNC" -a --delete --exclude=node_modules --exclude=.env --exclude=.env.local "$SRC/" "$APP/"; else find "$APP" -mindepth 1 -maxdepth 1 ! -name node_modules ! -name .env ! -name .env.local ! -name tmp ! -name public -exec rm -rf {} + && cp -a "$SRC/." "$APP/"; fi
 
-    # --- 依存を入れて、入れ替える -------------------------------
-    # activate の場所は Node の版でディレクトリ名が変わるので、
-    # 決め打ちせずその都度探す。見つからなければ Selector が
-    # アプリを作っていないということなので、そこで止める。
+    # --- 依存を入れる -------------------------------------------
+    # activate の場所は Node の版でディレクトリ名が変わる。決め打ちに
+    # せず毎回探す。10 と 24 が並んでいるので sort -V で新しい方を取る
+    # （辞書順だと 24 より 10 が後ろに来る）。
     - export ACT=$(ls -d "$HOME"/nodevenv/kstudy101-line/*/bin/activate 2>/dev/null | sort -V | tail -1)
-    - test -n "$ACT" || (echo "✗ nodevenv が見つかりません。Setup Node.js App でアプリを作り直してください" && false)
-    - /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node -v; npm ci --omit=dev'
+    - test -n "$ACT" || (echo "NG - nodevenv がありません。Setup Node.js App を確認してください" && false)
+    - /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; echo "node $(node -v) / npm $(npm -v)"; npm ci --omit=dev'
+
+    # --- 入れ替える ---------------------------------------------
+    # Passenger は動いているプロセスを抱えたままなので、置いただけでは
+    # 古いコードが応え続ける。restart.txt に触れて初めて入れ替わる。
     - /bin/mkdir -p "$APP/tmp"
     - /bin/touch "$APP/tmp/restart.txt"
-    - echo "✓ 配置と再起動要求まで終わりました"
+    - echo "OK - 配置と再起動要求まで終わりました"

@@ -47,6 +47,15 @@ deployment:
     - test -n "$ACT" || (echo "NG - nodevenv がありません。Setup Node.js App を確認してください" && false)
     - /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; echo "node $(node -v) / npm $(npm -v)"; npm ci --omit=dev'
 
+    # --- 表を code に合わせる -----------------------------------
+    # migrate は「エラーが出なかった」で終わらず、表が 8 つ本当にあるか・
+    # utf8mb4 か・接続の time_zone が +09:00 かを数え直す。何度流しても
+    # 同じ結果になるので、配置のたびに通す。
+    #
+    # 再起動より前に置く。ここで落ちたら古いコードが動き続ける ──
+    # 新しいコードが古い表に向かって動き出すより、そのほうが安全。
+    - /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node db/with-env.mjs db/migrate.mjs'
+
     # --- 入れ替える ---------------------------------------------
     # Passenger は動いているプロセスを抱えたままなので、置いただけでは
     # 古いコードが応え続ける。restart.txt に触れて初めて入れ替わる。

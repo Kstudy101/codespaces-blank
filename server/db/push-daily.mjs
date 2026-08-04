@@ -40,7 +40,7 @@ import { getPool, closePool } from "../lib/db.mjs";
 import { users, learning, pushlogs, entitlements, lapses } from "../lib/repo/index.mjs";
 import { pushMessage, isUnreachable } from "../lib/line.mjs";
 import { jstDate, jstDateTime } from "../lib/jst.mjs";
-import { renderDay, renderReviewQuiz, nameMissingNotice } from "../lib/render.mjs";
+import { renderDay, renderReviewQuiz, renderCheckpointQuiz, nameMissingNotice } from "../lib/render.mjs";
 import { TOTAL_DAYS } from "../lib/repo/learning.mjs";
 import { blockingStep, messageForStep } from "../lib/onboarding.mjs";
 import { fortuneFor } from "../lib/fortune.mjs";
@@ -404,13 +404,17 @@ export async function deliverOne(conn, u, { send = pushMessage, load = loadLines
     warned = true;
   }
 
+  /* 節目（30/50/75）かどうかは 1 度だけ引いて、復習と節目の両方が
+     同じ答えを見る ── 別々に訊くと、表を直した朝に片方だけずれる。 */
+  const atCheckpoint = await learning.isCheckpoint(conn, next);
+
   /* ---- 3 日周期の復習クイズ（docs/plan-quiz.md）--------------------
      送る日（next）が 3 の倍数の朝だけ。current_day では数えない ──
      あれは「昨日までに送った数」で、それで割ると 1 日ずれる。
 
      節目（30/50/75）は休む。30 % 3 = 0 で重なるが、同じ朝に
-     クイズが 2 件出ると、どの答えがどの問題か混ざる。節目クイズが
-     実装される日のために席を空けておく。
+     クイズが 2 件出ると、どの答えがどの問題か混ざる ── その朝は
+     節目クイズ（下）が出る。
 
      期限の予告が付く朝も休む（承認時の決定④）。朝の便を常に
      最大 4 通に保つ ── LINE の上限は 5 で、予告と重ねると丁度 5 に
@@ -419,9 +423,29 @@ export async function deliverOne(conn, u, { send = pushMessage, load = loadLines
 
      引けなければ（原稿なし・壊れ）何も足さない。本編は届く ──
      運勢（fortuneSection）と同じ態度。 */
-  if (next % 3 === 0 && !warned && !(await learning.isCheckpoint(conn, next))) {
+  if (next % 3 === 0 && !warned && !atCheckpoint) {
     const quiz = await learning.pickReviewQuiz(conn, u.track, next);
     if (quiz) messages = [...messages, renderReviewQuiz(quiz)];
+  }
+
+  /* ---- 節目クイズ（30/50/75、docs/plan-quiz-checkpoint.md）---------
+     本編の後ろに 1 通。原稿はその朝の tpl.quiz そのもの ── 追加の
+     問い合わせは無い。無ければ・壊れていれば黙って抜く（復習と
+     同じ態度で、30/50/75 日目の quiz が入稿されるまではこれが普通）。
+
+     期限の予告と重なる朝は 5 通になるが、そのまま送る（承認時の
+     決定 §4(가)：予告は残り日数ごとに 1 度、節目は学期に 1 度なので
+     重なりは稀で、LINE の上限 5 は超えない）。
+
+     必ず配列の末尾に置く。quickReply が開くのは最後の 1 通だけ ──
+     予告の後ろに来ないと、答えのボタンが画面に出ない。 */
+  let checkpointQuiz = false;
+  if (atCheckpoint) {
+    const q = learning.usableQuiz(tpl.quiz);
+    if (q) {
+      messages = [...messages, renderCheckpointQuiz(next, q)];
+      checkpointQuiz = true;
+    }
   }
 
   /* 下見でも、組み上がった文面は見せられるようにする（--user の
@@ -447,6 +471,12 @@ export async function deliverOne(conn, u, { send = pushMessage, load = loadLines
     if (warned) {
       await pushlogs.logSent(conn, u.id,
         { dayNumber: entitledNow, pushType: "expiring" });
+    }
+    /* 節目クイズを同封したことも別に残す（予告と同じ形）。
+       読むのは P10 の集計だけだが、送った記録が learning しか無いと
+       「30 日目の朝にクイズが出たか」を後から確かめる術が無い。 */
+    if (checkpointQuiz) {
+      await pushlogs.logSent(conn, u.id, { dayNumber: next, pushType: "quiz" });
     }
     return `送信:${next}日目`;
   } catch (e) {

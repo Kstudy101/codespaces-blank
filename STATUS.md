@@ -187,7 +187,7 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | **운세 문면** | `server/content/fortune-lines.json` — 6항목 × 5등급 = 30칸 + 십신 10. 없으면 운세만 조용히 빠짐 |
 | **특정상거래법 표기 페이지** | `tokushoho.html` 미작성 (§3 이 정해져야 씀) |
 | **퀴즈 원고** | `quiz` 열은 생겼으나(003) 원고 0건 — 백필 전까지 복습 퀴즈는 조용히 빠짐 ([docs/plan-quiz.md](docs/plan-quiz.md) §3-8) |
-| **절목 퀴즈의 발신** | 30/50/75일차. 수신·채점은 살아 있음(`tpl.quiz` 파싱, 003). 보내는 코드만 없음 — 후속 계획 |
+| **절목 퀴즈의 원고** | 발신·채점 답장은 구현 완료 (2026-08-05, [docs/plan-quiz-checkpoint.md](docs/plan-quiz-checkpoint.md)). 30/50/75일차의 `quiz` 가 입고될 때까지 조용히 빠짐 |
 
 ---
 

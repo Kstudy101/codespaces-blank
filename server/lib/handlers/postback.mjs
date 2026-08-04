@@ -17,7 +17,7 @@
        action=resume&track=…&mode=…    買い直した人の「続き / 最初から」
 
      節目
-       action=quiz&day=30&choice=2     クイズ（計画書 5-4）
+       action=quiz&day=30&choice=2     クイズ（docs/plan-quiz-checkpoint.md）
 
    data は利用者の端末を経由して戻ってくる文字列で、こちらが
    送ったものがそのまま返る保証は無い（作り替えられる）。
@@ -394,23 +394,33 @@ export async function handlePostback(conn, event, { send = replyMessage } = {}) 
     return { skipped: "受講中のコースがありません", userId: user.id, day };
   }
 
-  const answer = await lookupAnswer(conn, track, day);
-  if (answer === null) {
+  const q = await lookupAnswer(conn, track, day);
+  if (q === null) {
     return { pending: "正答が未入稿です（P4）", userId: user.id, day, semester, choice };
   }
 
-  const passed = choice === answer;
+  const passed = choice === q.answer;
   await learning.setQuizResult(conn, user.id, track, semester, passed);
-  return { userId: user.id, track, day, semester, choice, passed };
+
+  /* 答えた本人に、その場で返す（docs/plan-quiz-checkpoint.md §1-2）。
+     記録だけして黙ると、答えたのに何も起きていないように見える ──
+     このファイルの頭書き自身がそう約束している。返信の失敗は
+     採点の結果を壊さない（reply は throw しない）。 */
+  const mark = ["①", "②", "③", "④"][q.answer] || `${q.answer + 1}`;
+  const replied = await reply(token, [{
+    type: "text",
+    text: passed
+      ? `⭕ 正解です！🎉\n第${semester}学期の節目クイズ、合格です！`
+      : `❌ ざんねん…　正解は ${mark} ${q.choices[q.answer] ?? ""} でした`
+  }], send);
+  return { userId: user.id, track, day, semester, choice, passed, replied };
 }
 
-/* 正答の置き場所は P4 の入稿設計で決まる（content_templates の
-   どこに持たせるか）。決まるまでは null を返し、
-   「採点できない」を呼ぶ側に伝える。 */
+/* 正答は 003 で content_templates.quiz に決まった。壊れた原稿は
+   ここで null になり「採点できない」を呼ぶ側に伝える ──
+   quiz を丸ごと返すのは、不正解の返信に正答の文字列も要るため。 */
 async function lookupAnswer(conn, track, day) {
   const tpl = await learning.getTemplate(conn, track, day);
   if (!tpl) return null;
-  const q = tpl.quiz || null;
-  if (!q || typeof q.answer !== "number") return null;
-  return q.answer;
+  return learning.usableQuiz(tpl.quiz);
 }

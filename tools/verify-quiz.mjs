@@ -1,5 +1,6 @@
 /* ==================================================================
    verify-quiz.mjs — 3 日周期の復習クイズ（docs/plan-quiz.md）
+                   ＋ 節目クイズの発信・採点の返事（docs/plan-quiz-checkpoint.md）
 
    このクイズが間違えたときに起こることは、どれも画面に出ない。
 
@@ -12,8 +13,11 @@
                                   どの問題か混ざる
      ・期限予告の朝に重ねる     → 5 通丁度になり、次に 1 通足した日に
                                   朝の配信全体が 400 で落ちる
+                                  （節目の朝だけは例外 ── 決定 §4(가)。
+                                  学期に 1 回だけで、上限 5 の内）
      ・復習の結果を保存する     → 9 日目の誤答が semester1 の合否
                                   （修了判定の材料）を上書きする
+     ・節目の採点だけして黙る   → 答えたのに何も起きていないように見える
 
    DB は使わない。repo/ は渡された接続の execute() しか呼ばない
    約束なので、偽物を渡して SQL を読む（verify-push と同じやり方）。
@@ -21,7 +25,7 @@
 import { deliverOne } from "../server/db/push-daily.mjs";
 import { handlePostback } from "../server/lib/handlers/postback.mjs";
 import { pickReviewQuiz } from "../server/lib/repo/learning.mjs";
-import { renderReviewQuiz } from "../server/lib/render.mjs";
+import { renderReviewQuiz, renderCheckpointQuiz } from "../server/lib/render.mjs";
 import { EXPIRING_AT } from "../server/lib/handlers/checkout.mjs";
 import { checkDay } from "../server/lib/content-check.mjs";
 
@@ -97,6 +101,8 @@ const noFortune = { load: () => null };
    持っていて、それをクイズと数えると誤検知になる（実際なった）。 */
 const hasReviewQuiz = (msgs) => msgs.some((m) =>
   m.quickReply?.items?.some((i) => /action=review/.test(i.action?.data || "")));
+const hasCheckpointQuiz = (msgs) => msgs.some((m) =>
+  m.quickReply?.items?.some((i) => /action=quiz&/.test(i.action?.data || "")));
 
 console.log("[出す朝・出さない朝]");
 
@@ -129,18 +135,87 @@ await check("3 の倍数の朝は、習った範囲から引いて 1 通足す",
   return `本編 + クイズ = ${msgs.length} 通`;
 });
 
-await check("節目（30 日目）は復習を休む", async () => {
+await check("節目（30 日目）は復習を休む。原稿が無ければ節目クイズも付かない", async () => {
+  const conn = fakeConn({
+    ...READY(30, QUIZ_ROW),                       /* TPL(30) に quiz は無い */
+    "FROM quiz_checkpoints": [{ day_number: 30 }]
+  });
+  let msgs = null;
+  await deliverOne(conn, { ...USER, current_day: 29, days_used: 29 },
+    { send: async (_to, m) => { msgs = m; return {}; }, ...noFortune });
+  assert(msgs, "送信が呼ばれていません（本編が止まっています）");
+  assert(!conn.sql().some((s) => /quiz IS NOT NULL/i.test(s)),
+    "節目なのに復習クイズを引いています");
+  assert(!hasCheckpointQuiz(msgs), "原稿が無いのに節目クイズが付いています");
+  return "30/50/75 の quiz が入稿されるまでは本編だけ";
+});
+
+await check("節目の朝は、その日の原稿（tpl.quiz）から節目クイズを 1 通足す", async () => {
   const conn = fakeConn({
     ...READY(30, QUIZ_ROW),
+    "FROM content_templates": [{ ...TPL(30)[0], quiz: JSON.stringify(QUIZ) }],
     "FROM quiz_checkpoints": [{ day_number: 30 }]
   });
   let msgs = null;
   await deliverOne(conn, { ...USER, current_day: 29, days_used: 29 },
     { send: async (_to, m) => { msgs = m; return {}; }, ...noFortune });
   assert(msgs, "送信が呼ばれていません");
+  assert(hasCheckpointQuiz(msgs), "節目クイズの 1 通がありません");
+  assert(!hasReviewQuiz(msgs), "同じ朝に復習クイズが重なっています");
   assert(!conn.sql().some((s) => /quiz IS NOT NULL/i.test(s)),
-    "節目なのにクイズを引いています");
-  return "席は節目クイズのために空けてある";
+    "原稿は tpl にあるのに、復習の引き当てを走らせています");
+  const item = msgs.flatMap((m) => m.quickReply?.items ?? [])
+    .find((i) => /action=quiz&/.test(i.action.data));
+  assert(/^action=quiz&day=30&choice=\d$/.test(item.action.data),
+    `data の形が違います: ${item.action.data}`);
+  return `本編 + 節目クイズ = ${msgs.length} 通`;
+});
+
+await check("送った後に push_type='quiz' を記録する ── 実送信だけ", async () => {
+  /* dry-run は送信の手前で降りるので、ここに来ない（構造上の保証）。
+     見るのは「成功で 1 件・失敗で 0 件」。 */
+  const ready = () => fakeConn({
+    ...READY(30, QUIZ_ROW),
+    "FROM content_templates": [{ ...TPL(30)[0], quiz: JSON.stringify(QUIZ) }],
+    "FROM quiz_checkpoints": [{ day_number: 30 }]
+  });
+  const quizLogs = (conn) => conn.calls.filter((c) =>
+    /INSERT INTO push_logs/i.test(c.sql) && c.params.includes("quiz"));
+
+  const ok = ready();
+  await deliverOne(ok, { ...USER, current_day: 29, days_used: 29 },
+    { send: async () => ({}), ...noFortune });
+  assert(quizLogs(ok).length === 1, `記録が ${quizLogs(ok).length} 件（1 のはず）`);
+  assert(Number(quizLogs(ok)[0].params[1]) === 30,
+    `day_number が節目の日ではありません: ${quizLogs(ok)[0].params[1]}`);
+
+  const bad = ready();
+  await deliverOne(bad, { ...USER, current_day: 29, days_used: 29 },
+    { send: async () => { throw new Error("400"); }, ...noFortune });
+  assert(quizLogs(bad).length === 0, "送れていないのに quiz を記録しています");
+  return "成功 1 件 / 失敗 0 件";
+});
+
+await check("節目と期限予告が重なる朝は、そのまま送る（決定 §4(가)）", async () => {
+  const u = { ...USER, current_day: 29, days_used: 29,
+              days_entitled: 29 + EXPIRING_AT + 1 };
+  const conn = fakeConn({
+    ...READY(30, QUIZ_ROW),
+    "FROM content_templates": [{ ...TPL(30)[0], quiz: JSON.stringify(QUIZ) }],
+    "FROM quiz_checkpoints": [{ day_number: 30 }]
+  });
+  let msgs = null;
+  await deliverOne(conn, u,
+    { send: async (_to, m) => { msgs = m; return {}; }, ...noFortune });
+  assert(msgs, "送信が呼ばれていません");
+  assert(msgs.some((m) => /お預かりしている日数/.test(m.text)), "予告が抜けています");
+  assert(hasCheckpointQuiz(msgs), "節目クイズが抜けています（休むのは復習だけ）");
+  /* quickReply が開くのは最後の 1 通だけ。クイズが末尾でないと
+     答えのボタンが画面に出ない。 */
+  const last = msgs[msgs.length - 1];
+  assert(last.quickReply?.items?.some((i) => /action=quiz&/.test(i.action.data)),
+    "節目クイズが末尾ではありません（答えのボタンが出ません）");
+  return `予告 + 節目クイズ = ${msgs.length} 通（運勢を足しても上限 5 の内）`;
 });
 
 await check("期限予告の朝は休む（常に 4 通以下・決定④）", async () => {
@@ -188,6 +263,19 @@ await check("data に answer が載っていない", async () => {
   }
   assert(m.quickReply.items.length === QUIZ.choices.length, "選択肢の数が合いません");
   return m.quickReply.items.map((i) => i.action.data).join(" / ");
+});
+
+await check("節目クイズの data にも answer が載っていない", async () => {
+  const m = renderCheckpointQuiz(30, QUIZ);
+  for (const item of m.quickReply.items) {
+    assert(!/answer/i.test(item.action.data), `data に answer: ${item.action.data}`);
+    assert(item.action.data.startsWith("action=quiz&day=30&choice="),
+      `data の形が違います: ${item.action.data}`);
+    assert(item.action.label.length <= 20, "label が 20 字超（LINE が 400 を返す）");
+  }
+  assert(m.quickReply.items.length === QUIZ.choices.length, "選択肢の数が合いません");
+  assert(/節目クイズ/.test(m.text), `頭の 1 行が違います: ${m.text.split("\n")[0]}`);
+  return "復習と同じ組み立て、頭と action だけ違う";
 });
 
 console.log("\n[採点]  保存しない・未習は答えない");
@@ -251,6 +339,47 @@ await check("クイズの無い日を指されたら、静かに降りる", asyn
     { send: async () => ({}) });
   assert(r.skipped, `降りていません: ${JSON.stringify(r)}`);
   return r.skipped;
+});
+
+console.log("\n[節目の採点]  記録して、答えた本人にその場で返す");
+
+const CP_READY = {
+  "FROM users":             [{ id: 7, line_user_id: "U_test", active_track: "beginner",
+                               name_source: "web" }],
+  "FROM quiz_checkpoints":  [{ day_number: 30 }],
+  "FROM content_templates": [{ ...TPL(30)[0], quiz: JSON.stringify(QUIZ) }]
+};
+const passLogWrites = (conn) => conn.calls.filter((c) => /JSON_MERGE_PATCH/i.test(c.sql));
+
+await check("合格 → ⭕ の返事 1 通。合否の記録は正しく 1 回", async () => {
+  const conn = fakeConn(CP_READY);
+  let replied = null;
+  const r = await handlePostback(conn, EVENT("action=quiz&day=30&choice=0"),
+    { send: async (_t, m) => { replied = m; return {}; } });
+  assert(r.passed === true, JSON.stringify(r));
+  assert(replied && replied.length === 1, "返事が 1 通ではありません");
+  assert(/⭕/.test(replied[0].text) && /第1学期/.test(replied[0].text), replied[0].text);
+  const w = passLogWrites(conn);
+  assert(w.length === 1, `quiz_pass_log への書き込みが ${w.length} 回`);
+  assert(/"semester1":true/.test(String(w[0].params[0])),
+    `記録の中身が違います: ${w[0].params[0]}`);
+  return "採点・記録は従来のまま、返事だけ増えた";
+});
+
+await check("不合格 → ❌ と正答を返す。false も 1 回だけ記録", async () => {
+  const conn = fakeConn(CP_READY);
+  let replied = null;
+  const r = await handlePostback(conn, EVENT("action=quiz&day=30&choice=2"),
+    { send: async (_t, m) => { replied = m; return {}; } });
+  assert(r.passed === false, JSON.stringify(r));
+  assert(replied && replied.length === 1, "返事が 1 通ではありません");
+  assert(/❌/.test(replied[0].text) && /네/.test(replied[0].text),
+    `正答が入っていません: ${replied[0].text}`);
+  const w = passLogWrites(conn);
+  assert(w.length === 1, `quiz_pass_log への書き込みが ${w.length} 回`);
+  assert(/"semester1":false/.test(String(w[0].params[0])),
+    `記録の中身が違います: ${w[0].params[0]}`);
+  return "黙って記録だけ、が無くなった";
 });
 
 console.log("\n[入稿]  壊れた原稿は入り口で止める");

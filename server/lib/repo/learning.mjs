@@ -282,13 +282,25 @@ export async function upsertTemplate(conn, {
   return getTemplate(conn, track, d);
 }
 
+/* quiz 列の形。壊れていれば null ── 送らないだけで、本編は届く。
+   復習（pickReviewQuiz）と節目（db/push-daily.mjs）の両方がここを
+   通る。別々に見ると、片方だけ「answer が範囲外」を通してしまう。 */
+export function usableQuiz(q) {
+  if (!q || typeof q.question !== "string" || !q.question
+      || !Array.isArray(q.choices) || q.choices.length < 2
+      || !Number.isInteger(q.answer) || q.answer < 0 || q.answer >= q.choices.length) {
+    return null;
+  }
+  return q;
+}
+
 /* ---- 復習クイズ（3 日周期、docs/plan-quiz.md）----------------------
    maxDay 以下から 1 問を無作為に。上限を切るのは未習の文法を
    出さないため ── 範囲を外すと、3 日目の人に 40 日目の敬語が届く。
    表はコース当たり最大 101 行なので RAND() の費用は無い。
 
-   原稿が壊れていれば null ── 送らないだけで、本編は届く。
-   ここで throw すると、原稿 1 件の不備が配信バッチごと落とす。 */
+   原稿が壊れていれば null ── ここで throw すると、
+   原稿 1 件の不備が配信バッチごと落とす。 */
 export async function pickReviewQuiz(conn, track, maxDay) {
   if (!isTrack(track)) throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")}）`);
   const d = Number(maxDay);
@@ -300,12 +312,8 @@ export async function pickReviewQuiz(conn, track, maxDay) {
       ORDER BY RAND() LIMIT 1`, [track, d]);
   if (!rows.length) return null;
 
-  const q = fromJson(rows[0].quiz);
-  if (!q || typeof q.question !== "string" || !q.question
-      || !Array.isArray(q.choices) || q.choices.length < 2
-      || !Number.isInteger(q.answer) || q.answer < 0 || q.answer >= q.choices.length) {
-    return null;
-  }
+  const q = usableQuiz(fromJson(rows[0].quiz));
+  if (!q) return null;
   return { dayNumber: Number(rows[0].day_number),
            question: q.question, choices: q.choices, answer: q.answer };
 }

@@ -289,14 +289,14 @@ export function renderReview(template, user = {}) {
    配信ごと落ちる（quickReply は本文と同じ 1 通の中にある）。 */
 const CIRCLED = ["①", "②", "③", "④"];
 
-export function renderReviewQuiz(quiz) {
-  if (!quiz || !Array.isArray(quiz.choices)) throw new Error("quiz がありません");
-  const day = Number(quiz.dayNumber);
-
+/* 復習と節目で違うのは頭の 1 行と action だけ（plan-quiz-checkpoint §2）。
+   組み立てを分けて持つと、label の 20 字制限のような決まりを
+   片方だけ直すことになる。 */
+function quizMessage(head, action, day, quiz) {
   return {
     type: "text",
     text: [
-      `🔁 ふくしゅうクイズ（${day}日目より）`,
+      head,
       "",
       quiz.question,
       "",
@@ -308,12 +308,26 @@ export function renderReviewQuiz(quiz) {
         action: {
           type: "postback",
           label: `${CIRCLED[i]} ${String(c)}`.slice(0, 20),
-          data: `action=review&day=${day}&choice=${i}`,
+          data: `action=${action}&day=${day}&choice=${i}`,
           displayText: `${CIRCLED[i]} ${String(c)}`.slice(0, 20)
         }
       }))
     }
   };
+}
+
+export function renderReviewQuiz(quiz) {
+  if (!quiz || !Array.isArray(quiz.choices)) throw new Error("quiz がありません");
+  const day = Number(quiz.dayNumber);
+  return quizMessage(`🔁 ふくしゅうクイズ（${day}日目より）`, "review", day, quiz);
+}
+
+/* 節目（30/50/75）の 1 通。復習（action=review、無保存）とは別の部屋で、
+   こちらの答えは postback 側が学期の合否として記録する。 */
+export function renderCheckpointQuiz(day, quiz) {
+  if (!quiz || !Array.isArray(quiz.choices)) throw new Error("quiz がありません");
+  const d = Number(day);
+  return quizMessage(`🎯 節目クイズ（${d}日目）`, "quiz", d, quiz);
 }
 
 

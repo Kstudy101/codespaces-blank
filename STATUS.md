@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-04 / 기준 커밋: `23ec595` 이후
+최종 갱신: 2026-08-04 (배신 서버 첫 배포 후) / 기준 커밋: `660915a`
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -10,15 +10,17 @@
 ## 0. 30초 요약
 
 - 사이트(정적)는 **Xserver에서 가동 중** — https://www.kstudy101.jp/
-  `main` 에 push 하면 GitHub Actions 가 자동 배포합니다 (`07a78fd` 까지 반영)
-- LINE 배신 서버(`server/`)는 **코드는 완성, 아직 배포 안 함** — §5
+  `main` 에 push 하면 GitHub Actions 가 자동 배포합니다
+- LINE 배신 서버(`server/`)는 **ChemiCloud 에 배포 완료** (2026-08-04, `660915a`) —
+  마이그레이션 002(되돌릴 수 없는 DROP COLUMN 포함)까지 본번 적용 끝. §9.2
 - 결제(선불 횟수권)는 **코드 완성, 의도적으로 잠겨 있음** — §3
 - 관문(자동 검증) **17종 전부 통과**
 
 **다음에 할 일은 두 가지입니다.**
 
 1. **§3의 값 3개를 정한다** — 그게 없으면 결제가 안 열립니다
-2. **`server/` 를 배포한다** — §5. 되돌릴 수 없는 SQL 이 1줄 있으니 DB 백업 먼저
+2. **cron 등록을 확인한다** — cPanel → Cron Jobs 에 두 줄이 있는지, 홈에 `logs/` 폴더가
+   있는지 ([docs/plan-deploy-server.md](docs/plan-deploy-server.md) §3 S6). 미확인 상태로 남아 있습니다
 
 ---
 
@@ -114,6 +116,11 @@ done
 
 ## 5. `server/` 를 배포할 때 — ★ 되돌릴 수 없는 한 줄이 있습니다
 
+> **2026-08-04: 첫 배포 완료.** 아래 002 는 본번에 적용 끝났으므로, 다음 배포부터는
+> 이 절이 「이미 지나간 주의」가 됩니다. 새 migration 을 만들 때 다시 읽으십시오.
+> 배포 절차와 이번에 밟은 함정은 [docs/plan-deploy-server.md](docs/plan-deploy-server.md) /
+> [docs/plan-deploy-hang.md](docs/plan-deploy-hang.md) 에 있습니다.
+
 `server/db/migrations/002-per-course-billing.sql` 안에:
 
 ```sql
@@ -175,7 +182,8 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | **운세 문면** | `server/content/fortune-lines.json` — 6항목 × 5등급 = 30칸 + 십신 10. 없으면 운세만 조용히 빠짐 |
 | **특정상거래법 표기 페이지** | `tokushoho.html` 미작성 (§3 이 정해져야 씀) |
 | **퀴즈 배신** | 30/50/75일차. `push_type='quiz'` 는 ENUM 에만 있고 보내는 코드 없음 |
-| **cron 등록 확인** | `push-cron.sh` 는 있으나 ChemiCloud 에 실제로 걸려 있는지 미확인 → `bash tools/cpanel.sh --api2 Cron/listcron` |
+| **cron 등록 확인** | `push-cron.sh` 는 있으나 ChemiCloud 에 실제로 걸려 있는지 미확인 → cPanel → Cron Jobs 화면 (또는 `bash tools/cpanel.sh --api2 Cron/listcron`). 홈에 `logs/` 폴더도 필요 |
+| **원고 수량 실측** | 배포는 성공했으나 migrate 의 stdout(`content_templates: beginner NN`)을 못 봄. phpMyAdmin 에서 `SELECT track, COUNT(*) FROM content_templates GROUP BY track` 1줄이면 확인 끝 |
 
 ---
 
@@ -222,6 +230,8 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 
 | 커밋 | 내용 |
 |---|---|
+| `660915a` | 배포에서 `npm ci` 를 쓰지 않는다 — Selector 의 symlink 를 지우기 때문 (§9.2) |
+| `d4937fd` | LLM 행동 지침 4원칙(`CLAUDE-karpathy.md`)을 `CLAUDE.md` 가 불러오게 함 |
 | `07a78fd` | STATUS.md(이 파일) 도입 + 리팩터링이 남긴 미사용 import 정리 |
 | `23ec595` | 선불 횟수권 — 코스별 일수·Stripe·리치메뉴·이탈 장부·수료. 관문 `verify-billing` 신설 |
 | `8325068` | LINE 연동 버그 2건 수정 — 답한 질문이 반복되는 것 / 생년월일 건너뛰면 배치가 매일 죽는 것 |
@@ -249,3 +259,23 @@ https://www.kstudy101.jp/privacy   새 문구(성별「未回答」) 반영 확�
 ```
 
 **이 배포에 `server/` 는 포함되지 않습니다.** 사이트만입니다(§1).
+
+### 9.2 배신 서버 첫 배포 (2026-08-04, ChemiCloud)
+
+경로 (가) — cPanel Git Version Control, 브라우저만으로. 커밋 `660915a`.
+
+**밟은 함정 (다음 사람은 안 밟도록):**
+
+1. **`npm ci` 가 CloudLinux Selector 의 symlink 를 파괴** — ci 는 `node_modules` 를
+   지우고 다시 만드는데, 지워진 것이 `~/nodevenv/` 를 가리키는 링크였음.
+   증상: Run NPM Install 이 「node_modules という名前の実体を置くな」로 거부.
+   복구: File Manager 로 실체 폴더 삭제 → Setup Node.js App 에서 Restart →
+   링크 재생성 → Run NPM Install 성공. 재발 방지: `660915a` 가 두 배포 경로
+   모두 `npm install` 로 변경 (자세한 경위는 [docs/plan-deploy-hang.md](docs/plan-deploy-hang.md))
+2. **cPanel UI 의 「in progress」는 믿을 수 없음** — 시스템 태스크 큐 로그로는
+   10초 만에 Task finished 인데 화면은 계속 in progress. 판정은 화면이 아니라
+   `tmp/restart.txt` 의 수정 시각으로 할 것 — 12개 작업이 `set -e` 로 이어져
+   있고 restart.txt 가 마지막이므로, 갱신됐다면 migrate 가 0 으로 끝난 것
+
+**확인된 것:** `/health` → `ok` / `tmp/restart.txt` 갱신 / 태스크 큐 Task finished (10초).
+**미확인:** migrate stdout (원고 수량 `beginner NN`) — §6 의 「원고 수량 실측」 / cron 등록 — §6.

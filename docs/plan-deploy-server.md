@@ -2,8 +2,9 @@
 
 작성: 2026-08-04 / 대상 커밋: `da5abfd` (main) / 실행: **대표님(브라우저)**
 
-> **상태: 승인 대기.** 아래 §3을 대표님이 직접 실행하십시오.
-> 되돌릴 수 없는 SQL 1줄이 포함됩니다 — **S0(백업)을 건너뛰지 마십시오.**
+> **상태: 배포 완료 (2026-08-04, 커밋 `660915a`). S6(cron)만 미확인.**
+> 도중에 `npm ci` 사고 1건 — 경위와 수정은 [plan-deploy-hang.md](plan-deploy-hang.md).
+> 결과 기록은 [STATUS.md](../STATUS.md) §9.2.
 
 ---
 
@@ -121,6 +122,13 @@ L126  ALTER TABLE subscriptions DROP COLUMN total_days_entitled;              �
 
 `.cpanel.yml` 이 자동으로 하는 일: 코드 배치 → 운세엔진(`saju.js`/`fortune.js`/
 `solar-terms.json`) 복사 → `npm install` → **`migrate`** → (content 있으면) seed → 재기동 요구.
+
+> **결과 (2026-08-04):** S0·S1 완료 → 첫 Deploy 는 `npm ci` 사고로 실패
+> ([plan-deploy-hang.md](plan-deploy-hang.md)) → 서버 복구 후 `660915a` 로 재배포 성공.
+> S4 는 stdout 대신 증거로 판정: `tmp/restart.txt` 갱신 = 12개 작업 전부 통과 =
+> migrate 종료코드 0 = 스키마 검증 통과 (migrate 는 `✓` 일 때만 0 을 반환).
+> S5 `/health` → `ok`. **원고 수량(`beginner NN`)만 미실측** — STATUS §6.
+> **cPanel UI 의 in progress 표시는 멈춘 채였음** — 판정은 restart.txt 로 할 것.
 
 ### S4. 마이그레이션 결과 읽기
 

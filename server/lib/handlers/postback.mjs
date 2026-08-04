@@ -50,12 +50,26 @@ const int = (v) => {
 /* オンボーディングの判定に要る 3 つの表を 1 つの形にまとめる。
    listDeliverable が返す行と同じ形にしてあるので、nextStep は
    バッチから呼んでも、ここから呼んでも同じものを見る ──
-   別の形にすると、片方でだけ段が進む。 */
-async function stateOf(conn, user) {
-  const [saju, prog] = await Promise.all([
-    users.getSajuProfile(conn, user.id),
-    learning.getProgress(conn, user.id)
+   別の形にすると、片方でだけ段が進む。
+
+   【users も引き直す。渡された行を使わない】
+   受け取るのは id だけにしてある。呼ぶ側が持っている user は
+   ボタンを処理する**前**に引いたもので、name_source はまだ空。
+   それを ...user で広げると、setNameSource が書いたばかりの値が
+   古い値で上書きされ、nextStep が「まだ名前を訊いていない」と
+   判定する ── 答えた直後に、答えたのと同じ質問がもう一度届く。
+
+   saju と progress を引き直しているのに users だけ渡していたので、
+   生年月日とコースは進むのに名前だけ進まない、という形で出ていた。
+   handlers/link.mjs の completeLink は同じ理由で findById を
+   挟み直している（あちらの注記）。 */
+async function stateOf(conn, userId) {
+  const [user, saju, prog] = await Promise.all([
+    users.findById(conn, userId),
+    users.getSajuProfile(conn, userId),
+    learning.getProgress(conn, userId)
   ]);
+  if (!user) return null;
   return {
     ...user,
     birth_date: saju ? saju.birth_date : null,
@@ -66,8 +80,9 @@ async function stateOf(conn, user) {
 }
 
 /* 答えたあとに続けて出す 1 通。もう訊くことが無ければ null。 */
-async function followUp(conn, user) {
-  const st = await stateOf(conn, user);
+async function followUp(conn, userId) {
+  const st = await stateOf(conn, userId);
+  if (!st) return null;
   const step = nextStep(st);
   return step ? messageForStep(step, st) : null;
 }
@@ -117,7 +132,7 @@ export async function handlePostback(conn, event, { send = replyMessage } = {}) 
       return { userId: user.id, action, use, replied };
     }
 
-    const replied = await reply(token, [await followUp(conn, user)], send);
+    const replied = await reply(token, [await followUp(conn, user.id)], send);
     return { userId: user.id, action, use, replied };
   }
 
@@ -134,7 +149,7 @@ export async function handlePostback(conn, event, { send = replyMessage } = {}) 
     }
 
     await users.setBirthConfirmed(conn, user.id, true);
-    const replied = await reply(token, [await followUp(conn, user)], send);
+    const replied = await reply(token, [await followUp(conn, user.id)], send);
     return { userId: user.id, action, ok, replied };
   }
 

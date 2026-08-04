@@ -446,6 +446,44 @@ await check("生年月日の未確認では、レッスンを止めない", asyn
   return "運勢だけ落ちる";
 });
 
+/* ---- 止めない段が、止める段を隠さないこと ---------------------------
+   ここが lib/onboarding.mjs に blockingStep を足した理由。
+
+   nextStep は「次に訊くこと」を 1 つだけ返し、順番は
+   name → birth → track。だから生年月日を飛ばした人は、コースが
+   空でも "birth" が返る。バッチが name と track だけを見ていると、
+   その人は素通りして track=null のまま原稿を引き、
+   「未知の track: null」で落ちる。
+
+   落ち方が悪い。例外は main() の try/catch が拾って「処理中の異常」に
+   数えるので、cron は毎朝失敗で終わる。本人には何も届かないが、
+   届かない理由はどこにも出ない ── 受け取る側からは
+   「今日は来ないな」としか見えない。
+
+   生年月日を飛ばす人は珍しくない。ボタンを見て後回しにするだけで
+   この状態になる。 */
+await check("生年月日を飛ばした人にも、コースは訊く（止める段が隠れない）", async () => {
+  const skippedBirth = {
+    ...USER,
+    name_source: "web",                                   /* ① 名前は答えた */
+    birth_date: "1995-04-12", birth_confirmed: false,     /* ② 生年月日は飛ばした */
+    track: null                                           /* ③ コースはまだ */
+  };
+  const conn = fakeConn(READY);
+  let msgs = null;
+  let r;
+  try {
+    r = await deliverOne(conn, skippedBirth, { send: async (_t, m) => { msgs = m; return {}; } });
+  } catch (e) {
+    throw new Error(`例外で落ちました: ${e.message} ── 毎朝この人だけ配信が異常終了します`);
+  }
+  assert(/track/.test(r), `コースを訊いていません: ${r}`);
+  assert(msgs && /コース/.test(msgs[0].text), JSON.stringify(msgs));
+  assert(!conn.sql().some((s) => /UPDATE learning_progress SET current_day/i.test(s)),
+    "コース未選択のまま日を進めました");
+  return "birth が track を隠さない";
+});
+
 await check("促すのは 3 回まで（ブロックは取り消せない）", async () => {
   const conn = fakeConn({ ...READY, "SELECT COUNT\\(\\*\\) AS n FROM push_logs": [{ n: 3 }] });
   let sent = false;

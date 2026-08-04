@@ -42,7 +42,7 @@ import { pushMessage, isUnreachable } from "../lib/line.mjs";
 import { jstDate, jstDateTime } from "../lib/jst.mjs";
 import { renderDay, nameMissingNotice } from "../lib/render.mjs";
 import { TOTAL_DAYS } from "../lib/repo/learning.mjs";
-import { nextStep, messageForStep } from "../lib/onboarding.mjs";
+import { blockingStep, messageForStep } from "../lib/onboarding.mjs";
 import { fortuneFor } from "../lib/fortune.mjs";
 import { loadLines, fortuneMessage } from "../lib/fortune-text.mjs";
 
@@ -262,9 +262,13 @@ export async function deliverOne(conn, u, { send = pushMessage, load = loadLines
 
   /* 始める前に決まっていないといけないものを訊く。
      日は進めない ── 進めると、決まる前の日が中身の無いまま
-     消費される（plan-p4-content.md 7-6 と同じ間違い）。 */
-  const step = nextStep(u);
-  if (step === "name" || step === "track") {
+     消費される（plan-p4-content.md 7-6 と同じ間違い）。
+
+     見るのは nextStep ではなく blockingStep。nextStep は次に訊くこと
+     1 つを順番どおりに返すので、生年月日を飛ばした人には "birth" が
+     返り、コースが空のままここを素通りしていた（lib/onboarding.mjs）。 */
+  const step = blockingStep(u);
+  if (step) {
     return askOnboarding(conn, u, step, { send });
   }
 

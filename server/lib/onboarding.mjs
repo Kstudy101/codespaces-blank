@@ -41,21 +41,45 @@ export const STEPS = Object.freeze(["name", "birth", "track"]);
 
    返すのは 1 つだけ。3 つまとめて訊くと、答えが 3 つ返ってくるまで
    何も始まらず、途中で止めた人がどこまで答えたのか分からなくなる。 */
-export function nextStep(u = {}) {
+/* 段ごとの「まだ答えていない」。ここが唯一の出どころで、
+   nextStep も blockingStep もこれを見る ── 別々に書くと、片方だけ
+   直したときに「訊いたのに進まない」が生まれる。 */
+const PENDING = Object.freeze({
   /* 1. 名前。**選べるときにだけ**訊く。
      ウェブの名前が無い人（友だち追加だけ）は、そもそも選択肢が
      無いので訊かない ── その人は push-daily の名前案内が拾う。
      LINE の表示名が取れなかった人も同じで、比べる相手が無い。 */
-  if (!u.name_source && u.name_kr && u.display_name) return "name";
+  name:  (u) => !u.name_source && !!u.name_kr && !!u.display_name,
 
   /* 2. 生年月日。四柱がある人にだけ。
      無い人に「合っていますか」と訊いても見せるものが無い。 */
-  if (u.birth_date && !u.birth_confirmed) return "birth";
+  birth: (u) => !!u.birth_date && !u.birth_confirmed,
 
   /* 3. コース。 */
-  if (!u.track) return "track";
+  track: (u) => !u.track
+});
 
-  return null;
+export function nextStep(u = {}) {
+  return STEPS.find((s) => PENDING[s](u)) || null;
+}
+
+
+/* ---- 配信を止める段だけ ---------------------------------------------
+   nextStep は「次に訊くこと」を 1 つだけ返す。順番が name → birth → track
+   なので、生年月日に答えていない人は、コースが空でも "birth" が返る。
+
+   配信バッチはそこを読み違える。生年月日は配信を止めない段（止まるのは
+   運勢だけ）なので、バッチは name と track だけを見て素通りし、
+   その先で track=null のまま原稿を引きにいって落ちていた ──
+   毎朝その人だけ例外になり、cron は失敗で終わる。しかも本人には
+   何も届かないので、「今日は来ないな」としか見えない。
+
+   止める段だけを見る口を分ける。判定そのものは上の PENDING を共有
+   するので、段が増えても真実が 2 か所にはならない。 */
+export const BLOCKING_STEPS = Object.freeze(["name", "track"]);
+
+export function blockingStep(u = {}) {
+  return STEPS.find((s) => BLOCKING_STEPS.includes(s) && PENDING[s](u)) || null;
 }
 
 

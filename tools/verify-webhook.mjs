@@ -371,6 +371,65 @@ await acheck("未登録の利用者は採点しない", async () => {
   return "skipped";
 });
 
+/* ---- 答えた直後に、答えたのと同じ質問が戻らないこと ------------------
+   handlePostback は先に users を 1 度引き、それからボタンを処理する。
+   処理のあとで次の段を作るとき、その**引いておいた行**を使うと、
+   さっき書いたばかりの name_source が古い値で上書きされる ──
+   nextStep は「まだ名前を訊いていない」と読み、同じ質問をもう一度返す。
+   押しても押しても ① から動かない。
+
+   saju と progress は引き直していたので、生年月日とコースは進む。
+   名前だけが進まない、という形で出る。本物の LINE に押してみないと
+   分からない類いなので、ここで押しておく。
+
+   偽の接続は UPDATE を実際に反映する ── 反映しないと、直っているか
+   壊れているかをこの検査自身が見分けられない。 */
+await acheck("答えた段は、もう訊かない（次の段が返る）", async () => {
+  const st = {
+    user: { id: 7, line_user_id: "U_test", display_name: "たなか",
+            name_kanji: "田中", name_reading: "たなか", name_kr: "다나카",
+            name_source: null, status: "active" },
+    saju: { user_id: 7, birth_date: "1995-04-12", birth_time: "09:00:00", birth_confirmed: 0 },
+    progress: { user_id: 7, track: null, current_day: 0 }
+  };
+  const conn = {
+    calls: [],
+    async execute(sql, params = []) {
+      const s = sql.replace(/\s+/g, " ").trim();
+      this.calls.push({ sql: s, params });
+      if (/^UPDATE users SET name_source/i.test(s)) { st.user.name_source = params[0]; return [{ affectedRows: 1 }, []]; }
+      if (/^UPDATE saju_profiles SET birth_confirmed/i.test(s)) { st.saju.birth_confirmed = params[0]; return [{ affectedRows: 1 }, []]; }
+      if (/FROM users WHERE line_user_id/i.test(s) || /FROM users WHERE id/i.test(s)) return [[{ ...st.user }], []];
+      if (/FROM saju_profiles/i.test(s)) return [[{ ...st.saju }], []];
+      if (/FROM learning_progress/i.test(s)) return [[{ ...st.progress }], []];
+      if (/^(INSERT|UPDATE|DELETE)/i.test(s)) return [{ affectedRows: 1, insertId: 1 }, []];
+      return [[], []];
+    }
+  };
+
+  const sent = [];
+  const send = async (_t, m) => { sent.push(m); return {}; };
+
+  await handlePostback(conn, { source: { userId: "U_test" }, replyToken: "t1",
+    postback: { data: "action=name&use=web" } }, { send });
+  assert(st.user.name_source === "web", `書けていません: ${st.user.name_source}`);
+  assert(sent.length, "何も返していません");
+  assert(!/お名前の確認/.test(sent[0][0].text),
+    "答えたばかりの「お名前の確認」がもう一度返りました（引いておいた行で判定しています）");
+  assert(/生年月日の確認/.test(sent[0][0].text),
+    `次の段が生年月日ではありません: ${sent[0][0].text.split("\n")[0]}`);
+
+  /* 生年月日も同じ形で確かめる。こちらは元から進んでいたが、
+     users を引き直す作りに変えたので、壊していないことを見る。 */
+  await handlePostback(conn, { source: { userId: "U_test" }, replyToken: "t2",
+    postback: { data: "action=birth&ok=1" } }, { send });
+  assert(st.saju.birth_confirmed === 1, `書けていません: ${st.saju.birth_confirmed}`);
+  assert(/コースを選んでください/.test(sent[1][0].text),
+    `次の段がコースではありません: ${sent[1][0].text.split("\n")[0]}`);
+
+  return "名前 → 生年月日 → コース";
+});
+
 
 /* ================================================================== */
 head("[メッセージ]  文面で退会させない / ダミーの replyToken に返さない");

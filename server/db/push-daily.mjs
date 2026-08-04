@@ -61,6 +61,17 @@ const DATE  = value("date", jstDate());
 const LIMIT = Number(value("limit", 0)) || 0;
 const PAGE  = 200;
 
+/* 1 人だけを相手にする（本番の実動作検証・2026-08-04 指示書）。
+   これが付いているあいだ、全員のループは**一度も走らない** ──
+   絞り込みではなく別の道。絞り込み（listDeliverable を引いて
+   filter）にすると、フィルタの書き間違いが「全員へ送った」に
+   化ける。findDeliverable で 1 人ぶんだけ引く。
+
+   cron とはぶつからない ── 実送信すればその人の sentToday が
+   立つので、次の cron はその人を「既送」で飛ばす。他の人の
+   状態には触れない。 */
+const ONLY_USER = Number(value("user", 0)) || 0;
+
 /* 止めるときは、日を消費しない。
    .env の PUSH_DISABLED は原稿の入れ替えや障害対応のための非常停止で、
    止めているあいだに日だけ進んでいたら、直したあとに何日ぶんか
@@ -242,7 +253,7 @@ async function askOnboarding(conn, u, step, { send = pushMessage } = {}) {
    それは本物の LINE に送ってみても確かめられない ── 送る前に
    日が確保されているかどうかは、送る側から見えない。
    偽の send を渡して、呼ばれた時点の DB を覗く。 */
-export async function deliverOne(conn, u, { send = pushMessage, load = loadLines } = {}) {
+export async function deliverOne(conn, u, { send = pushMessage, load = loadLines, inspect = null } = {}) {
   const today = Number(u.current_day) || 0;
   const next  = today + 1;
 
@@ -413,6 +424,11 @@ export async function deliverOne(conn, u, { send = pushMessage, load = loadLines
     if (quiz) messages = [...messages, renderReviewQuiz(quiz)];
   }
 
+  /* 下見でも、組み上がった文面は見せられるようにする（--user の
+     実動作検証で「どのクイズが選ばれたか」を送らずに確かめる）。
+     stdout の検収であって応答の記録ではない ── 無保存(B)にはかからない。 */
+  if (inspect) inspect(messages, next);
+
   if (DRY || DISABLED) return `${DRY ? "予定" : "停止中"}:${next}日目`;
 
   /* 日を確保する。負けたら送らない。
@@ -476,6 +492,32 @@ async function main() {
   const pool = await getPool();
   const tally = new Map();
   const bump = (k) => tally.set(k.replace(/:\d+日目$/, ""), (tally.get(k.replace(/:\d+日目$/, "")) || 0) + 1);
+
+  /* ---- --user: 1 人だけの別の道 ------------------------------------
+     全員のループには入らない。下見（--dry-run）なら文面も並べる ──
+     「どのクイズが選ばれたか」を、誰にも送らずに目で確かめるため。 */
+  if (ONLY_USER) {
+    console.log(`★ --user=${ONLY_USER} ── この 1 人だけ。全員のループは走りません`);
+    const u = await users.findDeliverable(pool, ONLY_USER);
+    if (!u) {
+      console.log("  対象外です（active_track / 進みの器 / status を確認）");
+      await closePool();
+      return;
+    }
+    const inspect = (messages, next) => {
+      console.log(`  ${next} 日目として組んだ ${messages.length} 通:`);
+      for (const m of messages) {
+        console.log(`  ── ${m.text.split("\n")[0]}`);
+        for (const item of m.quickReply?.items ?? []) {
+          console.log(`       [${item.action.label}] data=${item.action.data}`);
+        }
+      }
+    };
+    const r = await deliverOne(pool, u, { inspect });
+    console.log(`  結果: ${r}`);
+    await closePool();
+    return;
+  }
 
   let offset = 0, seen = 0;
   for (;;) {

@@ -140,6 +140,39 @@ export async function advanceDay(conn, userId, track, fromDay) {
   return { claimed: r.affectedRows > 0, day: next };
 }
 
+/* ---- 進みの器の自己回復（docs/research-onboarding-gap.md 欠損B）-----
+   配信対象の SQL は learning_progress を INNER JOIN で結ぶ。行が
+   手で消される・障害で欠けると、その人は**エラーも無く**配信から
+   落ち、作り直す口は購入と体験開始にしか無かった ── 袋小路。
+
+   利用者の接点（webhook）で呼ぶ。コースが決まっていて、その
+   コースの持ち日数（course_entitlements）も在るのに、進みの行だけ
+   無い ── その組み合わせは「消えた」以外に説明が無いので、0 日目の
+   器を置き直す。
+
+   ★ days_used は 0 から。消えた行の使用済み日数は取り戻せない ──
+   残り = entitled - used なので、行を消した時点で受け取った日数が
+   復活している。ここでは直せない種類の損で、防ぐ側は
+   「learning_progress の行を手で消さない」（STATUS §8）。
+
+   entitlement が無い人には作らない。作っても配信対象の JOIN
+   （course_entitlements も INNER）を通れず、意味の無い行が残るだけ。 */
+export async function healProgress(conn, user) {
+  const track = user?.active_track;
+  if (!user?.id || !isTrack(track)) return false;
+
+  const p = await one(conn,
+    `SELECT id FROM learning_progress WHERE user_id = ? AND track = ?`, [user.id, track]);
+  if (p) return false;
+
+  const e = await one(conn,
+    `SELECT id FROM course_entitlements WHERE user_id = ? AND track = ?`, [user.id, track]);
+  if (!e) return false;
+
+  await ensureProgress(conn, user.id, track);
+  return true;
+}
+
 /* ---- 「1 日目からやり直す」------------------------------------------
    買い直した人が選べる（handlers/checkout.mjs の resume）。
 

@@ -37,7 +37,7 @@
 import { users, learning, billing, entitlements } from "../repo/index.mjs";
 import { replyMessage } from "../line.mjs";
 import { nextStep, messageForStep, askReading, confirmName, nameFixed,
-         birthRedo, serviceGuide } from "../onboarding.mjs";
+         onboardingDone, birthRedo, serviceGuide } from "../onboarding.mjs";
 import { kanaNameToHangul } from "../kana2hangul.mjs";
 import {
   salesOpen, notReady, askCourse, priceList, startCheckout, checkoutLink,
@@ -97,12 +97,14 @@ async function stateOf(conn, userId) {
   };
 }
 
-/* 答えたあとに続けて出す 1 通。もう訊くことが無ければ null。 */
+/* 答えたあとに続けて出す 1 通。次の段が無ければ**締めの 1 通** ──
+   null で黙ると、最後の答えにだけ無応答になる（欠損A、
+   docs/research-onboarding-gap.md）。 */
 async function followUp(conn, userId) {
   const st = await stateOf(conn, userId);
   if (!st) return null;
   const step = nextStep(st);
-  return step ? messageForStep(step, st) : null;
+  return step ? messageForStep(step, st) : onboardingDone(st);
 }
 
 /* 返信は失敗しても処理そのものは成立させる。ここで throw すると
@@ -127,6 +129,11 @@ export async function handlePostback(conn, event, { send = replyMessage } = {}) 
   const { action, params } = parsePostbackData(event?.postback?.data);
   const user = await users.findByLineUserId(conn, lineUserId);
   if (!user) return { skipped: "未登録の利用者です", lineUserId };
+
+  /* 進みの器が欠けていれば、触ってきたこの機会に置き直す
+     （repo/learning.mjs healProgress ── 欠けたままだと配信から
+     静かに落ち続ける）。失敗してもボタンの処理は続ける。 */
+  try { await learning.healProgress(conn, user); } catch { /* 本処理を止めない */ }
 
   const token = event?.replyToken;
 

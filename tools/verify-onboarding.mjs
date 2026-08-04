@@ -654,6 +654,95 @@ check("「別の名前で試す」で、前の人の名前が残らない", () =
 });
 
 
+/* ================================================================== */
+head("[部分状態]  手で消された・欠けた行があっても袋小路にならない"
+  + "（docs/research-onboarding-gap.md）");
+
+const { nextStep, blockingStep, onboardingDone } = await import("../server/lib/onboarding.mjs");
+const { healProgress } = await import("../server/lib/repo/learning.mjs");
+const { handlePostback } = await import("../server/lib/handlers/postback.mjs");
+
+check("部分状態 5 種で、次の質問が正しく導かれる", () => {
+  const CASES = [
+    /* [状態, 期待 nextStep] */
+    [{ name_source: null, name_kr: "하나코", display_name: "h", birth_date: "1990-01-01",
+       birth_confirmed: false, track: null }, "name",  "新規（連携直後）"],
+    [{ name_source: "web", name_kr: "하나코", display_name: "h", birth_date: "1990-01-01",
+       birth_confirmed: false, track: null }, "birth", "①だけ済み"],
+    [{ name_source: "web", name_kr: "하나코", display_name: "h", birth_date: "1990-01-01",
+       birth_confirmed: true, track: "beginner" }, null, "全部済み（再連携の代表口座）"],
+    [{ name_source: "web", name_kr: "하나코", display_name: "h", birth_date: null,
+       birth_confirmed: false, track: "beginner" }, null, "saju 行が無い（部分削除）"],
+    [{ name_source: null, name_kr: null, display_name: "h", birth_date: null,
+       birth_confirmed: false, track: null }, null, "友だち追加だけ（訊く材料が無い）"]
+  ];
+  for (const [st, want, label] of CASES) {
+    const got = nextStep(st);
+    assert(got === want, `${label}: nextStep=${got}（${want} のはず）`);
+    /* どの部分状態でも throw しない ── 袋小路の別の形は例外で落ちること */
+    blockingStep(st);
+  }
+  return `${CASES.length} 状態`;
+});
+
+await acheck("最後の答えに締めの 1 通が返る（無応答で終わらない・欠損A）", async () => {
+  /* birth ok=1、他の段は済み → followUp は null ではなく締めを返す */
+  const row = [{ id: 7, line_user_id: "U", display_name: "h", name_kanji: null,
+    name_reading: "はなこ", name_kr: "하나코", name_source: "web",
+    status: "active", active_track: null }];
+  const conn = fakeConn({
+    "FROM users": row,
+    "FROM saju_profiles": [{ user_id: 7, birth_date: "1990-01-01", birth_time: null,
+      birth_confirmed: 1 }]
+  });
+  let sent = null;
+  const r = await handlePostback(conn,
+    { source: { userId: "U" }, replyToken: "rt", postback: { data: "action=birth&ok=1" } },
+    { send: async (_t, m) => { sent = m; return {}; } });
+  assert(r.ok === true, JSON.stringify(r));
+  assert(sent && sent.length === 1, "締めの 1 通がありません（最後の答えに無応答）");
+  assert(/準備が整いました/.test(sent[0].text), sent[0].text);
+  assert(/受講料/.test(sent[0].text), "コース未購入者に次の行動を示していません");
+  return "無応答の穴が閉じた";
+});
+
+check("締めの 1 通はコースの有無で分かれる", () => {
+  assert(/受講料/.test(onboardingDone({ track: null }).text), "未購入者に導線がありません");
+  assert(/明日の朝/.test(onboardingDone({ track: "beginner" }).text), "購入者に予告がありません");
+  return "未購入 → 導線 / 購入済 → 予告";
+});
+
+await acheck("進みの器の自己回復 ── 欠けていて持ち日数が在るときだけ作る", async () => {
+  const U = { id: 7, active_track: "beginner" };
+
+  /* 欠けている + entitlement 在り → 作る */
+  const heal = fakeConn({
+    "FROM learning_progress WHERE user_id": [],
+    "FROM course_entitlements": [{ id: 1 }],
+    "INSERT INTO learning_progress": { affectedRows: 1, insertId: 9 }
+  });
+  assert(await healProgress(heal, U) === true, "欠けているのに作りません");
+  assert(heal.calls.some((c) => /INSERT INTO learning_progress/i.test(c.sql)),
+    "INSERT が走っていません");
+
+  /* 行が在る → 触らない */
+  const ok = fakeConn({ "FROM learning_progress WHERE user_id": [{ id: 5 }] });
+  assert(await healProgress(ok, U) === false, "在るのに作り直しています");
+  assert(!ok.calls.some((c) => /INSERT/i.test(c.sql)), "余計な INSERT");
+
+  /* entitlement が無い → 作らない（配信対象になれない行を残さない） */
+  const noEnt = fakeConn({
+    "FROM learning_progress WHERE user_id": [],
+    "FROM course_entitlements": []
+  });
+  assert(await healProgress(noEnt, U) === false, "持ち日数が無いのに作りました");
+
+  /* コース未選択 → 何もしない */
+  assert(await healProgress(fakeConn(), { id: 7, active_track: null }) === false,
+    "コースが無いのに動きました");
+  return "作る 1 / 触らない 3";
+});
+
 console.log(`\n${failed ? "✗" : "✓"} ${passed + failed} 項目中 ${passed} 件成功`
   + (failed ? ` / ${failed} 件失敗` : ""));
 process.exit(failed ? 1 : 0);

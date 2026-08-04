@@ -16,14 +16,14 @@
 - 결제(선불 횟수권)는 **코드 완성, 의도적으로 잠겨 있음** — §3
 - 관문(자동 검증) **19종 전부 통과**
 
-**다음에 할 일은 두 가지입니다.**
+**다음에 할 일 세 가지.**
 
-1. **자동 배포를 활성화한다** — cPanel API 토큰을 만들어 GitHub Secrets 3개
-   (`CPANEL_HOST`/`CPANEL_USER`/`CPANEL_TOKEN`) 등록 → Actions 의 `deploy-server` 를
-   Run workflow ([docs/plan-deploy-auto.md](docs/plan-deploy-auto.md) §4).
-   첫 실행이 밀린 커밋(이름 교정·절목 퀴즈)을 배포하고, 화면의
-   「Deploy HEAD Commit 안 눌림」의 원인도 로그로 확정합니다 (§5)
-2. **§3의 값 3개를 정한다** — 그게 없으면 결제가 안 열립니다
+1. **배포 판정 확인** — 002 교정(`ceb2582`)과 온보딩 수정이 자동 배포로 나갔는지:
+   Actions 초록 + `restart.txt` 갱신 + `/health` → ok. 성공 후 **대표 계정으로
+   아무 버튼/메시지 1회** — 자기복구(healProgress)가 배신 대상 복귀를 실증합니다
+2. **plan-profile 의 전제 2건** — §4 답(gender 대운 반영 ①/②)과 privacy 문안 확정
+   ([docs/plan-profile.md](docs/plan-profile.md) 승인 대기)
+3. **§3의 값 3개를 정한다** — 그게 없으면 결제가 안 열립니다
 
 복습 퀴즈는 **라이브 검증까지 통과** (2026-08-05): 테스트 계정 1개로
 발신 판정·스킵 3케이스·실발송·정답/오답 즉답·미학습 차단·DB 쓰기 0을
@@ -241,7 +241,11 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 5. **의존은 `mysql2` 하나뿐입니다.** Stripe SDK 도 LINE SDK 도 넣지 않았습니다
 6. **폴리시(privacy.html)와 코드가 어긋난 적이 4번 있습니다**(GA4·Clarity·LINE·성별).
    저장하는 항목을 늘리면 반드시 제2항도 같은 커밋에서 고치십시오
-7. **`build-site.sh` 의 `PUBLIC` 배열에 없는 파일은 배포되지 않습니다.**
+7. **`learning_progress` 의 행을 손으로 지우지 마십시오.** `days_used` 가 같이
+   사라져 잔여일수가 복활하고(잔여 = entitled - used), 배신 대상 JOIN 에서
+   무음 탈락합니다. 접점 자기복구(healProgress)가 행은 되살리지만
+   **days_used 는 되돌릴 수 없습니다** (docs/research-onboarding-gap.md)
+8. **`build-site.sh` 의 `PUBLIC` 배열에 없는 파일은 배포되지 않습니다.**
    페이지를 추가하면 `PUBLIC` / `set-site-url.py` 의 `TARGETS` / `sitemap.xml` /
    `deploy.yml` 의 스모크 테스트 **4곳 전부**를 고쳐야 합니다
 

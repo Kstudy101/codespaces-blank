@@ -51,6 +51,10 @@ export async function handleMessage(conn, event) {
   const user = await users.findByLineUserId(conn, lineUserId);
   if (!user) return { skipped: "未登録の利用者です", lineUserId };
 
+  /* 進みの器が欠けていれば、触ってきたこの機会に置き直す
+     （repo/learning.mjs healProgress）。失敗しても返事は続ける。 */
+  try { await learning.healProgress(conn, user); } catch { /* 本処理を止めない */ }
+
   /* ---- ① で読み仮名を待っている人 ----------------------------------
      「LINE の名前で／べつの名前で」を選んで韓国語表記がまだ無い、が
      待っている印（name_source='line' かつ name_kr が空）。段の列は

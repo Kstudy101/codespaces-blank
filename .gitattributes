@@ -1,0 +1,20 @@
+# 作業ツリーの改行を LF に揃える。
+#
+# 検証スクリプトのいくつかは、ソースを正規表現で切り出してから中身を見る。
+# そこに \n が直に書いてある:
+#
+#   tools/verify-amulet.mjs:478      /<script>\n([\s\S]*?)\n<\/script>/
+#   tools/verify-onboarding.mjs:393  /export async function completeLink[\s\S]*?\n}\n/
+#
+# CRLF で取り出すと一致が null になり、Windows では 16 種のうち 2 種が
+# 「壊れている」ように落ちる。CI は ubuntu なので本番には出ないが、
+# 出ないぶん、手元で関門を先に回すことができない ── 一番回したい場所で
+# 回せない、という形の穴になる。
+#
+# 正規表現側を \r?\n にする手もあるが、そちらはファイル 2 つ・3 か所を
+# 直したうえ、新しい検証を書くたびに同じ注意が要る。原因の方を消す。
+* text=auto eol=lf
+
+# 画像は触らせない。text=auto の推測に任せると壊れうる。
+*.png binary
+*.db  binary

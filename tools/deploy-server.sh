@@ -92,14 +92,26 @@ fi
 
 # --- 送る -----------------------------------------------------------
 #
-# node_modules と .env は送らない。
+# --delete で送るので、向こうにしか無いものは必ず除外する。
 #   node_modules … 向こうは symlink。上書きすると Selector が壊れる
 #   .env         … 手元に無いし、あっても送るべきではない。向こうの
 #                  値は cPanel の Environment variables で持つ
+#   content      … 101 日ぶんの原稿。公開リポジトリに置いていないので
+#                  サーバーのここにしか無い。消すと配信が止まり、
+#                  手元から上げ直すまで戻らない
+#   stderr.log   … アプリが落ちた理由。調べたいのはたいてい配置の直前なので、
+#                  配置のたびに消していては一番要るものが残らない
+#   tmp / public … Passenger が使う。再起動の合図と文書ルートで、
+#                  消すとアプリが上がらなくなりうる
+#
+# 除外の並びは .cpanel.yml と揃えること。片方だけ足すと、どちらの経路で
+# 配ったかで結果が変わる ── しかも消えたことに気づくのは、配信が
+# 止まった翌朝になる。
 echo
 echo "── 送ります ──"
 rsync -az --delete --checksum \
   --exclude node_modules --exclude '.env' --exclude '.env.local' \
+  --exclude content --exclude tmp --exclude public --exclude 'stderr.log' \
   -e "ssh -i $KEY -p $PORT -o StrictHostKeyChecking=accept-new" \
   server/ "$CHEMI_USER@$CHEMI_HOST:$APP_ROOT/" \
   --out-format='  %n'

@@ -4,7 +4,7 @@
      node server/app.js          （cPanel も同じ入口を使う）
      PORT=3000 node server/app.js
 
-   経路は 3 つだけ。
+   経路は 4 つだけ。
 
      POST /line/webhook      LINE からの通知
      POST /line/link/start   ウェブの占い結果を預かる（P3）

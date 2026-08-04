@@ -25,10 +25,27 @@ import { users, billing, learning, pushlogs } from "../lib/repo/index.mjs";
 import { jstDate } from "../lib/jst.mjs";
 
 const TEST_LINE_ID = "U_smoke_test_kstudy101";
-/* 原稿は day_number が主キーなので、本物の 1〜101 とぶつからない
-   番号が要る…が、範囲は 1〜101 に縛ってある。101 番を使って
-   終わったら消す（P4 の入稿前なのでまだ空）。 */
-const TEST_DAY = 101;
+
+/* ---- 原稿の試験に使う 1 行 ------------------------------------------
+   原稿の主キーは (track, day_number)。migrations/001 が day_number 単独から
+   変えたので、消すときも両方で絞る。day_number だけで消すと、1 行しか
+   入れていないのに 3 コースぶんの 101 日目が消える。
+
+   101 日目は講座の最後の日なので、消えるとその人はそこで永久に止まる ──
+   push-daily は「原稿なし」で日を消費せずに降りるため、翌朝も翌々朝も
+   同じ所で止まったままになる。送信失敗のログは残るが、止まっているのは
+   買った人の最終日で、しかも「何も届かない」としか見えない。
+
+   さらに、入稿済みの日には最初から触らない（下の templatesOwned）。
+   .cpanel.yml は smoke を「本番でも流せる」として seed の**後ろ**に
+   置いている。その保証を実際に守るには、他人の原稿を消さないことまで要る。
+
+   前回の smoke が途中で死んで残した行は、こちらのもの。grammar_point が
+   決め打ちなので、それで自分の残骸かどうかを見分ける ── 見分けずに
+   「行があれば飛ばす」にすると、一度落ちたあとは永久に飛ばし続ける。 */
+const TEST_TRACK   = "intermediate";
+const TEST_DAY     = 101;
+const TEST_GRAMMAR = "-습니다 / -습니까?";
 
 let failed = 0, passed = 0;
 const check = (label, fn) => {
@@ -40,10 +57,22 @@ const head = (s) => console.log(`\n${s}`);
 
 const pool = await getPool();
 
+/* 原稿を触ってよいかは、最初の cleanup より**前**に決める。
+   あとで見ても、その cleanup が既に消してしまっている。 */
+const existingTemplate = await learning.getTemplate(pool, TEST_TRACK, TEST_DAY);
+const templatesOwned =
+  existingTemplate === null || existingTemplate.grammar_point === TEST_GRAMMAR;
+
 async function cleanup() {
   const u = await users.findByLineUserId(pool, TEST_LINE_ID);
   if (u) await users.deleteUser(pool, u.id);
-  await pool.execute("DELETE FROM content_templates WHERE day_number = ?", [TEST_DAY]);
+  /* 入稿済みの原稿には触らない。track と day_number の両方で絞るのは、
+     day_number だけだと 3 コースぶんが消えるため。 */
+  if (templatesOwned) {
+    await pool.execute(
+      "DELETE FROM content_templates WHERE track = ? AND day_number = ?",
+      [TEST_TRACK, TEST_DAY]);
+  }
 }
 
 await cleanup();
@@ -244,42 +273,49 @@ try {
   /* ---- 原稿 -------------------------------------------------------- */
   head("[原稿]");
 
-  await learning.upsertTemplate(pool, {
-    track: "intermediate",
-    dayNumber: TEST_DAY,
-    grammarPoint: "-습니다 / -습니까?",
-    grammarTipKr: "정중한 종결어미입니다。ていねいな文末。",
-    dialogueTemplate: [{ kr: "{NAME}입니다.", ja: "{NAME_JP}です。" }],
-    vocab3: [{ kr: "사랑", meaning: "愛" }, { kr: "하늘", meaning: "空" }, { kr: "바다", meaning: "海" }],
-    requiresNameSlot: true
-  });
-  const tpl = await learning.getTemplate(pool, "intermediate", TEST_DAY);
-  check("原稿が往復する。学期は day_number から決まる", () => {
-    assert(tpl.semester === 4, `${TEST_DAY} 日目が ${tpl.semester} 学期になりました`);
-    assert(tpl.track === "intermediate", `track=${tpl.track}`);
-    assert(tpl.requires_name_slot === true, `${typeof tpl.requires_name_slot}`);
-    assert(tpl.dialogue_template[0].kr === "{NAME}입니다.", JSON.stringify(tpl.dialogue_template));
-    assert(tpl.vocab_3.length === 3, JSON.stringify(tpl.vocab_3));
-    return "中級 / 4 学期 / 名前スロットあり / 単語 3 語";
-  });
+  if (!templatesOwned) {
+    /* 入稿済みの日を試験で上書きしない。ここを飛ばしても、同じ経路は
+       配置のたびに seed-content.mjs が実物で通っている。 */
+    console.log(`  · ${TEST_TRACK} の ${TEST_DAY} 日目に入稿済みの原稿があるため、`
+      + "この節は飛ばします（上書きも削除もしません）");
+  } else {
+    await learning.upsertTemplate(pool, {
+      track: TEST_TRACK,
+      dayNumber: TEST_DAY,
+      grammarPoint: TEST_GRAMMAR,
+      grammarTipKr: "정중한 종결어미입니다。ていねいな文末。",
+      dialogueTemplate: [{ kr: "{NAME}입니다.", ja: "{NAME_JP}です。" }],
+      vocab3: [{ kr: "사랑", meaning: "愛" }, { kr: "하늘", meaning: "空" }, { kr: "바다", meaning: "海" }],
+      requiresNameSlot: true
+    });
+    const tpl = await learning.getTemplate(pool, TEST_TRACK, TEST_DAY);
+    check("原稿が往復する。学期は day_number から決まる", () => {
+      assert(tpl.semester === 4, `${TEST_DAY} 日目が ${tpl.semester} 学期になりました`);
+      assert(tpl.track === TEST_TRACK, `track=${tpl.track}`);
+      assert(tpl.requires_name_slot === true, `${typeof tpl.requires_name_slot}`);
+      assert(tpl.dialogue_template[0].kr === "{NAME}입니다.", JSON.stringify(tpl.dialogue_template));
+      assert(tpl.vocab_3.length === 3, JSON.stringify(tpl.vocab_3));
+      return "中級 / 4 学期 / 名前スロットあり / 単語 3 語";
+    });
 
-  /* コースは 3 本の別の 101 日。同じ日番号でも別の行になる。
-     ここが 1 行に潰れると、中級を選んだ人に初級が届く。 */
-  const beginnerSame = await learning.getTemplate(pool, "beginner", TEST_DAY);
-  check("同じ日番号でも、コースが違えば別の原稿", () => {
-    assert(beginnerSame === null || beginnerSame.track === "beginner",
-      `beginner で引いたのに track=${beginnerSame && beginnerSame.track}`);
-    return beginnerSame ? "初級にも入稿あり（別行）" : "初級は未入稿（別行として空）";
-  });
+    /* コースは 3 本の別の 101 日。同じ日番号でも別の行になる。
+       ここが 1 行に潰れると、中級を選んだ人に初級が届く。 */
+    const beginnerSame = await learning.getTemplate(pool, "beginner", TEST_DAY);
+    check("同じ日番号でも、コースが違えば別の原稿", () => {
+      assert(beginnerSame === null || beginnerSame.track === "beginner",
+        `beginner で引いたのに track=${beginnerSame && beginnerSame.track}`);
+      return beginnerSame ? "初級にも入稿あり（別行）" : "初級は未入稿（別行として空）";
+    });
 
-  const missing = await learning.findMissingTemplateDays(pool);
-  check("欠けている日をコース別に数えられる", () => {
-    assert(!missing.intermediate.includes(TEST_DAY),
-      `${TEST_DAY} が中級で欠けている扱いです`);
-    assert(Array.isArray(missing.beginner) && Array.isArray(missing.advanced),
-      "コース別になっていません");
-    return learning.TRACKS.map((t) => `${t} 残り${missing[t].length}`).join(" / ");
-  });
+    const missing = await learning.findMissingTemplateDays(pool);
+    check("欠けている日をコース別に数えられる", () => {
+      assert(!missing[TEST_TRACK].includes(TEST_DAY),
+        `${TEST_DAY} が ${TEST_TRACK} で欠けている扱いです`);
+      assert(Array.isArray(missing.beginner) && Array.isArray(missing.advanced),
+        "コース別になっていません");
+      return learning.TRACKS.map((t) => `${t} 残り${missing[t].length}`).join(" / ");
+    });
+  }
 
   /* ---- 退会 -------------------------------------------------------- */
   head("[退会]  外部キーで一緒に消えるか ── privacy の約束になる所");

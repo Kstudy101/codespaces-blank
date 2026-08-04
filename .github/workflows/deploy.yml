@@ -10,9 +10,19 @@ on:
     paths-ignore:
       - 'README.md'
       - 'data/**'
-      - 'docs/**'   # 計画書などの内部文書。build-site.sh の PUBLIC に無く配信もされない
+      - 'docs/**'          # 計画書などの内部文書。build-site.sh の PUBLIC に無く配信もされない
+      - 'instruction.txt'  # 進め方の取り決め。配信物ではない
+      - 'CLAUDE.md'        # 同上
       # tools/ は除外しない。build-site.sh が dist の中身を決めるので、
       # ここを直したのにデプロイされない、という食い違いが起きる。
+      #
+      # server/ も除外しない。動くのは ChemiCloud で dist にも入らないので、
+      # 配るという意味では確かに無関係だが、server を見張る検証 7 種
+      # （server / webhook / onboarding / render / push / fortune-server /
+      # evening）がこのワークフローにしか無い。除外すると server/ の変更が
+      # 誰にも検査されなくなる ── 配置履歴が余分に増えることより、
+      # そちらの方がはるかに重い。
+      # 分けるなら、先に verify-server.yml を切り出してから。
   workflow_dispatch:
     inputs:
       dry_run:
@@ -507,8 +517,11 @@ jobs:
           echo "実ファイル"
           for p in /kanji.json /ogp.png /ads.txt /sitemap.xml /robots.txt; do check "$p" 200; done
 
+          # birth.js も見る。index / gilbang / amulet の 3 ページが読んでいるのに
+          # ここに無かった ── 配信されなくても 3 ページの生年月日入力が死ぬだけで、
+          # パイプラインは緑で終わる。
           echo "運勢が使う実ファイル（PUBLIC への追加漏れはここで出る）"
-          for p in /saju.js /fortune.js /study.js /omikuji.js /gilbang.js /amulet.js \
+          for p in /saju.js /fortune.js /study.js /omikuji.js /gilbang.js /amulet.js /birth.js \
                    /solar-terms.json /new-moons.json; do check "$p" 200; done
 
           echo "存在しないURLは 404（SPA フォールバックを入れていない確認）"

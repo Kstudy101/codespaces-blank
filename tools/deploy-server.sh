@@ -64,6 +64,14 @@ SSH=(ssh -i "$KEY" -p "$PORT" -o StrictHostKeyChecking=accept-new
 # symlink で見せる。素の npm install を叩くと実体の方を壊すので、
 # 必ず activate を通してから叩く。その activate の場所は版によって
 # 変わるので、決め打ちせず毎回探す。
+#
+# そして ci ではなく install。activate が決めるのはどの npm を使うかで、
+# ci が node_modules を消すこと自体は止まらない ── 消えるのは上の
+# symlink なので、1 度で仮想環境との繋がりが切れる。実際に切れて、
+# cPanel の画面が「node_modules という名前の実体を置くな」と言って
+# npm を拒み、画面からは直せなくなった（File Manager で消して Restart）。
+# lockfile どおりに入れたくなっても、ここで ci に戻さないこと。
+# 再現性が要るなら package.json の版を固定する方で解く。
 echo "── 接続先を調べます ──"
 INFO=$("${SSH[@]}" bash -lc "'
   echo \"home=\$HOME\"
@@ -127,7 +135,7 @@ echo "── 依存を入れて再起動します ──"
   set -e
   . \"$ACTIVATE\"
   cd \"\$HOME/$APP_ROOT\"
-  npm ci --omit=dev 2>&1 | tail -3
+  npm install --omit=dev 2>&1 | tail -3
   mkdir -p tmp && touch tmp/restart.txt
   echo \"  再起動を要求しました\"
 '"

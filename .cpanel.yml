@@ -65,7 +65,15 @@ deployment:
     # （辞書順だと 24 より 10 が後ろに来る）。
     - export ACT=$(ls -d "$HOME"/nodevenv/kstudy101-line/*/bin/activate 2>/dev/null | sort -V | tail -1)
     - test -n "$ACT" || (echo "NG - nodevenv がありません。Setup Node.js App を確認してください" && false)
-    - /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; echo "node $(node -v) / npm $(npm -v)"; npm ci --omit=dev'
+    #
+    # ci ではなく install。ci は node_modules を消して作り直すが、ここで
+    # 消えるのは Selector の symlink（実体は ~/nodevenv/ 側）で、1 度でも
+    # 走ると仮想環境との繋がりが切れる。切れると cPanel の画面が
+    # 「node_modules という名前の実体を置くな」と言って npm を拒むので、
+    # 画面からは直せない ── File Manager で消して Restart するまで戻らない。
+    # activate を通すだけでは防げない。activate が決めるのはどの npm を
+    # 使うかで、ci が消すこと自体は止まらない。
+    - /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; echo "node $(node -v) / npm $(npm -v)"; npm install --omit=dev'
 
     # --- 表を code に合わせる -----------------------------------
     # migrate は「エラーが出なかった」で終わらず、表が 8 つ本当にあるか・

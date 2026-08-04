@@ -131,7 +131,7 @@ ALTER TABLE subscriptions DROP COLUMN total_days_entitled;
 #      cPanel 화면 → Git Version Control → "Update from Remote"
 #                                        → "Deploy HEAD Commit"
 #      .cpanel.yml 이 자동으로:
-#        코드 배치 → 운세엔진 복사 → npm ci → migrate → (content 있으면) seed → 재기동
+#        코드 배치 → 운세엔진 복사 → npm install → migrate → (content 있으면) seed → 재기동
 
 # (나) 손으로 — 아래 자격정보가 그 기기에 있어야 합니다
 bash tools/deploy-server.sh --probe    # 먼저 향쪽을 조사만

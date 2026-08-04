@@ -507,9 +507,10 @@ await check("文面が未入稿なら、黙って落とす（レッスンは送�
 
   const conn = fakeConn(READY);
   let msgs = null;
-  await deliverOne(conn, WITH_SAJU, { send: async (_t, mm) => { msgs = mm; return {}; } });
-  assert(msgs && msgs.length >= 1, "レッスンまで止まりました");
-  return "レッスンは届く";
+  await deliverOne(conn, WITH_SAJU,
+    { send: async (_t, mm) => { msgs = mm; return {}; }, load: () => null });
+  assert(msgs && msgs.length === 2, `${msgs ? msgs.length : 0} 通でした（運勢が付いています）`);
+  return "レッスン 2 通だけ";
 });
 
 await check("運勢の読み込みが落ちても、レッスンは送る", async () => {
@@ -520,10 +521,13 @@ await check("運勢の読み込みが落ちても、レッスンは送る", asyn
 });
 
 await check("運勢は 3 通目（レッスンの後ろ）", async () => {
+  /* 文面は server/content/ にあり、公開リポジトリには無い。
+     既定の読み込みに任せると、手元では 3 通・CI では 2 通になる
+     ── 実際そうなって CI だけが落ちた。渡して固定する。 */
   const conn = fakeConn(READY);
   let msgs = null;
   await deliverOne(conn, WITH_SAJU,
-    { send: async (_t, m) => { msgs = m; return {}; } });
+    { send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES });
   assert(msgs.length === 3, `${msgs.length} 通でした`);
   assert(/日目/.test(msgs[0].text), `1 通目が本文ではありません: ${msgs[0].text.slice(0, 30)}`);
   assert(/총운/.test(msgs[2].text), `3 通目が運勢ではありません: ${msgs[2].text.slice(0, 30)}`);

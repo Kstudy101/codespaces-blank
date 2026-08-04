@@ -241,7 +241,7 @@ async function askOnboarding(conn, u, step, { send = pushMessage } = {}) {
    それは本物の LINE に送ってみても確かめられない ── 送る前に
    日が確保されているかどうかは、送る側から見えない。
    偽の send を渡して、呼ばれた時点の DB を覗く。 */
-export async function deliverOne(conn, u, { send = pushMessage } = {}) {
+export async function deliverOne(conn, u, { send = pushMessage, load = loadLines } = {}) {
   const today = Number(u.current_day) || 0;
   const next  = today + 1;
 
@@ -320,8 +320,14 @@ export async function deliverOne(conn, u, { send = pushMessage } = {}) {
   }
 
   /* 3 通目の運勢。組むのは送る前 ── ここで落ちても
-     レッスンは送れるようにしておく（fortuneSection は投げない）。 */
-  const fortune = fortuneSection(u, tpl);
+     レッスンは送れるようにしておく（fortuneSection は投げない）。
+
+     load を差し替えられるようにしてあるのは、文面が
+     server/content/ にあり、公開リポジトリには無いため。
+     既定のまま検査すると、手元（文面あり）では 3 通、CI（文面なし）
+     では 2 通になり、通る場所と通らない場所が生まれる。
+     実際そうなって CI だけが落ちた。 */
+  const fortune = fortuneSection(u, tpl, { load });
   if (fortune) messages = [...messages, fortune];
 
   if (DRY || DISABLED) return `${DRY ? "予定" : "停止中"}:${next}日目`;

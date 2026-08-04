@@ -197,8 +197,12 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | [docs/research-audit.md](docs/research-audit.md) | 전수 점검 결과 (2026-08-04) |
 | [docs/research-line-flow.md](docs/research-line-flow.md) | LINE 연동 요구사항별 실기 검증 |
 | [docs/plan-billing.md](docs/plan-billing.md) | 선불 횟수권 설계·구현 결과 |
+| [docs/plan-audit-fixes.md](docs/plan-audit-fixes.md) | 전수 점검에서 나온 것의 수정 결과 |
+| [docs/plan-fortune-content.md](docs/plan-fortune-content.md) | 운세 콘텐츠 확장 (사이트 쪽) |
 | [docs/plan-fortune-daily.md](docs/plan-fortune-daily.md) | 운세 배신 |
 | [docs/plan-p4-content.md](docs/plan-p4-content.md) | 원고 입고 |
+| [docs/plan-deploy-server.md](docs/plan-deploy-server.md) | 배신 서버 배포 절차와 결과 (2026-08-04) |
+| [docs/plan-deploy-hang.md](docs/plan-deploy-hang.md) | 배포 중 npm ci 사고의 경위와 수정 |
 | [docs/system-overview.txt](docs/system-overview.txt) | 시스템 전반 |
 
 ---

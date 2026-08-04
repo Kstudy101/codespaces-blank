@@ -4,6 +4,11 @@
 원본 지침은 `instruction.txt`에 있고, 이 문서는 그 중 **작업 중 항상 적용되는 부분**만 뽑은 것이다.
 작업 시작 전에 `instruction.txt`를 읽을 것.
 
+LLM 일반 행동 지침(가정 금지 / 단순하게 / 최소 변경 / 검증 가능한 목표)은 아래 문서를 함께 읽는다.
+충돌하면 **이 문서가 우선**한다.
+
+@CLAUDE-karpathy.md
+
 ## 협업 방식 — 리서치 → 계획 → 주석 → 기계적 구현 → 피드백
 
 1. **코드리서치** — 대상을 깊이 읽고 `docs/research*.md`에 상세 보고서 작성.
@@ -36,6 +41,7 @@
 |---|---|
 | **`STATUS.md`** | **현재 상태와 다음 작업. 세션을 이어받을 때 여기부터 읽을 것** |
 | `instruction.txt` | 협업 지침 원본 |
+| `CLAUDE-karpathy.md` | LLM 일반 행동 지침 4원칙. `CLAUDE.md`가 `@`로 불러온다 |
 | `docs/research*.md` | 리서치 보고서 |
 | `docs/plan-*.md` | 계획 문서. 작업 이력이자 의사결정 기록 |
 | `docs/system-overview.txt` | 시스템 전반 설명 |

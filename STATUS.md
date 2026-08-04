@@ -10,11 +10,15 @@
 ## 0. 30초 요약
 
 - 사이트(정적)는 **Xserver에서 가동 중** — https://www.kstudy101.jp/
-- LINE 배신 서버(`server/`)는 **코드는 완성, 아직 배포 안 함**
-- 결제(선불 횟수권)는 **코드 완성, 의도적으로 잠겨 있음** — 아래 §3
+  `main` 에 push 하면 GitHub Actions 가 자동 배포합니다 (`07a78fd` 까지 반영)
+- LINE 배신 서버(`server/`)는 **코드는 완성, 아직 배포 안 함** — §5
+- 결제(선불 횟수권)는 **코드 완성, 의도적으로 잠겨 있음** — §3
 - 관문(자동 검증) **17종 전부 통과**
 
-**다음에 할 일은 §3의 값 3개를 정하는 것입니다. 그게 없으면 팔 수 없습니다.**
+**다음에 할 일은 두 가지입니다.**
+
+1. **§3의 값 3개를 정한다** — 그게 없으면 결제가 안 열립니다
+2. **`server/` 를 배포한다** — §5. 되돌릴 수 없는 SQL 이 1줄 있으니 DB 백업 먼저
 
 ---
 
@@ -123,14 +127,31 @@ ALTER TABLE subscriptions DROP COLUMN total_days_entitled;
 배포 경로는 두 가지:
 
 ```bash
-# (가) cPanel Git Version Control — .cpanel.yml 이 자동으로:
-#      코드 배치 → 운세엔진 복사 → npm ci → migrate → seed → 재기동
-#      cPanel 화면에서 "Update from Remote" → "Deploy HEAD Commit"
+# (가) cPanel Git Version Control — 자격정보가 필요 없습니다 (브라우저만)
+#      cPanel 화면 → Git Version Control → "Update from Remote"
+#                                        → "Deploy HEAD Commit"
+#      .cpanel.yml 이 자동으로:
+#        코드 배치 → 운세엔진 복사 → npm ci → migrate → (content 있으면) seed → 재기동
 
-# (나) 손으로
+# (나) 손으로 — 아래 자격정보가 그 기기에 있어야 합니다
 bash tools/deploy-server.sh --probe    # 먼저 향쪽을 조사만
 bash tools/deploy-server.sh            # 보내고 재기동
 ```
+
+**(나)에 필요한 것 — 저장소에 없습니다. 기기마다 따로 놓아야 합니다.**
+
+| 위치 | 내용 |
+|---|---|
+| `~/.config/kstudy101/chemicloud.conf` | `CHEMI_HOST` / `CHEMI_USER` / `CHEMI_PORT` |
+| `~/.ssh/chemicloud` | SSH 비밀키 (`chmod 600`) |
+| `~/.config/kstudy101/cpanel.token` | cPanel API 토큰 (`tools/cpanel.sh` 용) |
+
+> ChemiCloud는 SSH 포트를 IP 단위로 막습니다. 새 기기에서 (나)가 안 되면
+> **(가)를 쓰십시오** — 브라우저만 있으면 되고, 실행되는 내용은 같습니다.
+
+**본번 DB 접속정보는 저장소에도 `.env`에도 없습니다.**
+cPanel → Setup Node.js App → Environment variables 가 유일한 출처입니다
+(`db/with-env.mjs` 가 거기서 읽어옵니다).
 
 두 경로 모두 **`content/` `.env` `tmp` `public` `stderr.log` 를 지키도록** 되어 있습니다.
 `server/content/`(101일 원고)는 **저장소에 없고 서버 위에만** 있으므로,
@@ -201,7 +222,30 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 
 | 커밋 | 내용 |
 |---|---|
+| `07a78fd` | STATUS.md(이 파일) 도입 + 리팩터링이 남긴 미사용 import 정리 |
 | `23ec595` | 선불 횟수권 — 코스별 일수·Stripe·리치메뉴·이탈 장부·수료. 관문 `verify-billing` 신설 |
 | `8325068` | LINE 연동 버그 2건 수정 — 답한 질문이 반복되는 것 / 생년월일 건너뛰면 배치가 매일 죽는 것 |
 | `ce2f176` | 배포 경로가 서버에만 있는 원고를 지우던 것 수정 + 성별 폴리시 문구 |
 | `74879e1` | `instruction.txt` / `CLAUDE.md` 도입 |
+
+### 9.1 마지막 배포 (2026-08-04)
+
+`07a78fd` 를 `main` 에 push → GitHub Actions 성공.
+
+```
+관문 17종        전부 success
+Build dist       25 파일
+Guard destination  전송처 확인 (WordPress 등이 없는지)
+Deploy (rsync)   Xserver
+Smoke test       success
+```
+
+라이브 확인:
+
+```
+https://www.kstudy101.jp/privacy   새 문구(성별「未回答」) 반영 확인
+/ /privacy /tips /amulet /gilbang /omikuji /words /contact  전부 200
+/birth.js /saju.js                                          전부 200
+```
+
+**이 배포에 `server/` 는 포함되지 않습니다.** 사이트만입니다(§1).

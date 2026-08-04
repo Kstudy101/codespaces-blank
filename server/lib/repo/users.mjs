@@ -13,7 +13,7 @@ import { one, all, run, insertNew, fromJson, toJson, nn } from "./util.mjs";
 import { jstDateTime } from "../jst.mjs";
 
 const COLS = `id, line_user_id, display_name, name_kanji, name_reading,
-              name_kr, followed_at, status, created_at, updated_at`;
+              name_kr, name_source, followed_at, status, created_at, updated_at`;
 
 export async function findById(conn, id) {
   return one(conn, `SELECT ${COLS} FROM users WHERE id = ?`, [id]);
@@ -73,6 +73,26 @@ export async function updateName(conn, id, { nameKanji, nameReading, nameKr }) {
   return r.affectedRows > 0;
 }
 
+/* ---- どちらの名前で呼ぶか ------------------------------------------
+   この講座は名前で進むので、どの名前を使うかが中身そのものを決める。
+   ウェブの診断は「試しに入れてみる」場所でもあり、そこで入れた名前が
+   本人の呼ばれたい名前とはかぎらない ── 偽名のまま 101 日呼ばれると、
+   個人化した教材であることの意味が無くなる。
+
+   line を選んだ人には name_kr が無い。LINE の表示名は日本語か英字で、
+   ハングル表記はこちらでは作れない（ウェブの hanja_db が要る）。
+   なので line を選ぶと「名前を使う日」は名前案内に切り替わる ──
+   render.mjs が name_kr の有無だけを見る作りなので、分岐は増えない。 */
+const NAME_SOURCES = ["web", "line"];
+
+export async function setNameSource(conn, id, source) {
+  if (!NAME_SOURCES.includes(source)) {
+    throw new Error(`未知の name_source: ${source}（${NAME_SOURCES.join(" / ")} のどれか）`);
+  }
+  const r = await run(conn, `UPDATE users SET name_source = ? WHERE id = ?`, [source, id]);
+  return r.affectedRows > 0;
+}
+
 const STATUSES = ["trial", "active", "expired", "unfollowed", "completed"];
 
 export async function setStatus(conn, id, status) {
@@ -119,13 +139,22 @@ function int(v, fallback) {
 
    name_reading（ふりがな）も取る。日本語の行に出すのはこちらで、
    name_kanji ではない。取っていなかったので、バッチが漢字を
-   ふりがなとして渡していた。 */
+   ふりがなとして渡していた。
+
+   オンボーディングの 3 つ（name_source / birth_confirmed / track）も
+   ここで取る。どれも「まだ答えていない人には送らない」の判断に使い、
+   1 人ずつ引き直すと人数ぶんの往復になる。
+
+   birth_time も取る。運勢は生まれた時刻で時柱が変わるので、
+   これが抜けていると全員が同じ時柱で占われる。 */
 export async function listDeliverable(conn, { limit = 500, offset = 0 } = {}) {
   return all(conn,
-    `SELECT u.id, u.line_user_id, u.name_kanji, u.name_reading, u.name_kr, u.status,
+    `SELECT u.id, u.line_user_id, u.display_name,
+            u.name_kanji, u.name_reading, u.name_kr, u.name_source, u.status,
             s.total_days_entitled, s.trial_end, s.payment_status,
-            p.current_day, p.current_semester,
-            j.ohaeng_main, j.raw_result_json, j.birth_date, j.lucky_hour_display
+            p.track, p.current_day, p.current_semester,
+            j.ohaeng_main, j.raw_result_json, j.birth_date, j.birth_time,
+            j.birth_confirmed, j.lucky_hour_display
        FROM users u
        JOIN subscriptions     s ON s.user_id = u.id
        JOIN learning_progress p ON p.user_id = u.id
@@ -133,7 +162,13 @@ export async function listDeliverable(conn, { limit = 500, offset = 0 } = {}) {
       WHERE u.status IN ('trial', 'active')
       ORDER BY u.id
       LIMIT ${int(limit, 500)} OFFSET ${int(offset, 0)}`)
-    .then((rows) => rows.map((r) => ({ ...r, raw_result_json: fromJson(r.raw_result_json) })));
+    .then((rows) => rows.map((r) => ({
+      ...r,
+      raw_result_json: fromJson(r.raw_result_json),
+      /* BOOLEAN は TINYINT(1) で返る。0 を falsy として使うのは
+         効いてはいるが、意図してそう書いたのかが読めなくなる。 */
+      birth_confirmed: !!r.birth_confirmed
+    })));
 }
 
 /* 退会。外部キーが CASCADE なので、四柱・購入・進捗・ログも一緒に消える。
@@ -150,11 +185,27 @@ export async function deleteUser(conn, id) {
 
 export async function getSajuProfile(conn, userId) {
   const row = await one(conn,
-    `SELECT id, user_id, birth_date, birth_time, gender, ohaeng_main,
+    `SELECT id, user_id, birth_date, birth_time, birth_confirmed, gender, ohaeng_main,
             lucky_hour_display, raw_result_json
        FROM saju_profiles WHERE user_id = ?`, [userId]);
   if (!row) return null;
-  return { ...row, raw_result_json: fromJson(row.raw_result_json) };
+  return {
+    ...row,
+    raw_result_json: fromJson(row.raw_result_json),
+    birth_confirmed: !!row.birth_confirmed
+  };
+}
+
+/* 生年月日を本人のものとして確かめた、を記録する。
+   運勢はこれが立っている人にだけ付く ── ウェブの診断は
+   「試しに入れてみる」場所でもあるので、確かめないまま 101 日ぶんの
+   運勢を出すと、全部が別人のものになる。しかも数字は出るので、
+   受け取った側からは間違いだと分からない。 */
+export async function setBirthConfirmed(conn, userId, confirmed = true) {
+  const r = await run(conn,
+    `UPDATE saju_profiles SET birth_confirmed = ? WHERE user_id = ?`,
+    [confirmed ? 1 : 0, userId]);
+  return r.affectedRows > 0;
 }
 
 /* 1 人 1 枚（user_id が UNIQUE）。LINE Login のコールバックが
@@ -168,6 +219,15 @@ export async function upsertSajuProfile(conn, userId, {
        (user_id, birth_date, birth_time, gender, ohaeng_main, raw_result_json)
      VALUES (?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
+       /* 生年月日が変わったら、確認済みを外す。
+          「本当の誕生日で入れ直す」を選んだ人はここを通るので、
+          外さないと入れ直した値が確認済みのまま通ってしまう。
+
+          この 1 行を birth_date の代入より**前**に置くこと。MySQL は
+          左から順に評価するので、ここでの birth_date はまだ古い値。
+          下に置くと新しい値どうしを比べることになり、常に一致して
+          確認済みが落ちない。<=> は NULL 同士も等しいと見る。 */
+       birth_confirmed = IF(birth_date <=> VALUES(birth_date), birth_confirmed, 0),
        birth_date      = VALUES(birth_date),
        birth_time      = VALUES(birth_time),
        gender          = VALUES(gender),

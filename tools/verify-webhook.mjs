@@ -346,7 +346,10 @@ await acheck("正答が未入稿なら「不正解」にせず pending で返す
   const conn = fakeConn({
     "FROM users": USER_ROW,
     "FROM quiz_checkpoints": [{ day_number: 30 }],
-    "FROM content_templates": [{ day_number: 30, semester: 1 }]
+    /* コースが決まっていないと原稿を引けない（引く先が決まらない）。
+       採点はその人が受け取った原稿から正答を取るので、ここが要る。 */
+    "FROM learning_progress": [{ user_id: 1, track: "beginner", current_day: 30 }],
+    "FROM content_templates": [{ day_number: 30, track: "beginner", semester: 1 }]
   });
   const r = await handlePostback(conn, {
     source: { userId: "U_test" },
@@ -435,11 +438,52 @@ await acheck("名前が無い人には、診断への案内を返す", async () 
   return "サイトへ案内";
 });
 
-await acheck("名前がある人には返さない（サイトから来た人）", async () => {
+await acheck("名前がある人には、講座の案内と次に訊くことを返す", async () => {
+  /* 以前はここで「何も返さない」ことを確かめていた。名前があるなら
+     案内は済んでいるはず、という前提だったが、実際には**サイトで
+     連携しただけの人**がここに来る ── その人にとって LINE 側は
+     ずっと無言で、最初のメッセージが翌朝の「1 日目」だった。
+     何に登録したのか分からないまま本文が始まる。
+
+     いまは案内 1 通と、始める前に決まっていないこと 1 通を返す。 */
   const { r, sent } = await follow(NAMED);
-  assert(sent === null, `送ってしまいました: ${JSON.stringify(sent)}`);
-  assert(r.welcomed === false, JSON.stringify(r));
-  return "重ねて案内しない";
+  assert(sent && sent.length === 2, `返した通数: ${sent ? sent.length : 0}`);
+
+  const guide = sent[0].text;
+  assert(/名前/.test(guide), "名前で進む講座であることに触れていません");
+  assert(/初級|中級|上級/.test(guide), "コースの説明がありません");
+  assert(/7時/.test(guide) && /6時/.test(guide), "朝夕の時刻が書かれていません");
+
+  /* 2 通目は「次に訊くこと」。この人はコース未選択なので、その質問。 */
+  const ask = sent[1];
+  assert(/コース/.test(ask.text), `2 通目がコースの質問ではありません: ${ask.text.slice(0, 40)}`);
+  assert(ask.quickReply && ask.quickReply.items.length === 3,
+    "3 つのコースのボタンが付いていません");
+  for (const t of ["beginner", "intermediate", "advanced"]) {
+    assert(ask.quickReply.items.some((i) => i.action.data === `action=track&pick=${t}`),
+      `${t} のボタンがありません`);
+  }
+  assert(r.welcomed === true, JSON.stringify(r));
+  return "案内 + コース選択";
+});
+
+await acheck("コースが決まっている人には、もう訊かない", async () => {
+  const conn = fakeConn({
+    "FROM users": NAMED,
+    "FROM learning_progress": [{ user_id: 8, track: "beginner", current_day: 12 }]
+  });
+  const { handleFollow } = await import("../server/lib/handlers/follow.mjs");
+  let sent = null;
+  await handleFollow(conn,
+    { source: { userId: "U_old" }, replyToken: "t" },
+    { reply: async (_t, m) => { sent = m; return {}; },
+      profile: async () => ({ displayName: "テスト" }) });
+
+  /* 案内だけ。ブロック→再追加のたびにコースを訊き直すと、
+     12 日目まで来た人に「①から始めます」と言うことになる。 */
+  assert(sent && sent.length === 1, `返した通数: ${sent ? sent.length : 0}`);
+  assert(!sent[0].quickReply, "決まっているのにボタンを出しました");
+  return "案内 1 通だけ";
 });
 
 await acheck("返信できなくても、友だち追加は成立する", async () => {

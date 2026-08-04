@@ -4,7 +4,20 @@
      node db/seed-content.mjs                     content/ 全部
      node db/seed-content.mjs content/semester-1.json
      node db/seed-content.mjs --check             入れずに検査だけ
+     node db/seed-content.mjs --track=intermediate  コースを指定して入れる
      node db/with-env.mjs db/seed-content.mjs     ChemiCloud ではこちら
+
+   【どのコースに入るか】
+   コースは 3 本あり（初級・中級・上級）、それぞれ別の 101 日。
+   どこへ入れるかは次の順で決まる。
+
+     1  --track=…            全ファイルに効く
+     2  ファイルの "track"   そのファイルだけ
+     3  beginner             どちらも無いとき
+
+   3 を既定にしてあるのは、migrations/001 が既存の 50 行に入れる値と
+   同じだから ── 揃えておかないと、書いた人が同じつもりで流した
+   ものが別のコースに入る。どこへ入れたかは 1 ファイルずつ表示する。
 
    SQL の INSERT を手で書かない。原稿は人が何度も直すもので、
    直すたびに SQL を書き換えるのは間違えやすい。JSON に置いて、
@@ -33,8 +46,24 @@ const argv  = process.argv.slice(2);
 const CHECK = argv.includes("--check");
 const files = argv.filter((a) => !a.startsWith("--"));
 
+const trackArg = (argv.find((a) => a.startsWith("--track=")) || "").slice(8) || null;
+if (trackArg && !learning.isTrack(trackArg)) {
+  console.error(`✗ --track は ${learning.TRACKS.join(" / ")} のどれかです: ${trackArg}`);
+  process.exit(1);
+}
+
 /* ---- 原稿を読む --------------------------------------------------- */
 function load() {
+  /* 明示的に渡されたか、content/ を漁ったか。漁ったときだけ
+     「原稿ではない JSON」を黙って飛ばす ── content/ には運勢の
+     文面（fortune-lines.json）も置いてあり、これは 101 日の原稿では
+     ない。名前で決め打ちにしないのは、置くものが増えるたびに
+     ここへ書き足すことになるため。形で見る。
+
+     渡されたものは飛ばさない。指定して入らなかったのに
+     成功と言われるのが、いちばん困る。 */
+  const scanned = !files.length;
+
   let list = files.map((f) => path.resolve(f));
   if (!list.length) {
     if (!existsSync(CONTENT_DIR)) {
@@ -58,11 +87,23 @@ function load() {
     }
     const got = Array.isArray(parsed) ? parsed : parsed.days;
     if (!Array.isArray(got)) {
+      if (scanned) { console.log(`  ${path.basename(f)} — 原稿ではないので飛ばします`); continue; }
       console.error(`✗ ${path.basename(f)}: days が配列ではありません`);
       process.exit(1);
     }
-    console.log(`  ${path.basename(f)} — ${got.length} 日ぶん`);
-    days.push(...got);
+
+    /* コースは --track > ファイルの track > beginner。
+       ファイルに書いてあるのに読めない値なら止める ── 既定へ
+       落とすと、中級のつもりで書いたものが初級を上書きする。 */
+    const fileTrack = Array.isArray(parsed) ? null : parsed.track || null;
+    if (fileTrack && !learning.isTrack(fileTrack)) {
+      console.error(`✗ ${path.basename(f)}: track が読めません: ${fileTrack}`);
+      process.exit(1);
+    }
+    const track = trackArg || fileTrack || "beginner";
+
+    console.log(`  ${path.basename(f)} — ${got.length} 日ぶん → ${track}`);
+    days.push(...got.map((d) => ({ ...d, __track: track })));
   }
   return days;
 }
@@ -87,11 +128,13 @@ const pool = await getPool();
 let done = 0;
 for (const d of days) {
   await learning.upsertTemplate(pool, {
+    track:            d.__track,
     dayNumber:        d.day_number,
     grammarPoint:     d.grammar_point,
     grammarTipKr:     d.grammar_tip_kr,
     dialogueTemplate: d.dialogue_template,
     vocab3:           d.vocab_3,
+    fortuneBridge:    d.fortune_bridge ?? null,
     /* semester は渡さない。upsertTemplate が day_number から決める ──
        原稿にも書くと、学期の切れ目が 2 か所に生まれる。 */
     requiresNameSlot: !!d.requires_name_slot
@@ -100,20 +143,24 @@ for (const d of days) {
 }
 console.log(`\n✓ ${done} 日ぶん入れました`);
 
-/* ---- 残りを数える ------------------------------------------------- */
+/* ---- 残りを数える -------------------------------------------------
+   コース別に出す。合計で数えると、初級 101 日だけ揃った状態が
+   「303 日中 101 日」に見えて、中級を選んだ人には 1 日目すら
+   無いことが読み取れない。 */
 const missing = await learning.findMissingTemplateDays(pool);
-if (!missing.length) {
-  console.log("  101 日ぶん、すべて揃っています");
-} else {
+for (const track of learning.TRACKS) {
+  const days = missing[track];
+  if (!days.length) { console.log(`  ${track}: 101 日ぶん、すべて揃っています`); continue; }
+
   /* 連番はまとめて出す。「31,32,33,…,101」を全部並べても読めない。 */
   const ranges = [];
-  for (const n of missing) {
+  for (const n of days) {
     const last = ranges[ranges.length - 1];
     if (last && last[1] === n - 1) last[1] = n;
     else ranges.push([n, n]);
   }
   const shown = ranges.map(([a, b]) => (a === b ? `${a}` : `${a}〜${b}`)).join(", ");
-  console.log(`  未入稿 ${missing.length} 日: ${shown}`);
+  console.log(`  ${track}: 未入稿 ${days.length} 日 — ${shown}`);
 }
 
 await closePool();

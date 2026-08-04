@@ -20,7 +20,7 @@
    どれも 1 日ぶんを見ている限りは気づける。101 日を通しで
    見るのが難しいだけなので、機械に数えさせる。
    ================================================================== */
-import { SLOTS, findMisplacedSlot, renderDay } from "./render.mjs";
+import { SLOTS, findMisplacedSlot, renderDay, renderReview } from "./render.mjs";
 
 const TOTAL_DAYS = 101;
 
@@ -50,8 +50,15 @@ export function checkDay(d, seen = new Set()) {
   if (!Number.isInteger(day) || day < 1 || day > TOTAL_DAYS) {
     return [`day_number が 1〜${TOTAL_DAYS} ではありません: ${JSON.stringify(d?.day_number)}`];
   }
-  if (seen.has(day)) at(`${day} 日目が 2 回出てきます`);
-  seen.add(day);
+
+  /* 重複はコースの中で見る。コースは 3 本の別の 101 日なので、
+     初級 1 日目と中級 1 日目が両方あるのは正しい ── 日番号だけで
+     数えると、2 コースを一度に入稿したときに全日が「2 回出てきます」
+     になって、1 件も入らなくなる。 */
+  const track = d.__track || "beginner";
+  const key = `${track}:${day}`;
+  if (seen.has(key)) at(`${track} の ${day} 日目が 2 回出てきます`);
+  seen.add(key);
 
   if (!d.grammar_point) at("grammar_point がありません");
   if (!d.grammar_tip_kr) at("grammar_tip_kr がありません");
@@ -114,27 +121,49 @@ export function checkDay(d, seen = new Set()) {
     at("名前を使っていないのに requires_name_slot が true です");
   }
 
-  /* --- 実際に組み立ててみる --- */
-  for (const probe of PROBES) {
-    let msgs;
-    try {
-      msgs = renderDay(d, probe);
-    } catch (e) {
-      at(`${probe.name_kr} で組み立てに失敗: ${e.message}`);
-      continue;
+  /* --- 運勢に添える一言（任意） ---
+     無くてよい。あるなら kr が要る（ja は訳なので任意）。
+     ここに差し込み口を許さないのは、運勢の文は名前を主語に
+     しないため ── 許すと「다나카는 재물운이…」のような、
+     占いの文としては不自然な形が入りうる。 */
+  const fb = d.fortune_bridge;
+  if (fb !== undefined && fb !== null) {
+    if (typeof fb !== "object" || Array.isArray(fb)) {
+      at("fortune_bridge は {kr, ja} の形にしてください");
+    } else {
+      if (!fb.kr) at("fortune_bridge に kr がありません");
+      if (fb.kr && ANY_SLOT.test(fb.kr)) at("fortune_bridge に差し込み口は使えません");
+      ANY_SLOT.lastIndex = 0;
+      if (fb.kr && ODD_CHAR.test(fb.kr)) at("fortune_bridge に見慣れない文字が混ざっています");
     }
-    if (!msgs) { at(`${probe.name_kr} で組み立てられませんでした`); continue; }
+  }
 
-    const kr = probe.name_kr;
-    for (const m of msgs) {
-      if (m.text.includes(kr + kr)) at(`${kr} で名前が二重に出ます`);
-      if (/\{[A-Z_]+\}/.test(m.text)) {
-        at(`${kr} で差し込み口が残っています: ${m.text.match(/\{[A-Z_]+\}/)[0]}`);
+  /* --- 実際に組み立ててみる ---
+     朝（renderDay）と夕方（renderReview）の両方を通す。夕方だけで
+     落ちる原稿がありうる ── 復習は会話から 1 文だけ抜き出すので、
+     その 1 文にだけ問題があると朝は通って夕方で崩れる。 */
+  for (const probe of PROBES) {
+    for (const [label, fn] of [["朝", renderDay], ["夕", renderReview]]) {
+      let msgs;
+      try {
+        msgs = fn(d, probe);
+      } catch (e) {
+        at(`${probe.name_kr} の${label}で組み立てに失敗: ${e.message}`);
+        continue;
+      }
+      if (!msgs) { at(`${probe.name_kr} の${label}で組み立てられませんでした`); continue; }
+
+      const kr = probe.name_kr;
+      for (const m of msgs) {
+        if (m.text.includes(kr + kr)) at(`${kr} の${label}で名前が二重に出ます`);
+        if (/\{[A-Z_]+\}/.test(m.text)) {
+          at(`${kr} の${label}で差し込み口が残っています: ${m.text.match(/\{[A-Z_]+\}/)[0]}`);
+        }
       }
     }
   }
 
-  return bad.map((m) => `${day}日目: ${m}`);
+  return bad.map((m) => `${track} ${day}日目: ${m}`);
 }
 
 function unknownSlots(text) {
@@ -147,25 +176,33 @@ function unknownSlots(text) {
 
 /* まとめて見る。日の抜けも数える ── 101 日を売る以上、
    「買ったのに 87 日目が来ない」は起きてはいけない。 */
-export function checkAll(days, { expect = null } = {}) {
+export function checkAll(days, { expect = null, track = null } = {}) {
   const seen = new Set();
   const problems = [];
   for (const d of days) problems.push(...checkDay(d, seen));
 
   if (expect) {
+    /* 抜けを見るのは 1 コースぶんのとき。track を渡さないと、
+       どのコースの何日目を期待しているのかが決まらない。 */
+    const t = track || "beginner";
     const missing = [];
-    for (let n = expect.from; n <= expect.to; n++) if (!seen.has(n)) missing.push(n);
-    if (missing.length) problems.push(`抜けている日: ${missing.join(", ")}`);
+    for (let n = expect.from; n <= expect.to; n++) if (!seen.has(`${t}:${n}`)) missing.push(n);
+    if (missing.length) problems.push(`${t} で抜けている日: ${missing.join(", ")}`);
   }
 
   /* 同じ文法が二度出ていないか。気づかずに重ねると、
-     101 日ぶんに見えて中身が減る。 */
+     101 日ぶんに見えて中身が減る。
+
+     コースごとに見る。初級の「-입니다」と中級の「-입니다」は
+     別の講座の別の日なので、重なっていても間違いではない。 */
   const points = new Map();
   for (const d of days) {
     const p = String(d.grammar_point || "").trim();
     if (!p) continue;
-    if (points.has(p)) problems.push(`${d.day_number}日目: ${points.get(p)}日目と同じ文法「${p}」`);
-    else points.set(p, d.day_number);
+    const t = d.__track || "beginner";
+    const k = `${t}:${p}`;
+    if (points.has(k)) problems.push(`${t} ${d.day_number}日目: ${points.get(k)}日目と同じ文法「${p}」`);
+    else points.set(k, d.day_number);
   }
 
   return { ok: problems.length === 0, problems, count: seen.size };

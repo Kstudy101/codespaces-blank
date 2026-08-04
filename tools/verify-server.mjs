@@ -535,14 +535,26 @@ check("current_day を書き換える関数は 2 つだけ（進める / 運営�
   return "advanceDay / resetProgress";
 });
 
-check("pushlogs.mjs は learning_progress にも subscriptions にも触らない", () => {
+check("pushlogs.mjs は進捗も保有日数も書き換えない", () => {
   const code = stripComments(PUSH_SRC);
-  assert(!/learning_progress|subscriptions/.test(code),
-    "配信ログの記録が進捗や保有日数を動かしています");
+
+  /* 「触らない」から「書き換えない」に直した。夕方の対象を出すのに
+     learning_progress を読む必要ができたため（コース別の原稿を引くので
+     track が要る）。読むのは問題ではない ── 動かすのが問題。
+
+     なので INSERT / UPDATE / DELETE の宛先だけを見る。名前が出るか
+     どうかで見ていたときは、JOIN を足しただけで落ちていた。 */
+  const writes = [...code.matchAll(/\b(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+`?(\w+)`?/gi)]
+    .map((m) => m[2].toLowerCase());
+  for (const t of writes) {
+    assert(t === "push_logs", `push_logs 以外へ書いています: ${t}`);
+  }
+  assert(writes.length >= 2, `書き込みが ${writes.length} 件しか見つかりません（検査が空振りです）`);
+
   /* 注釈を落とす検査なので、落としすぎて素通しになっていないかを見る。
      この 1 行が無いと、stripComments を壊したときに全部 ✓ になる。 */
   assert(/push_logs/.test(code), "検査対象が空になっています（stripComments を確認）");
-  return "push_logs だけ";
+  return `書き込み ${writes.length} 件、すべて push_logs`;
 });
 
 check("total_days_entitled を増やすのは購入のときだけ", () => {
@@ -626,12 +638,23 @@ await acheck("夕方の対象は「今朝の学習配信が届いた人」だけ
   return "learning / sent / trial・active";
 });
 
-await acheck("push_type は 5 種。ENUM に無い値を DB へ通さない", async () => {
-  assert(pushlogs.PUSH_TYPES.length === 5, pushlogs.PUSH_TYPES.join(", "));
-  const inSchema = SCHEMA.match(/push_type\s+ENUM\(([^)]*)\)/)[1];
+await acheck("push_type は 6 種。ENUM に無い値を DB へ通さない", async () => {
+  assert(pushlogs.PUSH_TYPES.length === 6, pushlogs.PUSH_TYPES.join(", "));
+
+  /* ENUM は 2 か所にある。schema.sql が作るときの形で、
+     migrations/001 が onboarding を足した後の形。新しい方と
+     突き合わせる ── 古い方だけ見ていると、足した種別が
+     「コードにはあるが DB に無い」まま通る。 */
+  const M001 = read("server/db/migrations/001-tracks-and-onboarding.sql");
+  const inSchema = M001.match(/push_type[\s\S]*?ENUM\(([^)]*)\)/)[1];
   for (const t of pushlogs.PUSH_TYPES) {
-    assert(inSchema.includes(`'${t}'`), `${t} が schema.sql の ENUM にありません`);
+    assert(inSchema.includes(`'${t}'`), `${t} が migrations/001 の ENUM にありません`);
   }
+  /* schema.sql 側は作った直後の 5 種のまま。migrations が
+     流れていないと 6 種目が入らないので、そこも見ておく。 */
+  const orig = SCHEMA.match(/push_type\s+ENUM\(([^)]*)\)/)[1];
+  assert(!orig.includes("'onboarding'"),
+    "schema.sql を直接書き換えています（既にデータのある表には効きません）");
   const conn = fakeConn(() => ({ insertId: 1 }));
   assert(await rejects(() => pushlogs.logSent(conn, 1, { pushType: "reminder" })),
     "知らない push_type が通りました");
@@ -719,27 +742,88 @@ check("LIMIT に整数以外を渡しても SQL に入らない", () => {
 /* ================================================================== */
 head("[原稿]  101 日ぶんが揃っているかを、数えられるようにする");
 
-await acheck("欠けている日を全部返す", async () => {
-  const conn = fakeConn(() => [{ day_number: 1 }, { day_number: 2 }, { day_number: 101 }]);
+await acheck("欠けている日を、コースごとに全部返す", async () => {
+  const conn = fakeConn(() => [
+    { track: "beginner", day_number: 1 },
+    { track: "beginner", day_number: 2 },
+    { track: "beginner", day_number: 101 },
+    { track: "advanced", day_number: 1 }
+  ]);
   const missing = await learning.findMissingTemplateDays(conn);
-  assert(missing.length === 98, `${missing.length} 日ぶん`);
-  assert(missing[0] === 3 && missing[missing.length - 1] === 100, JSON.stringify(missing.slice(0, 3)));
-  return "3〜100 の 98 日";
+
+  /* コース別に返らないと、初級 101 日だけ揃った状態が
+     「303 日中 101 日」に見えて、中級を選んだ人には 1 日目すら
+     無いことが読み取れない。 */
+  assert(missing.beginner.length === 98, `beginner ${missing.beginner.length} 日ぶん`);
+  assert(missing.beginner[0] === 3, JSON.stringify(missing.beginner.slice(0, 3)));
+  assert(missing.intermediate.length === 101, `intermediate ${missing.intermediate.length} 日ぶん`);
+  assert(missing.advanced.length === 100, `advanced ${missing.advanced.length} 日ぶん`);
+  return "初級 98 / 中級 101 / 上級 100";
+});
+
+await acheck("1 コースだけ訊いたら、そのコースの配列が返る", async () => {
+  const conn = fakeConn(() => [{ track: "advanced", day_number: 1 }]);
+  const missing = await learning.findMissingTemplateDays(conn, "advanced");
+  assert(Array.isArray(missing), `配列ではなく ${typeof missing} が返りました`);
+  assert(missing.length === 100, `${missing.length} 日ぶん`);
+  /* 絞ったのに全コースぶんを読んでいないか。 */
+  assert(/WHERE track = \?/.test(conn.calls[0].sql), conn.calls[0].sql);
+  return "上級だけ 100 日";
 });
 
 await acheck("学期は day_number から決める（人に入れさせない）", async () => {
   const conn = fakeConn(() => ({ affectedRows: 1 }));
-  await learning.upsertTemplate(conn, { dayNumber: 45, grammarPoint: "-려고 하다", semester: 1 });
-  assert(conn.calls[0].params[1] === 2,
-    `45 日目の学期が ${conn.calls[0].params[1]} になりました（正: 2）`);
+  await learning.upsertTemplate(conn,
+    { track: "beginner", dayNumber: 45, grammarPoint: "-려고 하다", semester: 1 });
+  /* params は (track, day_number, semester, …) の順。 */
+  assert(conn.calls[0].params[2] === 2,
+    `45 日目の学期が ${conn.calls[0].params[2]} になりました（正: 2）`);
   return "45 日目 → 2 学期";
+});
+
+await acheck("コースは 3 つ。ENUM の外を DB へ通さない", async () => {
+  const conn = fakeConn(() => ({ affectedRows: 1 }));
+  assert(learning.TRACKS.length === 3, learning.TRACKS.join(", "));
+
+  /* migrations の ENUM と突き合わせる。片方だけ増やすと、
+     コードにはあるのに DB に無い値を書きに行く ── MySQL の設定に
+     よっては例外ではなく空文字が入り、その人だけ原稿が引けなくなる。 */
+  const M001 = read("server/db/migrations/001-tracks-and-onboarding.sql");
+  for (const t of learning.TRACKS) {
+    assert(M001.includes(`'${t}'`), `${t} が migrations/001 の ENUM にありません`);
+  }
+
+  for (const bad of ["Beginner", "初級", "", null, undefined]) {
+    let threw = false;
+    try { await learning.upsertTemplate(conn, { track: bad, dayNumber: 1, grammarPoint: "x" }); }
+    catch { threw = true; }
+    assert(threw, `track=${JSON.stringify(bad)} が通りました`);
+  }
+  /* 引く側も同じ。既定で初級に落ちると、中級の人に初級が届く。 */
+  let getThrew = false;
+  try { await learning.getTemplate(conn, undefined, 1); } catch { getThrew = true; }
+  assert(getThrew, "track 無しで原稿を引けてしまいました");
+  return "3 つ以外を拒否（入れる側・引く側とも）";
+});
+
+await acheck("コースは一度だけ決まる（進んだあとに変わらない）", async () => {
+  const conn = fakeConn(() => ({ affectedRows: 1 }));
+  await learning.setTrack(conn, 7, "intermediate");
+  const flat = conn.calls[0].sql.replace(/\s+/g, " ");
+  assert(/track IS NULL/.test(flat),
+    "選び直しが通ります。別のコースの途中の日からいきなり始まります");
+
+  const busy = fakeConn(() => ({ affectedRows: 0 }));
+  const r = await learning.setTrack(busy, 7, "advanced");
+  assert(r.claimed === false, "2 回目が通りました");
+  return "track IS NULL のときだけ";
 });
 
 await acheck("原稿の範囲は 1〜101", async () => {
   const conn = fakeConn(() => ({ affectedRows: 1 }));
   for (const bad of [0, 102, -1]) {
     let threw = false;
-    try { await learning.upsertTemplate(conn, { dayNumber: bad, grammarPoint: "x" }); }
+    try { await learning.upsertTemplate(conn, { track: "beginner", dayNumber: bad, grammarPoint: "x" }); }
     catch { threw = true; }
     assert(threw, `${bad} 日目が通りました`);
   }
@@ -753,8 +837,8 @@ check("名前を差し込む既定は false ── 入れ忘れが「出ない�
 });
 
 await acheck("TINYINT(1) の 0/1 を真偽値に直して返す", async () => {
-  const conn = fakeConn(() => [{ day_number: 1, requires_name_slot: 0, vocab_3: '[{"kr":"사랑"}]' }]);
-  const t = await learning.getTemplate(conn, 1);
+  const conn = fakeConn(() => [{ day_number: 1, track: "beginner", requires_name_slot: 0, vocab_3: '[{"kr":"사랑"}]' }]);
+  const t = await learning.getTemplate(conn, "beginner", 1);
   assert(t.requires_name_slot === false, `${typeof t.requires_name_slot}`);
   assert(Array.isArray(t.vocab_3) && t.vocab_3[0].kr === "사랑", JSON.stringify(t.vocab_3));
   return "false / 配列";

@@ -23,11 +23,12 @@
    リンクが先の人も居る。users への書き込みは upsertOnFollow を
    通すので、どちらが先でも 2 人にならない。
    ================================================================== */
-import { users, links, billing, learning } from "../repo/index.mjs";
+import { users, links, billing, learning, pushlogs } from "../repo/index.mjs";
 import { newState, hashState, looksLikeState } from "../token.mjs";
 import { authorizeUrl, exchangeCode, loginProfile, revoke } from "../linelogin.mjs";
-import { getProfile, isUnreachable } from "../line.mjs";
+import { getProfile, pushMessage, isUnreachable } from "../line.mjs";
 import { jstDateTime } from "../jst.mjs";
+import { serviceGuide, nextStep, messageForStep } from "../onboarding.mjs";
 
 /* ---- 入力の検査 ----------------------------------------------------
    ここはウェブから来る唯一の入口で、中身は利用者が作れる。
@@ -124,6 +125,54 @@ export async function startLink(conn, input) {
 
 /* ---- 2. 戻ってくる ------------------------------------------------ */
 
+/* ---- 連携できた直後に送る 1 便 --------------------------------------
+   ここまで、サイトを通ってきた人には**何も送っていなかった**。
+   handlers/follow.mjs が返すのは名前の無い人だけで、名前を持って
+   きた人は素通り ── 連携が成功しても LINE 側は無言のまま、
+   最初のメッセージが翌朝の「1 日目」だった。何に登録したのか
+   分からないまま本文が始まる。
+
+   送るのは 2 通まで。講座の案内と、次に訊くこと 1 つ。
+   pushMessage は配列を受けるので、2 通でも通知は 1 回。
+
+   友だちでない人には送らない（送れない）。その人は友だち追加の
+   ときに follow.mjs が拾う。
+
+   送信の失敗でリンクそのものを失敗にしない。DB の書き込みは
+   もう終わっていて、やり直すと state は使用済みなので通らない
+   ── 「連携できたのに、できなかったと言われる」が起きる。 */
+async function greet(conn, user, { send = pushMessage } = {}) {
+  const [saju, prog] = await Promise.all([
+    users.getSajuProfile(conn, user.id),
+    learning.getProgress(conn, user.id)
+  ]);
+
+  const state = {
+    ...user,
+    birth_date: saju ? saju.birth_date : null,
+    birth_time: saju ? saju.birth_time : null,
+    birth_confirmed: saju ? saju.birth_confirmed : false,
+    track: prog ? prog.track : null
+  };
+
+  const step = nextStep(state);
+  const messages = [
+    serviceGuide({ nameJa: user.name_reading || user.name_kanji }),
+    messageForStep(step, state)
+  ].filter(Boolean);
+
+  try {
+    await send(user.line_user_id, messages);
+    await pushlogs.logSent(conn, user.id, { pushType: "onboarding" });
+    return { sent: messages.length, step };
+  } catch (e) {
+    await pushlogs.logFailed(conn, user.id,
+      { pushType: "onboarding", error: String(e.message || e).slice(0, 500) });
+    return { sent: 0, step, error: e.message };
+  }
+}
+
+
 export async function completeLink(conn, { code, state, error, errorDescription }) {
   /* 利用者が同意画面で「キャンセル」を押すと、code ではなく
      error が付いて戻る。異常ではないので、そう伝える。 */
@@ -174,6 +223,15 @@ export async function completeLink(conn, { code, state, error, errorDescription 
     nameReading: pending.name_reading,
     nameKr: pending.name_kr
   });
+
+  /* 2 度目以降の連携は「選び直した結果」として扱う。
+     初回は name_source が空のままにしておき、あとで
+     「サイトの名前と LINE の表示名、どちらで呼ぶか」を訊く。
+
+     一度でも答えた人がサイトへ戻って入れ直したなら、その名前が
+     答えそのもの ── もう一度同じことを訊くと、直したのに
+     直っていないように見える。 */
+  if (user.name_source) await users.setNameSource(conn, user.id, "web");
   await users.upsertSajuProfile(conn, user.id, {
     birthDate: pending.birth_date,
     birthTime: pending.birth_time,
@@ -205,12 +263,24 @@ export async function completeLink(conn, { code, state, error, errorDescription 
     friend = isUnreachable(e) ? false : null;   // null は判定できなかった
   }
 
+  /* 友だちだと分かったときだけ挨拶する。false（まだ友だちでない・
+     プロバイダー違い）と null（判定できなかった）には送らない ──
+     送れないものを送ろうとして 404 を記録すると、あとから
+     「配信が届いていない人」を数えるときの雑音になる。 */
+  let greeted = null;
+  if (friend === true) {
+    /* 名前を書き換えたあとの行で判定する。上の user は
+       upsertOnFollow が返したもので、まだ名前が入っていない。 */
+    greeted = await greet(conn, await users.findById(conn, user.id));
+  }
+
   return {
     ok: true,
     userId: user.id,
     lineUserId,
     displayName,
     nameKr: pending.name_kr,
+    greeted,
     /* false = まだ友だちでない（追加を促す）。
        ただしプロバイダー違いでも false になるので、
        設置直後にこれが必ず false なら、まずそちらを疑う。 */

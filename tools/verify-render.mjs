@@ -18,7 +18,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
-  hasJong, fillSlots, renderDay, findMisplacedSlot, SLOTS, nameMissingNotice
+  hasJong, fillSlots, renderDay, renderReview, findMisplacedSlot, SLOTS, nameMissingNotice
 } from "../server/lib/render.mjs";
 import { semesterForDay, SEMESTERS, TOTAL_DAYS } from "../server/lib/repo/learning.mjs";
 
@@ -375,6 +375,80 @@ check("名前が無い日の案内文がある", () => {
   assert(n.type === "text" && n.text.includes("7日目"), JSON.stringify(n));
   assert(n.text.includes("お名前"), "名前登録を促していません");
   return "101 日の数を崩さず促す";
+});
+
+console.log("\n[ふりかえり]  夕方の便。朝の再送にしない");
+
+const REVIEW_TPL = {
+  ...TPL,
+  dialogue_template: [
+    { kr: "안녕하세요.", ja: "こんにちは。" },
+    { kr: "{NAME_IEYO}.", ja: "{NAME_JP}です。" },
+    { kr: "반가워요.", ja: "はじめまして。" }
+  ]
+};
+
+check("問いと答えの 2 通になる", () => {
+  const m = renderReview(REVIEW_TPL, { name_kr: "아이", name_reading: "あい" });
+  assert(m && m.length === 2, `${m ? m.length : 0} 通`);
+  assert(m[0].type === "text" && m[1].type === "text", JSON.stringify(m));
+  return "問い → 答え";
+});
+
+check("会話は 1 文だけ拾う（全部出すと朝の再送になる）", () => {
+  const m = renderReview(REVIEW_TPL, { name_kr: "아이", name_reading: "あい" });
+  const q = m[0].text;
+  /* 3 文のうち出るのは 1 文。名前を使う文が優先 ── この講座で
+     覚えてほしいのは「自分の名前で言える形」なので。 */
+  assert(q.includes("아이예요"), `名前の文が選ばれていません: ${q}`);
+  assert(!q.includes("반가워요"), `会話を全部出しています: ${q}`);
+  return "名前の入る 1 文";
+});
+
+check("名前を使う文が無ければ、先頭の文で足りる", () => {
+  const noName = { ...REVIEW_TPL, requires_name_slot: false,
+    dialogue_template: [{ kr: "안녕하세요.", ja: "こんにちは。" }] };
+  const m = renderReview(noName, {});
+  assert(m && m[0].text.includes("안녕하세요"), JSON.stringify(m));
+  return "先頭の 1 文";
+});
+
+check("問いの側に訳と意味を出さない", () => {
+  /* 同じ画面に答えが出ていると、思い出す間が無い。
+     ここが崩れると、復習が「もう一度読むだけ」に戻る。 */
+  const m = renderReview(REVIEW_TPL, { name_kr: "아이", name_reading: "あい" });
+  const [q, a] = m.map((x) => x.text);
+  assert(!q.includes("あいです"), `1 通目に訳が出ています: ${q}`);
+  assert(a.includes("あいです"), `2 通目に訳がありません: ${a}`);
+  /* 単語はハングルだけ。「일본」は 1 通目に出て、「日本」は出ない。 */
+  assert(q.includes("일본"), `1 通目に単語がありません: ${q}`);
+  assert(!q.includes("日本"), `1 通目に単語の意味が出ています: ${q}`);
+  assert(a.includes("日本"), `2 通目に単語の意味がありません: ${a}`);
+  return "訳と意味は 2 通目だけ";
+});
+
+check("受け取る側が何日目か分かる", () => {
+  const m = renderReview(REVIEW_TPL, { name_kr: "아이", name_reading: "あい" });
+  assert(m[0].text.includes(`${TPL.day_number}日目`), m[0].text.slice(0, 30));
+  return `${TPL.day_number}日目`;
+});
+
+check("名前が要るのに無ければ null（朝と同じ扱い）", () => {
+  /* 既定名を入れない。入れると全員が同じ名前で呼ばれる。 */
+  assert(renderReview(REVIEW_TPL, {}) === null, "名前なしで組み立ててしまいました");
+  return "呼ぶ側が黙る";
+});
+
+check("받침 の規則は朝と同じものを通る", () => {
+  const jong  = renderReview(REVIEW_TPL, { name_kr: "켄", name_reading: "けん" });
+  const vowel = renderReview(REVIEW_TPL, { name_kr: "아이", name_reading: "あい" });
+  assert(jong[0].text.includes("켄이에요"), jong[0].text);
+  assert(vowel[0].text.includes("아이예요"), vowel[0].text);
+  /* 差し込み口が残っていない。残ると {NAME_IEYO} が画面に出る。 */
+  for (const m of [...jong, ...vowel]) {
+    assert(!/\{[A-Z_]+\}/.test(m.text), `差し込み口が残っています: ${m.text}`);
+  }
+  return "켄이에요 / 아이예요";
 });
 
 console.log(`\n${fails.length ? "✗" : "✓"} ${pass + fails.length} 項目中 ${pass} 件成功`);

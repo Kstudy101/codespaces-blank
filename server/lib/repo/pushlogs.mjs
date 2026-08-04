@@ -13,11 +13,17 @@
    （保有日数切れ・送信失敗）まで復習の対象に混ざる。
    実際に送ったログを見るのが唯一正しい。
    ================================================================== */
-import { one, all, run, nn } from "./util.mjs";
+import { one, all, run, nn, fromJson } from "./util.mjs";
 import { jstDate, jstDateTime, jstDayRange } from "../jst.mjs";
 
+/* DB の ENUM（schema.sql + migrations/001）と同じ並び。2 か所に
+   なるので、verify-server.mjs が両方を読んで突き合わせる。
+
+   onboarding は名前・生年月日・コースの確認。数えるために種別を
+   分けている ── 答えない人に毎朝送り続けるとブロックされ、
+   ブロックは取り消せない。 */
 export const PUSH_TYPES = Object.freeze(
-  ["learning", "review", "quiz", "upsell", "completion"]);
+  ["learning", "review", "quiz", "upsell", "completion", "onboarding"]);
 
 function assertType(t) {
   if (!PUSH_TYPES.includes(t)) {
@@ -86,6 +92,25 @@ export async function countForDay(conn, userId, dayNumber, pushType = "learning"
   return row ? Number(row.n) : 0;
 }
 
+/* その人に、その種別を通算で何回送ったか。日をまたいで数える。
+
+   オンボーディング（名前の選択・コース選択）に使う。こちらは
+   countForDay では数えられない ── 日が進まないのは同じだが、
+   day_number そのものが無い（何日目の話でもない）ので、
+   NULL 同士の比較になって 1 件も当たらない。
+
+   通算で数えるのは、促す上限が「その日に何回」ではなく
+   「ぜんぶで何回」だから。毎朝 1 回ずつでも、3 日続けば
+   3 回になる ── 答えない人にはそこで黙る。 */
+export async function countByType(conn, userId, pushType) {
+  assertType(pushType);
+  const row = await one(conn,
+    `SELECT COUNT(*) AS n FROM push_logs
+      WHERE user_id = ? AND push_type = ? AND status = 'sent'`,
+    [userId, pushType]);
+  return row ? Number(row.n) : 0;
+}
+
 /* 今朝の学習配信で、その人に何日目を送ったか。夕方の復習が使う。
    届いていない人には null が返り、対象から外れる（計画書 5-6）。 */
 export async function todaysLearningDay(conn, userId, date = null) {
@@ -105,20 +130,39 @@ export async function todaysLearningDay(conn, userId, date = null) {
    users を join して line_user_id と名前まで取るのは、
    1 人ずつ引き直すと人数ぶんの往復になるため。
    upsell しか受けていない人（保有日数切れ）は push_type で
-   外れるので、条件を足す必要は無い。 */
+   外れるので、条件を足す必要は無い。
+
+   取る列は listDeliverable と揃える。復習も朝と同じ renderer に
+   通す（lib/render.mjs）ので、片方だけ列が足りないと、夕方だけ
+   名前が入らない・五行が空になる ── どちらも文としては成立
+   するので、読み比べるまで気づけない。
+
+   track も要る。コースごとに別の原稿を引くため。無いと、
+   中級の人に初級の復習が届く。
+
+   【day_number は MAX を取る】
+   ふつうその日の learning は 1 件だが、名前案内も learning として
+   残る（進みを止めたまま同じ日を数える仕組み）。MAX にしておけば
+   実際に本文が行った日が取れる。 */
 export async function listReviewTargets(conn, date = null) {
   const [from, to] = jstDayRange(date || jstDate());
   return all(conn,
-    `SELECT l.user_id, MAX(l.day_number) AS day_number,
-            u.line_user_id, u.name_kanji, u.name_kr
+    `SELECT l.user_id AS id, MAX(l.day_number) AS day_number,
+            u.line_user_id, u.name_kanji, u.name_reading, u.name_kr,
+            p.track,
+            j.ohaeng_main, j.raw_result_json
        FROM push_logs l
        JOIN users u ON u.id = l.user_id
+       JOIN learning_progress p ON p.user_id = u.id
+       LEFT JOIN saju_profiles j ON j.user_id = u.id
       WHERE l.push_type = 'learning' AND l.status = 'sent'
         AND l.sent_at >= ? AND l.sent_at < ?
         AND u.status IN ('trial', 'active')
-      GROUP BY l.user_id, u.line_user_id, u.name_kanji, u.name_kr
+      GROUP BY l.user_id, u.line_user_id, u.name_kanji, u.name_reading, u.name_kr,
+               p.track, j.ohaeng_main, j.raw_result_json
       ORDER BY l.user_id`,
-    [from, to]);
+    [from, to])
+    .then((rows) => rows.map((r) => ({ ...r, raw_result_json: fromJson(r.raw_result_json) })));
 }
 
 /* その日の集計。P10 の通知が読む。

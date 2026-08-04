@@ -13,10 +13,43 @@
 import { one, all, run, insertNew, fromJson, toJson, nn } from "./util.mjs";
 import { jstDateTime } from "../jst.mjs";
 
+/* ---- コース ------------------------------------------------------
+   初級・中級・上級。**3 本の独立した 101 日**で、進み方を共有しない。
+
+   1 本の 101 日を 3 つに割って「中級は 31 日目から」にする案もあったが、
+   そちらだと中級を選んだ人の講座が 71 日で終わる ── 同じ値段で
+   受け取る量が違うことになり、説明もできない。
+
+   選ばせる以上、選んだ先にそれぞれ 101 日ぶんが要る。原稿の総量は
+   3 倍（303 日）になる。今あるのは初級 50 日だけなので、中級・上級は
+   入稿が済むまで content_templates が空のまま ── 配信バッチは
+   「原稿なし」で日を消費せずに止まるので、空のコースを選んだ人に
+   何かが届いてしまうことは無い（db/push-daily.mjs）。
+
+   ここが唯一の出どころ。DB の ENUM と 2 か所になるので、
+   verify-server.mjs が schema と突き合わせる。 */
+export const TRACKS = Object.freeze(["beginner", "intermediate", "advanced"]);
+
+/* 画面に出す名前。日本語で出す（利用者は日本語話者）。
+   韓国語を併記するのは、コース名そのものが最初の単語になるため。 */
+export const TRACK_LABELS = Object.freeze({
+  beginner:     { ja: "初級", kr: "초급" },
+  intermediate: { ja: "中級", kr: "중급" },
+  advanced:     { ja: "上級", kr: "고급" }
+});
+
+export function isTrack(v) {
+  return typeof v === "string" && TRACKS.includes(v);
+}
+
+
 /* ---- カリキュラム ------------------------------------------------
    計画書 1-2 の 4 学期。日数の切れ目はここだけに書く。
    配信側とクイズ側で別々に持つと、片方だけ直したときに
-   「30 日目のクイズが 1 学期扱いで採点される」が起きる。 */
+   「30 日目のクイズが 1 学期扱いで採点される」が起きる。
+
+   学期の区切りは 3 コースで共通。コースが違っても「30 日目が節目」は
+   同じにしておくと、クイズの表（quiz_checkpoints）を 3 つに増やさずに済む。 */
 export const SEMESTERS = Object.freeze([
   { semester: 1, from: 1,  to: 30  },
   { semester: 2, from: 31, to: 50  },
@@ -40,10 +73,30 @@ export function semesterForDay(day) {
 
 export async function getProgress(conn, userId) {
   const row = await one(conn,
-    `SELECT id, user_id, current_day, current_semester, last_sent_at, quiz_pass_log
+    `SELECT id, user_id, track, current_day, current_semester, last_sent_at, quiz_pass_log
        FROM learning_progress WHERE user_id = ?`, [userId]);
   if (!row) return null;
   return { ...row, quiz_pass_log: fromJson(row.quiz_pass_log) };
+}
+
+/* コースを決める。1 度だけ ── 進んだあとに変えると、
+   別のコースの 20 日目からいきなり始まる。
+
+   WHERE track IS NULL を付けているのがその 1 度きりで、
+   2 回目のボタンは affectedRows = 0 で戻る。押した人には
+   「もう決まっています」と返せる（handlers/postback.mjs）。
+
+   選び直しは運営者が resetProgress と一緒に行う想定。ここに
+   「まだ 0 日目なら変えてよい」を入れなかったのは、0 日目かどうかで
+   挙動が変わると、押した人に何が起きたのか説明できないため。 */
+export async function setTrack(conn, userId, track) {
+  if (!isTrack(track)) {
+    throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")} のどれか）`);
+  }
+  const r = await run(conn,
+    `UPDATE learning_progress SET track = ? WHERE user_id = ? AND track IS NULL`,
+    [track, userId]);
+  return { claimed: r.affectedRows > 0, track };
 }
 
 /* 0 日目の行を用意する。既にあれば触らない ── 既存の行を
@@ -135,24 +188,38 @@ function shapeTemplate(row) {
        そのまま渡すと呼び出し側の if で 0 が falsy として効いてしまう
        ── 効いてはいるが、意図して真偽値を扱っているのか
        たまたま通っているのか読めなくなるので、ここで直す。 */
-    requires_name_slot: !!row.requires_name_slot
+    requires_name_slot: !!row.requires_name_slot,
+    fortune_bridge: fromJson(row.fortune_bridge)
   };
 }
 
-export async function getTemplate(conn, dayNumber) {
+const TPL_COLS = `day_number, track, semester, grammar_point, grammar_tip_kr,
+                  dialogue_template, vocab_3, fortune_bridge, requires_name_slot`;
+
+/* track を第 2 引数ではなく第 2 引数「として必須」にしてある。
+   既定を 'beginner' にすると、渡し忘れた呼び出しが初級の原稿を
+   引いて動いてしまう ── 中級の人に初級が届くが、どちらも
+   「それらしい 1 日ぶん」なので、読むまで分からない。 */
+export async function getTemplate(conn, track, dayNumber) {
+  if (!isTrack(track)) throw new Error(`未知の track: ${track}`);
   return shapeTemplate(await one(conn,
-    `SELECT day_number, semester, grammar_point, grammar_tip_kr,
-            dialogue_template, vocab_3, requires_name_slot
-       FROM content_templates WHERE day_number = ?`, [dayNumber]));
+    `SELECT ${TPL_COLS} FROM content_templates
+      WHERE track = ? AND day_number = ?`, [track, dayNumber]));
 }
 
-export async function listTemplates(conn, { semester = null } = {}) {
-  const rows = semester === null
-    ? await all(conn, `SELECT day_number, semester, grammar_point, requires_name_slot
-                         FROM content_templates ORDER BY day_number`)
-    : await all(conn, `SELECT day_number, semester, grammar_point, requires_name_slot
-                         FROM content_templates WHERE semester = ? ORDER BY day_number`,
-                [semester]);
+export async function listTemplates(conn, { track = null, semester = null } = {}) {
+  const where = [], args = [];
+  if (track !== null) {
+    if (!isTrack(track)) throw new Error(`未知の track: ${track}`);
+    where.push("track = ?"); args.push(track);
+  }
+  if (semester !== null) { where.push("semester = ?"); args.push(semester); }
+
+  const rows = await all(conn,
+    `SELECT day_number, track, semester, grammar_point, requires_name_slot
+       FROM content_templates
+       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+      ORDER BY track, day_number`, args);
   return rows.map(shapeTemplate);
 }
 
@@ -160,9 +227,13 @@ export async function listTemplates(conn, { semester = null } = {}) {
    day_number から一意に決まるものを人が入れられるようにすると、
    30 日目なのに 2 学期、のような組み合わせが入りうる。 */
 export async function upsertTemplate(conn, {
-  dayNumber, grammarPoint, grammarTipKr = null,
-  dialogueTemplate = null, vocab3 = null, requiresNameSlot = false
+  track, dayNumber, grammarPoint, grammarTipKr = null,
+  dialogueTemplate = null, vocab3 = null, fortuneBridge = null,
+  requiresNameSlot = false
 }) {
+  if (!isTrack(track)) {
+    throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")} のどれか）`);
+  }
   const d = Number(dayNumber);
   if (!Number.isInteger(d) || d < 1 || d > TOTAL_DAYS) {
     throw new Error(`day_number の範囲外: ${dayNumber}（1〜${TOTAL_DAYS}）`);
@@ -171,30 +242,50 @@ export async function upsertTemplate(conn, {
 
   await run(conn,
     `INSERT INTO content_templates
-       (day_number, semester, grammar_point, grammar_tip_kr,
-        dialogue_template, vocab_3, requires_name_slot)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+       (track, day_number, semester, grammar_point, grammar_tip_kr,
+        dialogue_template, vocab_3, fortune_bridge, requires_name_slot)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        semester           = VALUES(semester),
        grammar_point      = VALUES(grammar_point),
        grammar_tip_kr     = VALUES(grammar_tip_kr),
        dialogue_template  = VALUES(dialogue_template),
        vocab_3            = VALUES(vocab_3),
+       fortune_bridge     = VALUES(fortune_bridge),
        requires_name_slot = VALUES(requires_name_slot)`,
-    [d, semesterForDay(d), grammarPoint, nn(grammarTipKr),
-     toJson(dialogueTemplate), toJson(vocab3), requiresNameSlot ? 1 : 0]);
-  return getTemplate(conn, d);
+    [track, d, semesterForDay(d), grammarPoint, nn(grammarTipKr),
+     toJson(dialogueTemplate), toJson(vocab3), toJson(fortuneBridge),
+     requiresNameSlot ? 1 : 0]);
+  return getTemplate(conn, track, d);
 }
 
 /* 何日目が埋まっていないか。101 日を売る以上、
    「買ったのに 87 日目が来ない」は起きてはいけない。
-   P4 の入稿作業と P10 の監視の両方から呼ぶ。 */
-export async function findMissingTemplateDays(conn) {
-  const rows = await all(conn, `SELECT day_number FROM content_templates`);
-  const have = new Set(rows.map((r) => Number(r.day_number)));
-  const missing = [];
-  for (let d = 1; d <= TOTAL_DAYS; d++) if (!have.has(d)) missing.push(d);
-  return missing;
+   P4 の入稿作業と P10 の監視の両方から呼ぶ。
+
+   コース別に見る。合計で数えると、初級 101 日だけ入った状態が
+   「303 日中 101 日」に見えて、中級を選んだ人には 1 日目すら
+   無いことが読み取れない。 */
+export async function findMissingTemplateDays(conn, track = null) {
+  if (track !== null && !isTrack(track)) throw new Error(`未知の track: ${track}`);
+
+  const rows = track === null
+    ? await all(conn, `SELECT track, day_number FROM content_templates`)
+    : await all(conn, `SELECT track, day_number FROM content_templates WHERE track = ?`, [track]);
+
+  const have = new Set(rows.map((r) => `${r.track}:${Number(r.day_number)}`));
+  const wanted = track === null ? TRACKS : [track];
+
+  const missing = {};
+  for (const t of wanted) {
+    const days = [];
+    for (let d = 1; d <= TOTAL_DAYS; d++) if (!have.has(`${t}:${d}`)) days.push(d);
+    missing[t] = days;
+  }
+  /* 1 コースだけ訊かれたときは、そのコースの配列をそのまま返す。
+     呼ぶ側が track を指定しているのに {beginner:[…]} が返ると、
+     ほぼ確実に .length を取り違える。 */
+  return track === null ? missing : missing[track];
 }
 
 

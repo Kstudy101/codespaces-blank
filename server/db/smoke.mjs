@@ -229,10 +229,15 @@ try {
 
   const targets = await pushlogs.listReviewTargets(pool);
   check("夕方の対象に入っている", () => {
-    const me = targets.find((t) => Number(t.user_id) === uid);
+    /* 列名は listDeliverable と揃えて id。復習も朝と同じ renderer に
+       通すので、片方だけ違う名前だと呼ぶ側で取り違える。 */
+    const me = targets.find((t) => Number(t.id) === uid);
     assert(me, `対象 ${targets.length} 件の中にいません`);
     assert(Number(me.day_number) === 1, `day_number=${me.day_number}`);
     assert(me.name_kr === "다케다 하나코", me.name_kr);
+    /* renderReview が要る列。抜けていると夕方だけ名前が入らない。 */
+    assert(me.name_reading !== undefined, "name_reading が取れていません");
+    assert("track" in me, "track が取れていません（コース別の原稿を引けません）");
     return `${targets.length} 件中に自分あり`;
   });
 
@@ -240,6 +245,7 @@ try {
   head("[原稿]");
 
   await learning.upsertTemplate(pool, {
+    track: "intermediate",
     dayNumber: TEST_DAY,
     grammarPoint: "-습니다 / -습니까?",
     grammarTipKr: "정중한 종결어미입니다。ていねいな文末。",
@@ -247,19 +253,32 @@ try {
     vocab3: [{ kr: "사랑", meaning: "愛" }, { kr: "하늘", meaning: "空" }, { kr: "바다", meaning: "海" }],
     requiresNameSlot: true
   });
-  const tpl = await learning.getTemplate(pool, TEST_DAY);
+  const tpl = await learning.getTemplate(pool, "intermediate", TEST_DAY);
   check("原稿が往復する。学期は day_number から決まる", () => {
     assert(tpl.semester === 4, `${TEST_DAY} 日目が ${tpl.semester} 学期になりました`);
+    assert(tpl.track === "intermediate", `track=${tpl.track}`);
     assert(tpl.requires_name_slot === true, `${typeof tpl.requires_name_slot}`);
     assert(tpl.dialogue_template[0].kr === "{NAME}입니다.", JSON.stringify(tpl.dialogue_template));
     assert(tpl.vocab_3.length === 3, JSON.stringify(tpl.vocab_3));
-    return "4 学期 / 名前スロットあり / 単語 3 語";
+    return "中級 / 4 学期 / 名前スロットあり / 単語 3 語";
+  });
+
+  /* コースは 3 本の別の 101 日。同じ日番号でも別の行になる。
+     ここが 1 行に潰れると、中級を選んだ人に初級が届く。 */
+  const beginnerSame = await learning.getTemplate(pool, "beginner", TEST_DAY);
+  check("同じ日番号でも、コースが違えば別の原稿", () => {
+    assert(beginnerSame === null || beginnerSame.track === "beginner",
+      `beginner で引いたのに track=${beginnerSame && beginnerSame.track}`);
+    return beginnerSame ? "初級にも入稿あり（別行）" : "初級は未入稿（別行として空）";
   });
 
   const missing = await learning.findMissingTemplateDays(pool);
-  check("欠けている日を数えられる", () => {
-    assert(!missing.includes(TEST_DAY), `${TEST_DAY} が欠けている扱いです`);
-    return `残り ${missing.length} 日ぶん未入稿`;
+  check("欠けている日をコース別に数えられる", () => {
+    assert(!missing.intermediate.includes(TEST_DAY),
+      `${TEST_DAY} が中級で欠けている扱いです`);
+    assert(Array.isArray(missing.beginner) && Array.isArray(missing.advanced),
+      "コース別になっていません");
+    return learning.TRACKS.map((t) => `${t} 残り${missing[t].length}`).join(" / ");
   });
 
   /* ---- 退会 -------------------------------------------------------- */

@@ -209,6 +209,74 @@ export function renderDay(template, user = {}) {
   return lines.map((text) => ({ type: "text", text }));
 }
 
+/* ---- 夕方のふりかえり ----------------------------------------------
+   朝と同じものを送り直さない。同じ 2 通がもう一度届くだけなら、
+   通知が 1 回増えただけで読まれない。
+
+   問いにして送る。朝に読んだ会話文を韓国語だけで出し、単語は
+   ハングルだけを並べる ── 思い出そうとした分だけ残るので、
+   読み流しとは別のことが起きる。
+
+     1 通目  文法の名前 ＋ 会話 1 文（韓国語だけ）＋ 単語（ハングルだけ）
+     2 通目  答え
+
+   2 通に分けるのは、1 通だと答えが同じ画面に出て、思い出す間が
+   無いため。pushMessage は配列を受けるので、2 通でも通知は 1 回。
+
+   進みには触らない。復習は「保有日数を削らないボーナス」という
+   取り決め（計画書 1-2）で、current_day を動かすのは朝だけ。
+   だからこの関数は DB を知らない ── 文字列を作るだけにしておくと、
+   触りようが無い。 */
+export function renderReview(template, user = {}) {
+  if (!template) throw new Error("template がありません");
+
+  const day = Number(template.day_number);
+
+  /* 会話は 1 文だけ拾う。全部出すと朝の再送になる。
+     名前の入る文を優先するのは、この講座で覚えてほしいのが
+     「自分の名前で言える形」だから ── 無ければ先頭で足りる。 */
+  const dialogue = Array.isArray(template.dialogue_template) ? template.dialogue_template : [];
+  const pick = dialogue.find((r) => /\{NAME(_[A-Z]+)?\}/.test(String(r.kr ?? ""))) || dialogue[0] || null;
+
+  const krLine = pick ? fillSlots(pick.kr, user) : null;
+  if (pick && krLine === null) return null;        /* 名前が要るのに無い */
+  const jaLine = pick && pick.ja ? fillSlots(pick.ja, user) : "";
+
+  const vocab = Array.isArray(template.vocab_3) ? template.vocab_3 : [];
+
+  /* --- 1 通目：問い --- */
+  const q = [`🌙 ${day}日目のふりかえり`];
+  if (template.grammar_point) q.push("", `【今日の文法】${template.grammar_point}`);
+
+  if (krLine) {
+    q.push("", "今朝の会話から1文。意味を思い出せますか？", `　${krLine}`);
+  }
+  if (vocab.length) {
+    q.push("", "🔖 今日の単語", ...vocab.map((w) => `　${w.kr}`));
+  }
+  q.push("", "…");
+
+  /* --- 2 通目：答え --- */
+  const a = ["✅ こたえ"];
+  if (template.grammar_point) a.push("", `【文法】${template.grammar_point}`);
+  if (template.grammar_tip_kr) a.push(template.grammar_tip_kr);
+
+  if (krLine) {
+    a.push("", `　${krLine}`);
+    if (jaLine) a.push(`　${jaLine}`);
+  }
+  if (vocab.length) {
+    a.push("", ...vocab.map((w) => {
+      const note = w.note ? `　（${w.note}）` : "";
+      return `　${w.kr}　${w.meaning}${note}`;
+    }));
+  }
+  a.push("", "明日の朝7時に、次の日をおとどけします。");
+
+  return [q.join("\n"), a.join("\n")].map((text) => ({ type: "text", text }));
+}
+
+
 /* 名前が要る原稿なのに名前が無い人がいる。LINE だけ登録して
    サイトの診断をしていない場合など。その日を飛ばすと 101 日の
    数が合わなくなるので、飛ばさずに名前の登録を促す。

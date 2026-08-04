@@ -21,9 +21,13 @@ for (const u of rows) {
     `status=${u.status}`,
     `day=${u.current_day}`,
     `entitled=${u.total_days_entitled}`,
+    `track=${u.track || "未選択"}`,
     `name=${u.name_kr ? "あり" : "なし"}`,
+    `namesrc=${u.name_source || "未回答"}`,
     `reading=${u.name_reading ? "あり" : "なし"}`,
     `saju=${u.birth_date ? "あり" : "なし"}`,
+    /* 確認済みかどうかで運勢が付くかが変わるので、有無とは別に出す。 */
+    `birthok=${u.birth_confirmed ? "はい" : "いいえ"}`,
     `ohaeng=${u.ohaeng_main || "-"}`,
     `zodiac=${raw.zodiac || "-"}`,
     `city=${raw.city || "-"}`
@@ -31,5 +35,8 @@ for (const u of rows) {
 }
 
 const missing = await learning.findMissingTemplateDays(pool);
-console.log(`\n原稿: ${101 - missing.length}/101 日`);
+console.log("\n原稿:");
+for (const track of learning.TRACKS) {
+  console.log(`  ${track}: ${101 - missing[track].length}/101 日`);
+}
 await closePool();

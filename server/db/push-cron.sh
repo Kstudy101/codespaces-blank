@@ -8,13 +8,35 @@
 # 止まったことは誰も気づかない ── 届かないことに気づけるのは
 # 受け取る側だけで、その人は「今日は来ないな」としか思わない。
 #
-# cron は 1 時間ごとに呼ぶ。何時に配るかは push-daily.mjs が
-# 日本時間を見て決める（--not-before=7）。借りているサーバーの
-# 地方時が何かは確かめにくく、移設や夏時間で黙ってずれる。
+# cron は 1 時間ごとに呼ぶ。何時に配るかは各バッチが日本時間を
+# 見て決める（朝 --not-before=7 / 夕 --not-before=18）。借りている
+# サーバーの地方時が何かは確かめにくく、移設や夏時間で黙ってずれる。
 #
-#   cron: 0 * * * * /bin/bash ~/kstudy101-line/db/push-cron.sh >> ~/logs/push.log 2>&1
+#   cron:
+#     0 * * * * /bin/bash ~/kstudy101-line/db/push-cron.sh morning >> ~/logs/push.log 2>&1
+#     0 * * * * /bin/bash ~/kstudy101-line/db/push-cron.sh evening >> ~/logs/push.log 2>&1
+#
+# 1 本のスクリプトに寄せているのは、nodevenv を探す手順（下）を
+# 2 か所に置きたくないため。実際そこが CloudLinux の activate で
+# 一度壊れており、直す場所が 2 つあると片方だけ直る。
+#
+# 第 1 引数が無いときは morning。cron の行を書き換える前に配置しても
+# 朝の便が止まらないようにしてある ── 配置と cron の変更は
+# 同時にはできない（別の画面で行う）。
 # ===================================================================
 set -uo pipefail
+
+# どちらの便か。引数が無ければ朝（上の注記のとおり）。
+WHICH="morning"
+if [ $# -gt 0 ]; then
+  case "$1" in
+    morning|evening) WHICH="$1"; shift ;;
+    # 綴り違いを黙って朝として走らせない。夕方のつもりで
+    # 書いた行が毎時朝の便を叩く、が起きる。
+    -*) : ;;
+    *) echo "使い方: push-cron.sh [morning|evening] [追加の引数…]" >&2; exit 1 ;;
+  esac
+fi
 
 APP="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG="$HOME/logs/push.log"
@@ -48,8 +70,12 @@ set -u
 
 cd "$APP" || exit 1
 
-echo "───── $(date -u '+%F %T')Z (UTC) ─────"
+echo "───── $(date -u '+%F %T')Z (UTC) ${WHICH} ─────"
 # 追加の引数はそのまま渡す。--dry-run を付けて呼べば、cron が
 # 実際に通る道（activate を探す・パスを組む）を、誰にも送らずに
 # 確かめられる。cron の行を直接叩いて試すと本当に送ってしまう。
-node db/with-env.mjs db/push-daily.mjs --not-before=7 "$@"
+if [ "$WHICH" = "evening" ]; then
+  node db/with-env.mjs db/push-evening.mjs --not-before=18 "$@"
+else
+  node db/with-env.mjs db/push-daily.mjs --not-before=7 "$@"
+fi

@@ -60,10 +60,10 @@
 | `tools/build-solar-terms.py` | 절기 시각 계산 → `solar-terms.json` |
 | `tools/build-new-moons.py` | 삭 계산 → `new-moons.json` |
 | `tools/fetch-naoj-reference.py` | 국립천문대에서 기준값 취득 → `data/naoj-reference.json` |
-| `tools/verify-*.mjs` | 배포 관문 12종 (아래 「검증」) |
+| `tools/verify-*.mjs` | 배포 관문 16종 (아래 「검증」) |
 | `tools/build-site.sh` | 공개 파일만 `dist/` 로 모음 + 6종 점검 (내부 링크·canonical·구 호스트·sitemap 망라·**CSS 토큰**) |
 | `tools/set-site-url.py` | 절대 URL 일괄 교체 (도메인 이전용) |
-| `.github/workflows/deploy.yml` | push → 검증 12종 → Xserver rsync 배포 |
+| `.github/workflows/deploy.yml` | push → 검증 16종 → Xserver rsync 배포 |
 
 **`server/`** — LINE 발송 시스템. **이 사이트와 같은 서버에서 돌지 않습니다**
 
@@ -929,6 +929,86 @@ Login 채널과 Messaging API 채널이 LINE Developers 의 **같은 프로바�
 - **`pending_links` 는 30분 만료 + `purgeExpired`.** 생년월일이 들어 있으므로
   안 쓰인 걸 계속 갖고 있을 이유가 없습니다
 
+### P5 — 시작 전에 확인하는 3가지 + 코스 선택
+
+이 강좌는 **이름**과 **사주**로 진행되므로, 그 둘이 본인 것인지 확인하기 전에
+시작하면 101일치가 전부 다른 사람 것이 됩니다. 그런데 이름도 운세도 「그럴듯한
+형태」로 나오기 때문에 **받는 쪽에서는 틀렸다는 걸 알 수 없습니다.**
+
+연동 직후에 순서대로 하나씩 묻습니다.
+
+| 순서 | 묻는 것 | 왜 |
+|---|---|---|
+| ① | 웹에서 입력한 이름 / LINE 표시명 | 회화문에 그 이름이 등장하므로, 가명이면 101일 내내 가명으로 불림 |
+| ② | 생년월일이 본인 것인가 | 사이트 진단은 「시험 삼아 넣어보는」 곳이기도 함 |
+| ③ | 초급 / 중급 / 고급 | 뽑을 원고 자체가 달라짐 |
+
+**단계를 열로 갖지 않습니다.** `name_source` / `birth_confirmed` / `track` 이
+들어있는지에서 매번 도출합니다(`lib/onboarding.mjs` 의 `nextStep`). 열로 가지면
+실제 내용과 진실이 두 개가 되고, 한쪽만 진행된 상태(발신 실패·사용자가
+버튼을 안 누름)에서 어느 쪽을 믿을지 정할 수 없습니다.
+
+**①②는 날을 소비하지 않습니다.** 정해지기 전에 진행하면 그날 내용이 빈 채로
+사라집니다(7-6에서 이미 한 번 저지른 실수). ②는 레슨을 멈추지 않습니다 —
+멈추는 것은 운세뿐입니다.
+
+**재촉은 3회까지.** 매일 보내면 차단당하고, **차단은 되돌릴 수 없습니다.**
+침묵 중에도 진행은 멈춘 채이므로 나중에 답하면 그날부터 시작합니다. 다만
+quickReply 버튼은 다음 메시지가 오면 못 누르므로, 「코스」라고 보내면 다시
+꺼내주는 길을 `handlers/message.mjs` 에 열어 두었습니다.
+
+> **「LINE 이름으로」를 고르면 사이트로 되돌립니다.** 한글 표기(다나카)를 만들려면
+> 사이트가 가진 읽기-한글 대응표(`index.html` 의 `hanja_db` / `kanji.json`)가
+> 필요한데, 서버에는 없습니다. `.cpanel.yml` 이 옮기는 것은 `saju.js` /
+> `fortune.js` / `solar-terms.json` 셋뿐입니다. 복사해서 2부로 만들면 같은 이름이
+> 웹과 LINE 에서 다른 한글이 될 수 있고, 이는 운세 불일치와 같은 성질의
+> 고장입니다 — 나란히 놓고 보기 전까지 모릅니다.
+
+### 코스는 3개의 독립된 101일입니다
+
+```
+content_templates  PRIMARY KEY (track, day_number)   ← 3 × 101 = 303일
+learning_progress  track ENUM(...) NULL              ← NULL = 미선택
+```
+
+1개의 101일을 3등분해서 「중급은 31일차부터」로 하는 안도 있었지만, 그러면
+중급을 고른 사람의 강좌가 71일에 끝납니다 — 같은 값에 받는 양이 달라지고
+설명할 수도 없습니다.
+
+**원고는 초급 50일뿐입니다**(기존 1~50일이 마이그레이션에서 `beginner` 로
+들어갑니다). 중급·고급은 미입고라 `content_templates` 가 비어 있고, 배치는
+「원고 없음」으로 날을 소비하지 않고 멈춥니다 — 빈 코스를 고른 사람에게
+뭔가가 잘못 가는 일은 없습니다. **남은 253일은 원고 작업입니다.**
+
+### 하루 2회 — 아침 7시 / 저녁 6시
+
+```
+아침 7시  ①문법+회화  ②단어 3개  ③오늘의 운세      push-daily.mjs
+저녁 6시  ①문제       ②정답                        push-evening.mjs
+```
+
+**운세는 3통째로 붙습니다.** `pushMessage` 가 배열을 받으므로 3통이어도 API
+호출 1회, 알림도 1회입니다. 계산은 사이트와 같은 엔진(`saju.js`/`fortune.js`),
+문안은 `server/content/fortune-lines.json`(항목×등급 30 + 십신 10). 문안이
+없거나 생년월일이 미확인이면 **조용히 빼고 레슨만 보냅니다** — 기본 문구를
+넣으면 전원에게 같은 한 줄이 「오늘의 운세」로 갑니다.
+
+**저녁은 아침의 재전송이 아닙니다.** 회화 1문을 한국어만, 단어를 한글만 내고,
+정답은 2통째에 둡니다. 같은 화면에 답이 있으면 떠올릴 틈이 없습니다.
+
+**저녁은 날을 진행시키지 않습니다**(계획서 1-2 의 「보유일수를 깎지 않는 보너스」).
+대상도 진도에서 역산하지 않고 **실제 발신 로그**에서 뽑습니다 — 아침에
+`current_day` 가 이미 +1 되어 있어, 역산하면 그날 못 받은 사람까지 섞입니다.
+
+```
+cron:
+  0 * * * * /bin/bash ~/kstudy101-line/db/push-cron.sh morning >> ~/logs/push.log 2>&1
+  0 * * * * /bin/bash ~/kstudy101-line/db/push-cron.sh evening >> ~/logs/push.log 2>&1
+```
+
+매시 호출하고 시각 판단은 코드가 합니다(`--not-before=7` / `=18`). 인자가 없으면
+morning — cron 행을 고치기 전에 배치해도 아침 편이 멈추지 않도록.
+
 ### 설치 (ChemiCloud)
 
 ```bash
@@ -980,7 +1060,7 @@ node db/smoke.mjs
 
 ### 1. 배포 관문 — 저장소에 있고, push 할 때마다 돌아갑니다
 
-`tools/verify-*.mjs` 12종 **332항목**. `.github/workflows/deploy.yml` 이 rsync 앞에
+`tools/verify-*.mjs` 16종 **465항목**. `.github/workflows/deploy.yml` 이 rsync 앞에
 세워 두었으므로, 하나라도 실패하면 배포가 멈춥니다. 루트에 `package.json` 이 없으므로
 의존 패키지도 없습니다 — 각 스크립트가 `vm` 으로 대상 `.js` 를 그대로 읽어 실행합니다.
 `server/` 만 `mysql2` 를 쓰지만 `lib/db.mjs` 한 곳에 갇혀 있어, `verify-server.mjs`
@@ -997,9 +1077,13 @@ node db/smoke.mjs
 | `verify-amulet.mjs` | 28 | **`kanji.json` 2,136자** — 부적 한자의 한국음·훈음 12자 |
 | `verify-birth.mjs` | 17 | **약속 그 자체** — `sessionStorage` 만 씀 / 이름이 안 섞임 / 절기표와 같은 1930〜2030 |
 | `verify-pages.mjs` | 14 | 9페이지를 **가로로 늘어놓고** 대조 — 메타·링크·읽어주기 |
-| `verify-server.mjs` | 73 | **DB 없이 SQL 을 읽음** — JST 경계·결제 재전송·배치 이중기동·보유일수를 깎지 않는 약속 |
-| `verify-webhook.mjs` | 38 | **서명이 유일한 경계** — 생바이트·timingSafeEqual·검증 전 파싱 금지·postback data 불신 |
+| `verify-server.mjs` | 76 | **DB 없이 SQL 을 읽음** — JST 경계·결제 재전송·배치 이중기동·보유일수를 깎지 않는 약속 |
+| `verify-webhook.mjs` | 42 | **서명이 유일한 경계** — 생바이트·timingSafeEqual·검증 전 파싱 금지·postback data 불신 |
 | `verify-onboarding.mjs` | 47 | **OAuth 는 틀려도 성공처럼 보인다** — state 예측·재사용·CORS·XSS·채널 프로바이더 불일치 |
+| `verify-render.mjs` | 39 | **한글 완성형 11,172자 전수** — 받침·조사, 그리고 저녁 복습이 아침의 재전송이 아닌 것 |
+| `verify-push.mjs` | 40 | **아침 배치의 순서** — 확보→발신, 코스 미선택 시 날을 안 깎는 것, 운세가 3통째인 것 |
+| `verify-evening.mjs` | 21 | **복습은 보너스** — `current_day` 를 건드리지 않는가 / 대상을 진도가 아닌 발신 로그에서 뽑는가 |
+| `verify-fortune-server.mjs` | 16 | **웹과 같은 값** — 사본 없음 / 출생지로 오늘 주 계산 / 문안 30칸+십신 10 결번 |
 
 여기서 잡은 것 중 화면으로는 절대 못 봤을 것들:
 

@@ -17,6 +17,7 @@
    ================================================================== */
 import { users, billing, learning } from "../repo/index.mjs";
 import { getProfile, replyMessage } from "../line.mjs";
+import { serviceGuide, nextStep, messageForStep } from "../onboarding.mjs";
 
 /* 診断ページの場所。LINE から案内するのはここだけ。 */
 const SITE_URL = process.env.SITE_URL || "https://www.kstudy101.jp";
@@ -33,17 +34,32 @@ function welcomeForNameless() {
     type: "text",
     text: [
       "ご登録ありがとうございます。",
-      "101日間の韓国語レッスンを、毎朝おとどけします。",
+      "101日間の韓国語レッスンを、毎日おとどけします。",
       "",
-      "このレッスンは、あなたのお名前を使って進みます。",
-      "たとえば「다나카는 일본에서 왔어요」のように、",
-      "ご自身の名前で例文が出てきます。",
+      "──────────",
+      "📖 どんな講座か",
+      "──────────",
+      "韓国語を、あなたの**名前**と**四柱**で学びます。",
+      "教科書の「ミンスさん」ではなく、例文の主語があなたです。",
       "",
+      "・会話文はあなたが「私」として登場します",
+      "　場面（買い物・道をたずねる・自己紹介…）ごとに、",
+      "　ご自身の名前で言えるようになります",
+      "　たとえば「다나카는 일본에서 왔어요」のように",
+      "・韓国式の占い（사주・운세・기운）が毎朝つきます",
+      "",
+      "朝 7時　運勢 ＋ 文法 ＋ 会話 ＋ 単語3語",
+      "夕 6時　その文法をもう一度（復習）",
+      "",
+      "コースは 初級・中級・上級 の3つ。",
+      "それぞれ101日ぶんの別の講座です。",
+      "",
+      "──────────",
       "▼ はじめに、こちらでお名前を入れてください（1分ほど）",
       SITE_URL,
       "診断のあと「LINEで受け取る」を押すと、ここに繋がります。",
       "",
-      "お名前が登録された翌朝から、1日目をおとどけします。"
+      "お名前が登録できたら、コースをお訊きします。"
     ].join("\n")
   };
 }
@@ -90,17 +106,32 @@ export async function handleFollow(conn, event,
     await users.setStatus(conn, user.id, paid ? "active" : "trial");
   }
 
-  /* 名前がまだ無い人にだけ、診断への案内を返す。
+  /* 何を返すかは、名前があるかで分かれる。
+
+     名前が無い  … 診断への案内（この講座は名前で進むので、
+                    先に名前を入れてもらわないと 1 日目が作れない）
+     名前がある  … 先にサイトで連携した人が、あとから友だち追加した。
+                    講座の案内と、次に訊くこと（コースなど）を返す
+
+     以前は後者に**何も返していなかった**。連携も友だち追加も
+     済んでいるのに LINE 側は無言で、最初のメッセージが翌朝の
+     「1 日目」だった。
+
      返信に失敗しても友だち追加そのものは成立させる ── ここで
      throw すると LINE が webhook を失敗とみなして掛け直し、
      同じ人の追加処理が何度も走る。 */
   let welcomed = false;
-  if (!user.name_kr && event?.replyToken) {
-    try {
-      await reply(event.replyToken, [welcomeForNameless()]);
-      welcomed = true;
-    } catch {
-      /* 返信できなくても、翌朝の案内で拾える。 */
+  if (event?.replyToken) {
+    const messages = user.name_kr
+      ? await onboardingMessages(conn, user)
+      : [welcomeForNameless()];
+    if (messages.length) {
+      try {
+        await reply(event.replyToken, messages);
+        welcomed = true;
+      } catch {
+        /* 返信できなくても、翌朝の案内で拾える。 */
+      }
     }
   }
 
@@ -111,6 +142,26 @@ export async function handleFollow(conn, event,
     displayName,
     welcomed
   };
+}
+
+/* 講座の案内 ＋ 次に訊くこと 1 つ。訊くことが無ければ案内だけ。
+   段は lib/onboarding.mjs が中身から導く（列で持たない）。 */
+async function onboardingMessages(conn, user) {
+  const [saju, prog] = await Promise.all([
+    users.getSajuProfile(conn, user.id),
+    learning.getProgress(conn, user.id)
+  ]);
+  const state = {
+    ...user,
+    birth_date: saju ? saju.birth_date : null,
+    birth_time: saju ? saju.birth_time : null,
+    birth_confirmed: saju ? saju.birth_confirmed : false,
+    track: prog ? prog.track : null
+  };
+  return [
+    serviceGuide({ nameJa: user.name_reading || user.name_kanji }),
+    messageForStep(nextStep(state), state)
+  ].filter(Boolean);
 }
 
 /* ブロック。消さない ── 消すと再追加が新規に見え、

@@ -19,11 +19,20 @@
    ================================================================== */
 import { users, billing, learning } from "../repo/index.mjs";
 import { replyMessage } from "../line.mjs";
+import { nextStep, messageForStep } from "../onboarding.mjs";
 
 /* 受け取る文面は日本語。ひらがな・カタカナ・漢字が混ざるので
    単語の一致で見る（形態素解析は入れない）。 */
 const ASK_STATUS = ["何日", "なんにち", "今日", "きょう", "残り", "のこり", "進捗", "ステータス"];
 const ASK_STOP   = ["解約", "退会", "やめたい", "停止", "配信停止", "キャンセル"];
+
+/* まだ始まっていない人が、始めるための言葉。
+
+   quickReply のボタンは、次のメッセージが届くと押せなくなる。
+   配信バッチは 3 回まで促して黙るので（db/push-daily.mjs の
+   ONBOARD_NOTICE_MAX）、黙ったあとにボタンだけが残っていても
+   押せない ── そこで手が無くなる。ここを開けておく。 */
+const ASK_SETUP  = ["コース", "こーす", "初級", "中級", "上級", "設定", "はじめ", "始め", "名前", "なまえ", "生年月日"];
 
 const hit = (text, words) => words.some((w) => text.includes(w));
 
@@ -40,6 +49,22 @@ export async function handleMessage(conn, event) {
 
   const user = await users.findByLineUserId(conn, lineUserId);
   if (!user) return { skipped: "未登録の利用者です", lineUserId };
+
+  /* 始める前の 3 つ（名前・生年月日・コース）が残っていれば、
+     状況を答えるより先にそれを出す。まだ 0 日目の人に
+     「いま 0 日目まで進んでいます」と返しても、次にすることが
+     分からない。 */
+  const pending = await pendingStep(conn, user);
+  if (pending && hit(text, [...ASK_SETUP, ...ASK_STATUS])) {
+    if (replyToken && !isVerifyToken(replyToken)) {
+      try {
+        await replyMessage(replyToken, [pending]);
+      } catch (e) {
+        return { userId: user.id, replied: false, error: e.message };
+      }
+    }
+    return { userId: user.id, replied: true, onboarding: true };
+  }
 
   let reply = null;
 
@@ -75,6 +100,25 @@ export async function handleMessage(conn, event) {
     }
   }
   return { userId: user.id, replied: true };
+}
+
+/* 始める前に残っている 1 つ。無ければ null。
+   段は lib/onboarding.mjs が中身から導く（列で持たない）ので、
+   ここも handlers/postback.mjs も配信バッチも、同じものを見る。 */
+async function pendingStep(conn, user) {
+  const [saju, prog] = await Promise.all([
+    users.getSajuProfile(conn, user.id),
+    learning.getProgress(conn, user.id)
+  ]);
+  const state = {
+    ...user,
+    birth_date: saju ? saju.birth_date : null,
+    birth_time: saju ? saju.birth_time : null,
+    birth_confirmed: saju ? saju.birth_confirmed : false,
+    track: prog ? prog.track : null
+  };
+  const step = nextStep(state);
+  return step ? messageForStep(step, state) : null;
 }
 
 /* LINE Developers の「検証」ボタンは、返信できないダミーの

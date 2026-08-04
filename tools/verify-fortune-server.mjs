@@ -16,6 +16,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fortuneFor, engineDir, categories } from "../server/lib/fortune.mjs";
+import {
+  checkLines, fortuneMessage, CAT_IDS, GRADES_KO, SIPSIN
+} from "../server/lib/fortune-text.mjs";
 
 let pass = 0;
 const fails = [];
@@ -138,6 +141,93 @@ check("四柱が無い人には出さない（既定の運勢を作らない）"
   /* 作ってしまうと、全員が同じ運勢を受け取る。 */
   assert(fortuneFor({}, "2026-08-04") === null, "出してしまいました");
   assert(fortuneFor({ birth_date: null }, "2026-08-04") === null, "出してしまいました");
+  return "null";
+});
+
+console.log("\n[文面]  数字を言葉にする所。当てはめ先が欠けると、その等級の日だけ消える");
+
+/* 実物（server/content/fortune-lines.json）は公開リポジトリに無い。
+   ここで見るのは「受け入れる条件」の側 ── 原稿を持っていない環境
+   でも、何を満たすべきかは検査できる。lib/content-check.mjs と同じ。 */
+const FULL = {
+  cats: Object.fromEntries(CAT_IDS.map((c) =>
+    [c, Object.fromEntries(GRADES_KO.map((g) => [g, { kr: `${c}${g}`, ja: `${c}${g}` }]))])),
+  sipsin: Object.fromEntries(SIPSIN.map((s) => [s, { kr: `${s}kr`, ja: `${s}ja` }]))
+};
+
+check("当てはめ先が、エンジンの出すものと同じ並び", () => {
+  /* ここがずれると、当てはめ先の無い等級・項目が出る。
+     出た日は運勢が落ちるだけなので、入稿漏れと区別できない。 */
+  const ids = categories().map((c) => c.id);
+  assert(JSON.stringify(ids) === JSON.stringify([...CAT_IDS]),
+    `項目: エンジン ${ids.join(",")} / 文面 ${CAT_IDS.join(",")}`);
+
+  /* 等級はエンジンの GRADES から読む。fortune.js は
+     globalThis に付ける書き方なので、実際に呼んで確かめる。 */
+  const seen = new Set();
+  for (let d = 1; d <= 28; d++) {
+    const f = fortuneFor(ME, `2026-02-${String(d).padStart(2, "0")}`);
+    for (const id of ids) seen.add(f.grades[id].ko);
+  }
+  for (const g of seen) {
+    assert(GRADES_KO.includes(g), `エンジンが出す等級「${g}」が文面の表にありません`);
+  }
+  return `${CAT_IDS.length} 項目 / ${GRADES_KO.length} 等級 / ${SIPSIN.length} 十神`;
+});
+
+check("欠番を数える（30 マス + 十神 10）", () => {
+  assert(checkLines(FULL).length === 0, JSON.stringify(checkLines(FULL)));
+
+  /* 1 マス抜くと、そこだけ指摘される。全部まとめて返るので、
+     入稿で何往復もしなくて済む。 */
+  const hole = JSON.parse(JSON.stringify(FULL));
+  delete hole.cats.money["대길"];
+  const bad = checkLines(hole);
+  assert(bad.length === 1 && /money.*대길/.test(bad[0]), JSON.stringify(bad));
+
+  const noSip = JSON.parse(JSON.stringify(FULL));
+  delete noSip.sipsin["정인"];
+  assert(checkLines(noSip).some((m) => /정인/.test(m)), "十神の欠けを見ていません");
+  return "1 マス抜くと 1 件";
+});
+
+check("知らない項目・等級が混ざったら指摘する", () => {
+  /* 綴り違い（「대길」を「대吉」）は、抜けと違って気づけない ──
+     30 マスは埋まっているのに、当てはめ先だけが無い。 */
+  const typo = JSON.parse(JSON.stringify(FULL));
+  typo.cats.money["대吉"] = { kr: "x", ja: "x" };
+  assert(checkLines(typo).some((m) => /대吉/.test(m)), "綴り違いが素通りしました");
+
+  const extra = JSON.parse(JSON.stringify(FULL));
+  extra.cats.luck = {};
+  assert(checkLines(extra).some((m) => /luck/.test(m)), "知らない項目が素通りしました");
+  return "綴り違いも拾う";
+});
+
+check("kr だけ・ja だけの半端も通さない", () => {
+  const half = JSON.parse(JSON.stringify(FULL));
+  half.cats.love["길"] = { kr: "있음" };
+  assert(checkLines(half).some((m) => /love.*길/.test(m)), "日本語が無いまま通りました");
+  return "両方そろって 1 マス";
+});
+
+check("実際の運勢を文にできる", () => {
+  const f = fortuneFor(ME, "2026-08-04");
+  const m = fortuneMessage(f, FULL);
+  assert(m && m.type === "text", JSON.stringify(m));
+  assert(/총운/.test(m.text), m.text);
+  /* 十神の一言が入る。点の根拠がここなので、落ちると
+     「なぜ今日がそうなのか」が消える。 */
+  assert(SIPSIN.some((s) => m.text.includes(`${s}kr`)), `十神がありません: ${m.text}`);
+  /* 6 項目すべてに一言を付けると、韓国語と訳で 12 行になり
+     レッスン本体より長くなる。高い方と低い方だけ。 */
+  assert(m.text.split("\n").length <= 20, `${m.text.split("\n").length} 行あります`);
+  return `${m.text.split("\n").length} 行`;
+});
+
+check("文面が無ければ、既定の一言を作らない", () => {
+  assert(fortuneMessage(fortuneFor(ME, "2026-08-04"), null) === null, "作ってしまいました");
+  assert(fortuneMessage(null, FULL) === null, "運勢が無いのに作りました");
   return "null";
 });
 

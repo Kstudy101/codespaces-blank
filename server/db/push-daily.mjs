@@ -42,6 +42,9 @@ import { pushMessage, isUnreachable } from "../lib/line.mjs";
 import { jstDate, jstDateTime } from "../lib/jst.mjs";
 import { renderDay, nameMissingNotice } from "../lib/render.mjs";
 import { TOTAL_DAYS } from "../lib/repo/learning.mjs";
+import { nextStep, messageForStep } from "../lib/onboarding.mjs";
+import { fortuneFor } from "../lib/fortune.mjs";
+import { loadLines, fortuneMessage } from "../lib/fortune-text.mjs";
 
 /* ---- 引数 --------------------------------------------------------- */
 const argv = process.argv.slice(2);
@@ -66,6 +69,21 @@ const DISABLED = process.env.PUSH_DISABLED === "1";
 
 /* 名前の登録を促す回数。3 回目からは黙る。 */
 const NAME_NOTICE_MAX = 2;
+
+/* オンボーディング（名前の選択・コース選択）を促す回数。
+   同じ理由で上限を置く ── 答えない人へ毎朝ボタンを送ると
+   ブロックされ、ブロックは取り消せない。
+
+   黙っているあいだも日は進まないので、あとから答えれば
+   その日から始まる。答える口は message.mjs にも開けてある
+   （「コース」と送れば選び直しの案内が出る）── quickReply の
+   ボタンは新しいメッセージが来ると押せなくなるため、
+   黙ったあとに手が無くなるのを防ぐ。 */
+const ONBOARD_NOTICE_MAX = 3;
+
+/* 運勢を出せなかった理由。1 回だけ出す ── 全員ぶん出すと
+   ログが人数ぶん埋まって、他の行が読めなくなる。 */
+const fortuneSkips = new Set();
 
 if (!/^\d{4}-\d{2}-\d{2}$/.test(DATE)) {
   console.error(`✗ --date は YYYY-MM-DD で渡してください: ${DATE}`);
@@ -117,6 +135,103 @@ export function retryKey(userId, day, type) {
   return `${s.slice(0,8)}-${s.slice(8,12)}-${s.slice(12,16)}-${s.slice(16,20)}-${s.slice(20,32)}`;
 }
 
+/* ---- 3 通目の運勢 ---------------------------------------------------
+   レッスンの後ろに足す（plan-fortune-daily.md §5 の (가)）。
+   pushMessage は配列を受けるので、3 通でも API 呼び出しは 1 回、
+   通知も 1 回。
+
+   出さない条件が 3 つある。どれも「黙って出さない」で正しい ──
+   運勢はレッスンの付属で、これが無いことでレッスンが止まる方が損。
+
+     ・生年月日が未確認   … 確かめていない値で 101 日ぶん占うと、
+                            全部が別人のものになる。数字は出るので
+                            受け取った側からは間違いだと分からない
+     ・文面が未入稿       … 既定の一言を埋めると、全員に同じものが
+                            「今日の運勢」として届く
+     ・エンジンが読めない … 手元で engine/ が無いとき。本番では
+                            .cpanel.yml が写す
+
+   理由は 1 度だけログに出す。出さないと、運勢が丸ごと落ちた日に
+   「元々そういうもの」と読めてしまう。 */
+export function fortuneSection(u, template, { date = DATE, load = loadLines } = {}) {
+  if (!u.birth_date) return null;
+
+  if (!u.birth_confirmed) {
+    if (!fortuneSkips.has("未確認")) {
+      fortuneSkips.add("未確認");
+      console.log("  · 生年月日が未確認の人には運勢を付けていません");
+    }
+    return null;
+  }
+
+  let lines;
+  try {
+    lines = load();
+  } catch (e) {
+    if (!fortuneSkips.has("文面")) {
+      fortuneSkips.add("文面");
+      console.error(`  ! 運勢の文面が読めません: ${e.message}`);
+    }
+    return null;
+  }
+  if (!lines) {
+    if (!fortuneSkips.has("未入稿")) {
+      fortuneSkips.add("未入稿");
+      console.log("  · content/fortune-lines.json が無いので運勢は付きません");
+    }
+    return null;
+  }
+
+  let f;
+  try {
+    f = fortuneFor(u, date);
+  } catch (e) {
+    if (!fortuneSkips.has("エンジン")) {
+      fortuneSkips.add("エンジン");
+      console.error(`  ! 運勢エンジン: ${e.message}`);
+    }
+    return null;
+  }
+  if (!f) return null;
+
+  return fortuneMessage(f, lines, { bridge: template ? template.fortune_bridge : null });
+}
+
+
+/* ---- 始める前に訊くこと --------------------------------------------
+   名前とコースは、決まらないとその日の中身が作れない。
+
+     名前 … どちらの名前で呼ぶかで会話文が変わる
+     コース … 引く原稿そのものが変わる
+
+   なので決まるまで日を進めない。生年月日の確認は止めない ──
+   止まるのは運勢だけで、レッスンはそのまま送れる。
+
+   促す回数に上限を置くのは名前案内（NAME_NOTICE_MAX）と同じ理由。
+   日は進めないので、あとから答えればその日から始まる。 */
+async function askOnboarding(conn, u, step, { send = pushMessage } = {}) {
+  const asked = await pushlogs.countByType(conn, u.id, "onboarding");
+  if (asked >= ONBOARD_NOTICE_MAX) return `${step} 待ち`;
+  if (DRY || DISABLED) return `${DRY ? "予定" : "停止中"}:${step} の確認`;
+
+  const message = messageForStep(step, u);
+  if (!message) return `${step} 待ち`;
+
+  try {
+    await send(u.line_user_id, [message],
+      { retryKey: retryKey(u.id, 0, `onboard${step}${asked}`) });
+    await pushlogs.logSent(conn, u.id, { pushType: "onboarding" });
+    return `${step} の確認`;
+  } catch (e) {
+    const gone = isUnreachable(e);
+    if (gone) await users.markUnfollowed(conn, u.line_user_id);
+    await pushlogs.logFailed(conn, u.id,
+      { pushType: "onboarding", error: String(e.message || e).slice(0, 500) });
+    return gone ? "届かない" : "送信失敗";
+  }
+}
+
+
 /* ---- 1 人ぶん ------------------------------------------------------
    返すのは何をしたかの一語。数えるのは呼ぶ側の仕事にして、
    ここは「1 人について何が起きたか」だけを見る。
@@ -145,10 +260,20 @@ export async function deliverOne(conn, u, { send = pushMessage } = {}) {
   const entitled = Number(u.total_days_entitled) || 0;
   if (next > entitled) return "日数切れ";
 
-  /* 原稿。無ければ日を消費せずに降りる。
+  /* 始める前に決まっていないといけないものを訊く。
+     日は進めない ── 進めると、決まる前の日が中身の無いまま
+     消費される（plan-p4-content.md 7-6 と同じ間違い）。 */
+  const step = nextStep(u);
+  if (step === "name" || step === "track") {
+    return askOnboarding(conn, u, step, { send });
+  }
+
+  /* 原稿。コースごとに別の 101 日なので、その人のコースで引く。
+     無ければ日を消費せずに降りる。中級・上級はまだ入稿が済んで
+     いないので、ここに来るのは今のところ普通のこと。
      status='failed' で残すのは、歯抜けに気づくのが利用者からの
      問い合わせでは遅いため。 */
-  const tpl = await learning.getTemplate(conn, next);
+  const tpl = await learning.getTemplate(conn, u.track, next);
   if (!tpl) {
     if (!DRY && !DISABLED) {
       await pushlogs.logFailed(conn, u.id,
@@ -193,6 +318,11 @@ export async function deliverOne(conn, u, { send = pushMessage } = {}) {
       return gone ? "届かない" : "送信失敗";
     }
   }
+
+  /* 3 通目の運勢。組むのは送る前 ── ここで落ちても
+     レッスンは送れるようにしておく（fortuneSection は投げない）。 */
+  const fortune = fortuneSection(u, tpl);
+  if (fortune) messages = [...messages, fortune];
 
   if (DRY || DISABLED) return `${DRY ? "予定" : "停止中"}:${next}日目`;
 

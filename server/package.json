@@ -14,6 +14,7 @@
     "smoke": "node db/smoke.mjs",
     "verify": "node ../tools/verify-server.mjs && node ../tools/verify-webhook.mjs",
     "push": "node db/push-daily.mjs",
+    "push:evening": "node db/push-evening.mjs",
     "seed": "node db/seed-content.mjs",
     "seed:check": "node db/seed-content.mjs --check"
   },

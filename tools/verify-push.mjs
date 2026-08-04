@@ -16,7 +16,7 @@
    約束なので、偽物を渡して SQL を読む。LINE も偽物を渡し、
    呼ばれた瞬間に DB が何をされていたかを覗く。
    ================================================================== */
-import { deliverOne, retryKey, tooEarly } from "../server/db/push-daily.mjs";
+import { deliverOne, retryKey, tooEarly, fortuneSection } from "../server/db/push-daily.mjs";
 import { LineApiError } from "../server/lib/line.mjs";
 
 let pass = 0;
@@ -53,10 +53,14 @@ function fakeConn(rows = {}) {
   };
 }
 
-/* 3 日目まで進んでいて、101 日ぶん買っている人 */
+/* 3 日目まで進んでいて、101 日ぶん買っている人。
+   始める前の 3 つ（名前・生年月日・コース）は答え終わっている ──
+   答えていないと配信そのものが始まらないので、既定はこちら。
+   答えていない側は、下の [始める前] でひとつずつ崩して見る。 */
 const USER = {
   id: 7, line_user_id: "U_test",
   name_kanji: "田中", name_reading: "たなか", name_kr: "다나카",
+  name_source: "web", track: "beginner",
   status: "active", total_days_entitled: 101, current_day: 3, current_semester: 1,
   /* この講座は四柱で韓国語を教えるので、配信の対象を引くところから
      五行と干支が付いてくる（repo/users.mjs の listDeliverable）。 */
@@ -64,7 +68,7 @@ const USER = {
 };
 
 const TPL = [{
-  day_number: 4, semester: 1, grammar_point: "-예요 / -이에요",
+  day_number: 4, track: "beginner", semester: 1, grammar_point: "-예요 / -이에요",
   grammar_tip_kr: "打ち解けた丁寧。", requires_name_slot: 1,
   dialogue_template: JSON.stringify([{ kr: "{NAME_IEYO}.", ja: "{NAME_JP}です。" }]),
   vocab_3: JSON.stringify([{ kr: "네", meaning: "はい" }])
@@ -377,6 +381,167 @@ await check("LINE が受け取る UUID の形をしている", () => {
   const k = retryKey(7, 4, "learning");
   assert(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(k), k);
   return k;
+});
+
+console.log("\n[始める前]  名前とコースが決まるまで、日を消費しない");
+
+/* 決まっていない人。1 つずつ崩して、何を訊きに行くかを見る。 */
+const NO_TRACK = { ...USER, track: null };
+const NO_NAMESRC = { ...USER, name_source: null, display_name: "たなか" };
+
+await check("コースが決まっていなければ、日を進めない", async () => {
+  const conn = fakeConn(READY);
+  let msgs = null;
+  const r = await deliverOne(conn, NO_TRACK, { send: async (_t, m) => { msgs = m; return {}; } });
+  assert(/track/.test(r), r);
+  assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)),
+    "コース未選択のまま日を進めました（その日は誰にも届かず消えます）");
+  assert(msgs && /コース/.test(msgs[0].text), JSON.stringify(msgs));
+  return "advanceDay を呼ばない";
+});
+
+await check("コースを訊くときは、3 つのボタンを付ける", async () => {
+  const conn = fakeConn(READY);
+  let msgs = null;
+  await deliverOne(conn, NO_TRACK, { send: async (_t, m) => { msgs = m; return {}; } });
+  const q = msgs[0].quickReply;
+  assert(q && q.items.length === 3, JSON.stringify(q));
+  for (const t of ["beginner", "intermediate", "advanced"]) {
+    assert(q.items.some((i) => i.action.data === `action=track&pick=${t}`), `${t} が無い`);
+  }
+  /* label は 20 字まで。超えると LINE が 400 を返し、
+     その人だけ案内が届かないまま止まる。 */
+  for (const i of q.items) assert(i.action.label.length <= 20, i.action.label);
+  return "初級 / 中級 / 上級";
+});
+
+await check("名前をどちらにするかは、選べる人にだけ訊く", async () => {
+  const conn = fakeConn(READY);
+  let msgs = null;
+  const r = await deliverOne(conn, NO_NAMESRC, { send: async (_t, m) => { msgs = m; return {}; } });
+  assert(/name/.test(r), r);
+  assert(msgs[0].text.includes("다나카") && msgs[0].text.includes("たなか"),
+    `両方の名前を見せていません: ${msgs[0].text}`);
+
+  /* LINE の表示名が取れない人には訊かない ── 比べる相手が無く、
+     答えようが無い質問になる。その人はそのまま進む。 */
+  const noDisplay = fakeConn(READY);
+  let sent = false;
+  await deliverOne(noDisplay, { ...USER, name_source: null },
+    { send: async () => { sent = true; return {}; } });
+  assert(sent, "選択肢が無いのに止まりました");
+  assert(noDisplay.sql().some((s) => /UPDATE learning_progress/i.test(s)),
+    "選択肢が無いのに日を進めませんでした");
+  return "表示名がある人だけ";
+});
+
+await check("生年月日の未確認では、レッスンを止めない", async () => {
+  /* 止まるのは運勢だけ。ここで止めると、確かめていないというだけで
+     レッスンが 1 日も届かなくなる。 */
+  const conn = fakeConn(READY);
+  let sent = false;
+  await deliverOne(conn, { ...USER, birth_date: "1995-04-12", birth_confirmed: false },
+    { send: async () => { sent = true; return {}; } });
+  assert(sent, "レッスンまで止まりました");
+  return "運勢だけ落ちる";
+});
+
+await check("促すのは 3 回まで（ブロックは取り消せない）", async () => {
+  const conn = fakeConn({ ...READY, "SELECT COUNT\\(\\*\\) AS n FROM push_logs": [{ n: 3 }] });
+  let sent = false;
+  const r = await deliverOne(conn, NO_TRACK, { send: async () => { sent = true; return {}; } });
+  assert(!sent, "4 回目を送りました");
+  assert(/待ち/.test(r), r);
+  assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)),
+    "黙るときに日を進めました（あとから答えてもその日は戻りません）");
+  return "n=3 → 黙る。進みは止めたまま";
+});
+
+console.log("\n[運勢]  3 通目。付かない日があっても、レッスンは止めない");
+
+/* 生年月日まで確かめ終わっている人。 */
+const WITH_SAJU = {
+  ...USER,
+  birth_date: "1995-04-12", birth_time: "09:30:00", birth_confirmed: true,
+  raw_result_json: { zodiac: "돼지", city: "tokyo" }
+};
+
+/* 30 マス + 十神 10 の代わり。実物は server/content/ にあり
+   公開リポジトリには無いので、形だけ同じものを渡す。 */
+const CATS = ["total", "money", "love", "work", "health", "study"];
+const GRADES = ["대길", "길", "중길", "소길", "말길"];
+const SIPSIN = ["비견", "겁재", "식신", "상관", "편재", "정재", "편관", "정관", "편인", "정인"];
+const FAKE_LINES = {
+  cats: Object.fromEntries(CATS.map((c) => [c,
+    Object.fromEntries(GRADES.map((g) => [g, { kr: `${c}-${g}-kr`, ja: `${c}-${g}-ja` }]))])),
+  sipsin: Object.fromEntries(SIPSIN.map((s) => [s, { kr: `${s}-kr`, ja: `${s}-ja` }]))
+};
+
+await check("確かめた生年月日の人には、運勢が付く", async () => {
+  const m = fortuneSection(WITH_SAJU, TPL[0], { load: () => FAKE_LINES });
+  assert(m && m.type === "text", JSON.stringify(m));
+  assert(/총운/.test(m.text), m.text);
+  assert(SIPSIN.some((s) => m.text.includes(`${s}-kr`)), `十神の一言がありません: ${m.text}`);
+  return "総合運 + 十神";
+});
+
+await check("確かめていない生年月日には、運勢を付けない", async () => {
+  /* ウェブの診断は「試しに入れてみる」場所でもある。確かめずに
+     101 日ぶん占うと、全部が別人のものになる ── しかも数字は
+     出るので、受け取った側からは間違いだと分からない。 */
+  const m = fortuneSection({ ...WITH_SAJU, birth_confirmed: false }, TPL[0],
+    { load: () => FAKE_LINES });
+  assert(m === null, JSON.stringify(m));
+  return "null";
+});
+
+await check("四柱が無い人にも付けない（既定の運勢を作らない）", async () => {
+  const m = fortuneSection({ ...USER, birth_date: null }, TPL[0], { load: () => FAKE_LINES });
+  assert(m === null, JSON.stringify(m));
+  return "null";
+});
+
+await check("文面が未入稿なら、黙って落とす（レッスンは送る）", async () => {
+  const m = fortuneSection(WITH_SAJU, TPL[0], { load: () => null });
+  assert(m === null, JSON.stringify(m));
+
+  const conn = fakeConn(READY);
+  let msgs = null;
+  await deliverOne(conn, WITH_SAJU, { send: async (_t, mm) => { msgs = mm; return {}; } });
+  assert(msgs && msgs.length >= 1, "レッスンまで止まりました");
+  return "レッスンは届く";
+});
+
+await check("運勢の読み込みが落ちても、レッスンは送る", async () => {
+  const m = fortuneSection(WITH_SAJU, TPL[0],
+    { load: () => { throw new Error("欠番があります"); } });
+  assert(m === null, "例外が外へ出ました");
+  return "例外を外へ出さない";
+});
+
+await check("運勢は 3 通目（レッスンの後ろ）", async () => {
+  const conn = fakeConn(READY);
+  let msgs = null;
+  await deliverOne(conn, WITH_SAJU,
+    { send: async (_t, m) => { msgs = m; return {}; } });
+  assert(msgs.length === 3, `${msgs.length} 通でした`);
+  assert(/日目/.test(msgs[0].text), `1 通目が本文ではありません: ${msgs[0].text.slice(0, 30)}`);
+  assert(/총운/.test(msgs[2].text), `3 通目が運勢ではありません: ${msgs[2].text.slice(0, 30)}`);
+  return "文法・単語・運勢";
+});
+
+await check("その日の一言（fortune_bridge）は、原稿があるときだけ出る", async () => {
+  const withBridge = { ...TPL[0],
+    fortune_bridge: JSON.stringify({ kr: "오늘은 재물운이 좋아요.", ja: "今日は金運がいいです。" }) };
+  /* getTemplate を通さずに直接渡すので、JSON 列は自分で解く。 */
+  const parsed = { ...withBridge, fortune_bridge: JSON.parse(withBridge.fortune_bridge) };
+
+  const on = fortuneSection(WITH_SAJU, parsed, { load: () => FAKE_LINES });
+  assert(/오늘은 재물운이 좋아요/.test(on.text), on.text);
+
+  const off = fortuneSection(WITH_SAJU, TPL[0], { load: () => FAKE_LINES });
+  assert(!/오늘은 재물운이/.test(off.text), "原稿が無いのに出ました");
+  return "無ければ足さない";
 });
 
 console.log(`\n${fails.length ? "✗" : "✓"} ${pass + fails.length} 項目中 ${pass} 件成功`);

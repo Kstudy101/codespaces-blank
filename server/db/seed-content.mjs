@@ -121,6 +121,28 @@ if (!ok) {
 }
 console.log(`  ✓ ${count} 日ぶん、問題なし`);
 
+/* ---- クイズの答え合わせ（目視用、docs/plan-quiz.md）----------------
+   answer は 0 始まりの添字で、人が原稿を書くと 0/1 の取り違えが
+   必ず起きる。形の検査（content-check）は「範囲内か」までしか
+   見られない ── 2 番のつもりで answer:2 と書いて 3 番目が正解に
+   なっている、は機械には正しく見える。
+
+   だから添字を**解いた文字列**で並べる。ここを読む人間が
+   最後の関門になる ── 復習クイズは無保存（決定B）で、配信後に
+   間違いへ気づく計測が無いので、入れる前のこの目視が唯一の門。
+
+   これは検収用の stdout であって、クイズの**応答**の記録ではない。
+   無保存の原則(B)にはかからない。 */
+const withQuiz = days.filter((d) => d.quiz);
+if (withQuiz.length) {
+  console.log(`\nクイズの答え合わせ（${withQuiz.length} 問 ── 添字を解いた文字列で確かめてください）`);
+  for (const d of withQuiz) {
+    const q = d.quiz;
+    const resolved = Array.isArray(q.choices) ? q.choices[q.answer] : undefined;
+    console.log(`  [${d.__track} day ${d.day_number}] ${q.question} → answer:${q.answer} = 「${resolved}」`);
+  }
+}
+
 if (CHECK) { console.log("\n--check なので、ここで終わります"); process.exit(0); }
 
 /* ---- 入れる ------------------------------------------------------- */

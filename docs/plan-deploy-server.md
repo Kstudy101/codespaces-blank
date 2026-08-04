@@ -2,7 +2,7 @@
 
 작성: 2026-08-04 / 대상 커밋: `da5abfd` (main) / 실행: **대표님(브라우저)**
 
-> **상태: 배포 완료 (2026-08-04, 커밋 `660915a`). S6(cron)만 미확인.**
+> **상태: 전 단계 완료 (2026-08-04, 커밋 `660915a`).**
 > 도중에 `npm ci` 사고 1건 — 경위와 수정은 [plan-deploy-hang.md](plan-deploy-hang.md).
 > 결과 기록은 [STATUS.md](../STATUS.md) §9.2.
 
@@ -84,11 +84,11 @@ L126  ALTER TABLE subscriptions DROP COLUMN total_days_entitled;              �
 
 ### S0. DB 백업 ★ 건너뛰지 말 것
 
-- [ ] cPanel → **Setup Node.js App** → 앱(`kstudy101-line`) → Environment variables →
+- [x] cPanel → **Setup Node.js App** → 앱(`kstudy101-line`) → Environment variables →
       **`DB_NAME` 값을 적어 둡니다** (본번 DB 이름의 유일한 출처)
-- [ ] cPanel → **phpMyAdmin** → 왼쪽에서 그 DB 선택 → **Export** → Go → `.sql` 저장
+- [x] cPanel → **phpMyAdmin** → 왼쪽에서 그 DB 선택 → **Export** → Go → `.sql` 저장
       (또는 cPanel → **Backup Wizard** → Download a MySQL Database Backup)
-- [ ] 받은 파일의 **크기가 0이 아닌지** 확인
+- [x] 받은 파일의 **크기가 0이 아닌지** 확인
 
 > 이 시점의 DB 가 `DROP COLUMN` 전의 마지막 상태입니다.
 
@@ -96,29 +96,29 @@ L126  ALTER TABLE subscriptions DROP COLUMN total_days_entitled;              �
 
 `server/app.mjs:343` 이 기동 시 5개를 확인하고, 하나라도 없으면 `process.exit(1)` 합니다.
 
-- [ ] cPanel → Setup Node.js App → Environment variables 에 아래가 **전부** 있는지:
+- [x] cPanel → Setup Node.js App → Environment variables 에 아래가 **전부** 있는지:
 
 | 변수 | 없으면 |
 |---|---|
 | `LINE_CHANNEL_SECRET` | 기동 실패 |
 | `DB_HOST` `DB_USER` `DB_PASSWORD` `DB_NAME` | 기동 실패 |
 
-- [ ] (선택) LINE 로그인 연동을 쓰려면 `LINE_LOGIN_CHANNEL_ID` / `_SECRET` / `_REDIRECT_URI`
-- [ ] `TOKUSHOHO_URL` / `REFUND_POLICY` / `RICHMENU_IMAGE` 는 **지금 비워 둡니다** —
+- [x] (선택) LINE 로그인 연동을 쓰려면 `LINE_LOGIN_CHANNEL_ID` / `_SECRET` / `_REDIRECT_URI`
+- [x] `TOKUSHOHO_URL` / `REFUND_POLICY` / `RICHMENU_IMAGE` 는 **지금 비워 둡니다** —
       비어 있으면 가격표가 안 나오고 「준비중」으로 답합니다. 의도된 잠금입니다(STATUS §3)
 
 ### S2. 원격에서 가져오기
 
-- [ ] cPanel → **Git™ Version Control** → 해당 저장소 → **Update from Remote**
-- [ ] 가져온 커밋이 `da5abfd` (또는 그 이후)인지 확인
+- [x] cPanel → **Git™ Version Control** → 해당 저장소 → **Update from Remote**
+- [x] 가져온 커밋이 `da5abfd` (또는 그 이후)인지 확인
 
 > 이 배포는 GitHub `main` 을 가져옵니다. 제 기기의 미커밋 변경(`CLAUDE-karpathy.md`)은
 > 포함되지 않으며, `server/` 와 무관하므로 문제 없습니다.
 
 ### S3. 배포
 
-- [ ] 같은 화면에서 **Deploy HEAD Commit**
-- [ ] 화면의 로그가 마지막에 `OK - 配置と再起動要求まで終わりました` 로 끝나는지
+- [x] 같은 화면에서 **Deploy HEAD Commit**
+- [x] 화면의 로그가 마지막에 `OK - 配置と再起動要求まで終わりました` 로 끝나는지
 
 `.cpanel.yml` 이 자동으로 하는 일: 코드 배치 → 운세엔진(`saju.js`/`fortune.js`/
 `solar-terms.json`) 복사 → `npm install` → **`migrate`** → (content 있으면) seed → 재기동 요구.
@@ -127,7 +127,7 @@ L126  ALTER TABLE subscriptions DROP COLUMN total_days_entitled;              �
 > ([plan-deploy-hang.md](plan-deploy-hang.md)) → 서버 복구 후 `660915a` 로 재배포 성공.
 > S4 는 stdout 대신 증거로 판정: `tmp/restart.txt` 갱신 = 12개 작업 전부 통과 =
 > migrate 종료코드 0 = 스키마 검증 통과 (migrate 는 `✓` 일 때만 0 을 반환).
-> S5 `/health` → `ok`. **원고 수량(`beginner NN`)만 미실측** — STATUS §6.
+> S5 `/health` → `ok`. 원고 수량은 같은 날 phpMyAdmin 실측 — **`beginner 50` 확인**.
 > **cPanel UI 의 in progress 표시는 멈춘 채였음** — 판정은 restart.txt 로 할 것.
 
 ### S4. 마이그레이션 결과 읽기
@@ -138,7 +138,7 @@ S3 의 로그 안에 `migrate.mjs` 출력이 있습니다. 이렇게 끝나야 �
 ✓ スキーマは想定どおりです
 ```
 
-- [ ] 위 줄을 확인. `✗ N 件の問題があります` 면 **S5 로 가지 말고** §4 로
+- [x] 위 줄을 확인. `✗ N 件の問題があります` 면 **S5 로 가지 말고** §4 로
 
 로그에서 같이 볼 것:
 
@@ -151,21 +151,21 @@ S3 의 로그 안에 `migrate.mjs` 출력이 있습니다. 이렇게 끝나야 �
 
 ### S5. 살아 있는지 확인
 
-- [ ] 브라우저에서 https://api.kstudy101.jp/health → **`ok`** (200)
+- [x] 브라우저에서 https://api.kstudy101.jp/health → **`ok`** (200)
 
 `503 db unavailable` 이면 프로세스는 떴는데 DB 를 못 봅니다 → S1 의 `DB_*` 4개를 재확인.
 
 ### S6. cron 확인
 
-- [ ] cPanel → **Cron Jobs** → 목록에 **두 줄**이 있는지 확인:
+- [x] cPanel → **Cron Jobs** → 목록에 **두 줄**이 있는지 확인:
 
 ```
 0 * * * * /bin/bash ~/kstudy101-line/db/push-cron.sh morning >> ~/logs/push.log 2>&1
 0 * * * * /bin/bash ~/kstudy101-line/db/push-cron.sh evening >> ~/logs/push.log 2>&1
 ```
 
-- [ ] 없으면 위 두 줄을 그대로 추가 (Add New Cron Job, Common Settings → Once Per Hour)
-- [ ] `~/logs/` 디렉터리가 있는지 — 없으면 cPanel File Manager 로 만듭니다
+- [x] 없으면 위 두 줄을 그대로 추가 (Add New Cron Job, Common Settings → Once Per Hour)
+- [x] `~/logs/` 디렉터리가 있는지 — 없으면 cPanel File Manager 로 만듭니다
       (없으면 리다이렉트가 실패해 기록이 안 남습니다)
 
 **시각이 매시 0분인 것은 맞습니다.** 몇 시에 보낼지는 각 배치가 일본시간을 보고
@@ -177,8 +177,8 @@ S3 의 로그 안에 `migrate.mjs` 출력이 있습니다. 이렇게 끝나야 �
 
 ### S7. 마무리
 
-- [ ] `STATUS.md` §0 의 「LINE 배신 서버는 코드는 완성, 아직 배포 안 함」 갱신
-- [ ] `STATUS.md` §9.1 에 이번 배포 기록 추가
+- [x] `STATUS.md` §0 의 「LINE 배신 서버는 코드는 완성, 아직 배포 안 함」 갱신
+- [x] `STATUS.md` §9.1 에 이번 배포 기록 추가
 
 > S7 은 제가 하겠습니다. S5 까지 끝나면 결과를 알려 주십시오.
 

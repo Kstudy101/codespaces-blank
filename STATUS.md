@@ -16,11 +16,12 @@
 - 결제(선불 횟수권)는 **코드 완성, 의도적으로 잠겨 있음** — §3
 - 관문(자동 검증) **17종 전부 통과**
 
-**다음에 할 일은 두 가지입니다.**
+**다음에 할 일은 하나입니다.**
 
 1. **§3의 값 3개를 정한다** — 그게 없으면 결제가 안 열립니다
-2. **cron 등록을 확인한다** — cPanel → Cron Jobs 에 두 줄이 있는지, 홈에 `logs/` 폴더가
-   있는지 ([docs/plan-deploy-server.md](docs/plan-deploy-server.md) §3 S6). 미확인 상태로 남아 있습니다
+
+배포 검증은 전부 끝났습니다 (2026-08-04): cron 두 줄 + `~/logs/` 등록 완료,
+원고 수량 실측 `beginner 50` 확인. 배신은 다음 아침 7시(JST)부터 실전입니다.
 
 ---
 
@@ -182,8 +183,6 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | **운세 문면** | `server/content/fortune-lines.json` — 6항목 × 5등급 = 30칸 + 십신 10. 없으면 운세만 조용히 빠짐 |
 | **특정상거래법 표기 페이지** | `tokushoho.html` 미작성 (§3 이 정해져야 씀) |
 | **퀴즈 배신** | 30/50/75일차. `push_type='quiz'` 는 ENUM 에만 있고 보내는 코드 없음 |
-| **cron 등록 확인** | `push-cron.sh` 는 있으나 ChemiCloud 에 실제로 걸려 있는지 미확인 → cPanel → Cron Jobs 화면 (또는 `bash tools/cpanel.sh --api2 Cron/listcron`). 홈에 `logs/` 폴더도 필요 |
-| **원고 수량 실측** | 배포는 성공했으나 migrate 의 stdout(`content_templates: beginner NN`)을 못 봄. phpMyAdmin 에서 `SELECT track, COUNT(*) FROM content_templates GROUP BY track` 1줄이면 확인 끝 |
 
 ---
 
@@ -277,5 +276,5 @@ https://www.kstudy101.jp/privacy   새 문구(성별「未回答」) 반영 확�
    `tmp/restart.txt` 의 수정 시각으로 할 것 — 12개 작업이 `set -e` 로 이어져
    있고 restart.txt 가 마지막이므로, 갱신됐다면 migrate 가 0 으로 끝난 것
 
-**확인된 것:** `/health` → `ok` / `tmp/restart.txt` 갱신 / 태스크 큐 Task finished (10초).
-**미확인:** migrate stdout (원고 수량 `beginner NN`) — §6 의 「원고 수량 실측」 / cron 등록 — §6.
+**확인된 것:** `/health` → `ok` / `tmp/restart.txt` 갱신 / 태스크 큐 Task finished (10초) /
+원고 수량 실측 `beginner 50` (phpMyAdmin) / cron 두 줄 + `~/logs/` 등록 (같은 날 완료).

@@ -40,7 +40,7 @@ import { getPool, closePool } from "../lib/db.mjs";
 import { users, learning, pushlogs, entitlements, lapses } from "../lib/repo/index.mjs";
 import { pushMessage, isUnreachable } from "../lib/line.mjs";
 import { jstDate, jstDateTime } from "../lib/jst.mjs";
-import { renderDay, nameMissingNotice } from "../lib/render.mjs";
+import { renderDay, renderReviewQuiz, nameMissingNotice } from "../lib/render.mjs";
 import { TOTAL_DAYS } from "../lib/repo/learning.mjs";
 import { blockingStep, messageForStep } from "../lib/onboarding.mjs";
 import { fortuneFor } from "../lib/fortune.mjs";
@@ -391,6 +391,26 @@ export async function deliverOne(conn, u, { send = pushMessage, load = loadLines
     messages = [...messages,
       expiringNotice(u.track, { remaining: EXPIRING_AT, currentDay: next })];
     warned = true;
+  }
+
+  /* ---- 3 日周期の復習クイズ（docs/plan-quiz.md）--------------------
+     送る日（next）が 3 の倍数の朝だけ。current_day では数えない ──
+     あれは「昨日までに送った数」で、それで割ると 1 日ずれる。
+
+     節目（30/50/75）は休む。30 % 3 = 0 で重なるが、同じ朝に
+     クイズが 2 件出ると、どの答えがどの問題か混ざる。節目クイズが
+     実装される日のために席を空けておく。
+
+     期限の予告が付く朝も休む（承認時の決定④）。朝の便を常に
+     最大 4 通に保つ ── LINE の上限は 5 で、予告と重ねると丁度 5 に
+     なり、次に 1 通足した日に全体が 400 で落ちる。予告は日数ごとに
+     1 度だけなので、クイズの空白も 1 日で済む。
+
+     引けなければ（原稿なし・壊れ）何も足さない。本編は届く ──
+     運勢（fortuneSection）と同じ態度。 */
+  if (next % 3 === 0 && !warned && !(await learning.isCheckpoint(conn, next))) {
+    const quiz = await learning.pickReviewQuiz(conn, u.track, next);
+    if (quiz) messages = [...messages, renderReviewQuiz(quiz)];
   }
 
   if (DRY || DISABLED) return `${DRY ? "予定" : "停止中"}:${next}日目`;

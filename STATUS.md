@@ -14,7 +14,7 @@
 - LINE 배신 서버(`server/`)는 **ChemiCloud 에 배포 완료** (2026-08-04, `660915a`) —
   마이그레이션 002(되돌릴 수 없는 DROP COLUMN 포함)까지 본번 적용 끝. §9.2
 - 결제(선불 횟수권)는 **코드 완성, 의도적으로 잠겨 있음** — §3
-- 관문(자동 검증) **17종 전부 통과**
+- 관문(자동 검증) **18종 전부 통과**
 
 **다음에 할 일은 하나입니다.**
 
@@ -102,9 +102,9 @@ node tools/setup-richmenu.mjs --list              # 지금 뭐가 걸려 있나
 git clone https://github.com/Kstudy101/codespaces-blank.git
 cd codespaces-blank
 
-# 관문 17종. DB도 npm install 도 필요 없습니다 (의존은 mysql2 하나뿐)
+# 관문 18종. DB도 npm install 도 필요 없습니다 (의존은 mysql2 하나뿐)
 for f in saju fortune study name omikuji gilbang amulet birth pages \
-         server webhook onboarding render push fortune-server evening billing; do
+         server webhook onboarding render push fortune-server evening billing quiz; do
   node tools/verify-$f.mjs >/dev/null && echo "PASS $f" || echo "FAIL $f"
 done
 ```
@@ -182,7 +182,8 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | **101일 원고** | `server/content/` — 초급 약 50일치만 있고, 중급·고급은 0. 저장소에는 없음(유료물) |
 | **운세 문면** | `server/content/fortune-lines.json` — 6항목 × 5등급 = 30칸 + 십신 10. 없으면 운세만 조용히 빠짐 |
 | **특정상거래법 표기 페이지** | `tokushoho.html` 미작성 (§3 이 정해져야 씀) |
-| **퀴즈 배신** | 30/50/75일차. `push_type='quiz'` 는 ENUM 에만 있고 보내는 코드 없음 |
+| **퀴즈 원고** | `quiz` 열은 생겼으나(003) 원고 0건 — 백필 전까지 복습 퀴즈는 조용히 빠짐 ([docs/plan-quiz.md](docs/plan-quiz.md) §3-8) |
+| **절목 퀴즈의 발신** | 30/50/75일차. 수신·채점은 살아 있음(`tpl.quiz` 파싱, 003). 보내는 코드만 없음 — 후속 계획 |
 
 ---
 
@@ -219,7 +220,7 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
    `node:vm` 으로 사이트의 1부를 그대로 실행합니다. 사본을 두면 웹과 LINE의
    운세가 갈라지고, 양쪽 다 그럴듯한 숫자라 대조 전엔 아무도 모릅니다
 4. **`repo/` 는 `mysql2` 도 `node:` 내장도 읽지 않습니다.** 넘겨받은 `conn.execute()` 만.
-   그 덕에 관문 17종이 `npm install` 없이 돕니다
+   그 덕에 관문 18종이 `npm install` 없이 돕니다
 5. **의존은 `mysql2` 하나뿐입니다.** Stripe SDK 도 LINE SDK 도 넣지 않았습니다
 6. **폴리시(privacy.html)와 코드가 어긋난 적이 4번 있습니다**(GA4·Clarity·LINE·성별).
    저장하는 항목을 늘리면 반드시 제2항도 같은 커밋에서 고치십시오

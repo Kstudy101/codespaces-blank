@@ -54,7 +54,10 @@ const EXPECTED_COLUMNS = [
   ["purchases",          "track"],
   ["subscriptions",      "trial_track"],
   ["course_entitlements", "days_entitled"],
-  ["lapse_log",          "lapsed_at"]
+  ["lapse_log",          "lapsed_at"],
+  /* 003。復習クイズの原稿。無くてもクイズが黙って抜けるだけだが、
+     列ごと無いと postback の採点が「未入稿」と読み違える。 */
+  ["content_templates",  "quiz"]
 ];
 
 /* 「もう当たっている」を表すものだけ。

@@ -267,6 +267,9 @@ jobs:
       - name: Verify billing
         run: node tools/verify-billing.mjs
 
+      - name: Verify quiz
+        run: node tools/verify-quiz.mjs
+
       # ---------------------------------------------------------------
       # 公開ファイルを dist/ に集める。
       # このプロジェクトにビルドツールは無い（package.json も無い）。

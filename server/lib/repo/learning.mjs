@@ -208,12 +208,15 @@ function shapeTemplate(row) {
        ── 効いてはいるが、意図して真偽値を扱っているのか
        たまたま通っているのか読めなくなるので、ここで直す。 */
     requires_name_slot: !!row.requires_name_slot,
-    fortune_bridge: fromJson(row.fortune_bridge)
+    fortune_bridge: fromJson(row.fortune_bridge),
+    /* 003。節目の採点（handlers/postback.mjs の tpl.quiz）と
+       復習クイズの両方がここを読む。 */
+    quiz: fromJson(row.quiz)
   };
 }
 
 const TPL_COLS = `day_number, track, semester, grammar_point, grammar_tip_kr,
-                  dialogue_template, vocab_3, fortune_bridge, requires_name_slot`;
+                  dialogue_template, vocab_3, fortune_bridge, requires_name_slot, quiz`;
 
 /* track を第 2 引数ではなく第 2 引数「として必須」にしてある。
    既定を 'beginner' にすると、渡し忘れた呼び出しが初級の原稿を
@@ -248,7 +251,7 @@ export async function listTemplates(conn, { track = null, semester = null } = {}
 export async function upsertTemplate(conn, {
   track, dayNumber, grammarPoint, grammarTipKr = null,
   dialogueTemplate = null, vocab3 = null, fortuneBridge = null,
-  requiresNameSlot = false
+  requiresNameSlot = false, quiz = null
 }) {
   if (!isTrack(track)) {
     throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")} のどれか）`);
@@ -262,8 +265,8 @@ export async function upsertTemplate(conn, {
   await run(conn,
     `INSERT INTO content_templates
        (track, day_number, semester, grammar_point, grammar_tip_kr,
-        dialogue_template, vocab_3, fortune_bridge, requires_name_slot)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        dialogue_template, vocab_3, fortune_bridge, requires_name_slot, quiz)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        semester           = VALUES(semester),
        grammar_point      = VALUES(grammar_point),
@@ -271,11 +274,40 @@ export async function upsertTemplate(conn, {
        dialogue_template  = VALUES(dialogue_template),
        vocab_3            = VALUES(vocab_3),
        fortune_bridge     = VALUES(fortune_bridge),
-       requires_name_slot = VALUES(requires_name_slot)`,
+       requires_name_slot = VALUES(requires_name_slot),
+       quiz               = VALUES(quiz)`,
     [track, d, semesterForDay(d), grammarPoint, nn(grammarTipKr),
      toJson(dialogueTemplate), toJson(vocab3), toJson(fortuneBridge),
-     requiresNameSlot ? 1 : 0]);
+     requiresNameSlot ? 1 : 0, toJson(quiz)]);
   return getTemplate(conn, track, d);
+}
+
+/* ---- 復習クイズ（3 日周期、docs/plan-quiz.md）----------------------
+   maxDay 以下から 1 問を無作為に。上限を切るのは未習の文法を
+   出さないため ── 範囲を外すと、3 日目の人に 40 日目の敬語が届く。
+   表はコース当たり最大 101 行なので RAND() の費用は無い。
+
+   原稿が壊れていれば null ── 送らないだけで、本編は届く。
+   ここで throw すると、原稿 1 件の不備が配信バッチごと落とす。 */
+export async function pickReviewQuiz(conn, track, maxDay) {
+  if (!isTrack(track)) throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")}）`);
+  const d = Number(maxDay);
+  if (!Number.isInteger(d) || d < 1) return null;
+
+  const rows = await all(conn,
+    `SELECT day_number, quiz FROM content_templates
+      WHERE track = ? AND day_number <= ? AND quiz IS NOT NULL
+      ORDER BY RAND() LIMIT 1`, [track, d]);
+  if (!rows.length) return null;
+
+  const q = fromJson(rows[0].quiz);
+  if (!q || typeof q.question !== "string" || !q.question
+      || !Array.isArray(q.choices) || q.choices.length < 2
+      || !Number.isInteger(q.answer) || q.answer < 0 || q.answer >= q.choices.length) {
+    return null;
+  }
+  return { dayNumber: Number(rows[0].day_number),
+           question: q.question, choices: q.choices, answer: q.answer };
 }
 
 /* 何日目が埋まっていないか。101 日を売る以上、

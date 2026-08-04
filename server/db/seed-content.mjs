@@ -137,7 +137,9 @@ for (const d of days) {
     fortuneBridge:    d.fortune_bridge ?? null,
     /* semester は渡さない。upsertTemplate が day_number から決める ──
        原稿にも書くと、学期の切れ目が 2 か所に生まれる。 */
-    requiresNameSlot: !!d.requires_name_slot
+    requiresNameSlot: !!d.requires_name_slot,
+    /* 復習クイズ（任意、003）。形は content-check が入稿前に全部見る。 */
+    quiz:             d.quiz ?? null
   });
   done++;
 }

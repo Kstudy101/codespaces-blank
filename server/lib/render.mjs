@@ -277,6 +277,46 @@ export function renderReview(template, user = {}) {
 }
 
 
+/* ---- 復習クイズ 1 通（3 日周期、docs/plan-quiz.md）------------------
+   選択肢は quickReply ── オンボーディング・決済と同じ形式で、
+   Flex は使わない（この repo に無い形式を増やさない）。
+
+   data に answer を載せない。data は利用者の端末を経由して戻る
+   文字列で、押す前に書き換えれば必ず正解になる ── 正答は
+   postback 側がサーバーの原稿から引く（handlers/postback.mjs）。
+
+   label は 20 字まで。超えると LINE が 400 を返し、その人の朝の
+   配信ごと落ちる（quickReply は本文と同じ 1 通の中にある）。 */
+const CIRCLED = ["①", "②", "③", "④"];
+
+export function renderReviewQuiz(quiz) {
+  if (!quiz || !Array.isArray(quiz.choices)) throw new Error("quiz がありません");
+  const day = Number(quiz.dayNumber);
+
+  return {
+    type: "text",
+    text: [
+      `🔁 ふくしゅうクイズ（${day}日目より）`,
+      "",
+      quiz.question,
+      "",
+      ...quiz.choices.slice(0, CIRCLED.length).map((c, i) => `${CIRCLED[i]} ${c}`)
+    ].join("\n"),
+    quickReply: {
+      items: quiz.choices.slice(0, CIRCLED.length).map((c, i) => ({
+        type: "action",
+        action: {
+          type: "postback",
+          label: `${CIRCLED[i]} ${String(c)}`.slice(0, 20),
+          data: `action=review&day=${day}&choice=${i}`,
+          displayText: `${CIRCLED[i]} ${String(c)}`.slice(0, 20)
+        }
+      }))
+    }
+  };
+}
+
+
 /* 名前が要る原稿なのに名前が無い人がいる。LINE だけ登録して
    サイトの診断をしていない場合など。その日を飛ばすと 101 日の
    数が合わなくなるので、飛ばさずに名前の登録を促す。

@@ -60,7 +60,7 @@
 | `tools/build-solar-terms.py` | 절기 시각 계산 → `solar-terms.json` |
 | `tools/build-new-moons.py` | 삭 계산 → `new-moons.json` |
 | `tools/fetch-naoj-reference.py` | 국립천문대에서 기준값 취득 → `data/naoj-reference.json` |
-| `tools/verify-*.mjs` | 배포 관문 16종 (아래 「검증」) |
+| `tools/verify-*.mjs` | 배포 관문 18종 (아래 「검증」) |
 | `tools/build-site.sh` | 공개 파일만 `dist/` 로 모음 + 6종 점검 (내부 링크·canonical·구 호스트·sitemap 망라·**CSS 토큰**) |
 | `tools/set-site-url.py` | 절대 URL 일괄 교체 (도메인 이전용) |
 | `.github/workflows/deploy.yml` | push → 검증 16종 → Xserver rsync 배포 |
@@ -1060,7 +1060,7 @@ node db/smoke.mjs
 
 ### 1. 배포 관문 — 저장소에 있고, push 할 때마다 돌아갑니다
 
-`tools/verify-*.mjs` 16종 **465항목**. `.github/workflows/deploy.yml` 이 rsync 앞에
+`tools/verify-*.mjs` 18종 **521항목**. `.github/workflows/deploy.yml` 이 rsync 앞에
 세워 두었으므로, 하나라도 실패하면 배포가 멈춥니다. 루트에 `package.json` 이 없으므로
 의존 패키지도 없습니다 — 각 스크립트가 `vm` 으로 대상 `.js` 를 그대로 읽어 실행합니다.
 `server/` 만 `mysql2` 를 쓰지만 `lib/db.mjs` 한 곳에 갇혀 있어, `verify-server.mjs`
@@ -1084,6 +1084,8 @@ node db/smoke.mjs
 | `verify-push.mjs` | 40 | **아침 배치의 순서** — 확보→발신, 코스 미선택 시 날을 안 깎는 것, 운세가 3통째인 것 |
 | `verify-evening.mjs` | 21 | **복습은 보너스** — `current_day` 를 건드리지 않는가 / 대상을 진도가 아닌 발신 로그에서 뽑는가 |
 | `verify-fortune-server.mjs` | 16 | **웹과 같은 값** — 사본 없음 / 출생지로 오늘 주 계산 / 문안 30칸+십신 10 결번 |
+| `verify-billing.mjs` | 44 | **선불 횟수권** — 잔여는 `days_entitled - days_used` / 재개 시 일수가 공짜가 안 되는 것 |
+| `verify-quiz.mjs` | 12 | **3일 주기 복습 퀴즈** — 미학습 배제 / 정답이 data 에 없음 / 무저장 / 절목·기한예고와 안 겹침 |
 
 여기서 잡은 것 중 화면으로는 절대 못 봤을 것들:
 
@@ -1147,7 +1149,8 @@ python3 -m http.server 8000
 검증만 돌리려면 서버도 필요 없습니다:
 
 ```bash
-for t in name saju fortune study omikuji gilbang amulet birth pages server webhook onboarding; do node tools/verify-$t.mjs; done
+for t in saju fortune study name omikuji gilbang amulet birth pages \
+         server webhook onboarding render push fortune-server evening billing quiz; do node tools/verify-$t.mjs; done
 bash tools/build-site.sh    # dist/ 를 만들고 링크·canonical·구 호스트를 점검
 ```
 

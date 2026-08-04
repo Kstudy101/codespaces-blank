@@ -138,6 +138,36 @@ export function checkDay(d, seen = new Set()) {
     }
   }
 
+  /* --- 復習クイズ（任意、docs/plan-quiz.md） ---
+     無くてよい ── 無い日は配信側が黙って抜く。あるなら形を全部見る。
+     answer の範囲外は「入ってしまうと直しにくい」の典型 ──
+     配信側（pickReviewQuiz）は壊れた原稿を黙って抜くので、
+     入稿時に止めないと「なぜかこの日だけクイズが出ない」になる。 */
+  const qz = d.quiz;
+  if (qz !== undefined && qz !== null) {
+    if (typeof qz !== "object" || Array.isArray(qz)) {
+      at("quiz は {question, choices, answer} の形にしてください");
+    } else {
+      if (typeof qz.question !== "string" || !qz.question.trim()) {
+        at("quiz に question がありません");
+      }
+      if (!Array.isArray(qz.choices) || qz.choices.length < 2 || qz.choices.length > 4) {
+        at(`quiz の choices は 2〜4 個にしてください（今 ${Array.isArray(qz.choices) ? qz.choices.length : "配列でない"}）`);
+      } else {
+        qz.choices.forEach((c, i) => {
+          if (typeof c !== "string" || !c.trim()) at(`quiz の選択肢 ${i + 1} が空です`);
+        });
+        if (!Number.isInteger(qz.answer) || qz.answer < 0 || qz.answer >= qz.choices.length) {
+          at(`quiz の answer が選択肢の範囲外です: ${JSON.stringify(qz.answer)}（0〜${qz.choices.length - 1}）`);
+        }
+      }
+      /* 差し込み口は許さない。クイズは全員に同じ文面で届く ──
+         名前入りにすると、正解の文字列が人ごとに変わって採点できない。 */
+      if (ANY_SLOT.test(JSON.stringify(qz))) at("quiz に差し込み口は使えません");
+      ANY_SLOT.lastIndex = 0;
+    }
+  }
+
   /* --- 実際に組み立ててみる ---
      朝（renderDay）と夕方（renderReview）の両方を通す。夕方だけで
      落ちる原稿がありうる ── 復習は会話から 1 文だけ抜き出すので、

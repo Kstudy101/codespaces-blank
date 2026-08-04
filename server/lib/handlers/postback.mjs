@@ -267,6 +267,49 @@ export async function handlePostback(conn, event, { send = replyMessage } = {}) 
     return { userId: user.id, action, track: r.track, mode: r.mode, replied };
   }
 
+  /* ---- 復習クイズ（3 日周期、docs/plan-quiz.md）--------------------
+     節目（action=quiz）とは別の部屋。あちらは学期の合否を記録し、
+     こちらは**何も保存しない** ── その場で採点して返事するだけ。
+     混ぜると、9 日目の復習の誤答が semester1 の合否
+     （修了判定の材料）を上書きする（docs/research-quiz.md §2）。 */
+  if (action === "review") {
+    const day = int(params.day);
+    const choice = int(params.choice);
+    if (day === null || choice === null) {
+      return { skipped: "day / choice が読めません", userId: user.id, data: event?.postback?.data };
+    }
+
+    const track = user.active_track;
+    if (!track) return { skipped: "受講中のコースがありません", userId: user.id };
+
+    /* data は利用者の端末を経由して戻るので、書き換えられる。
+       未習の日を名乗れば答えを探れる ── 進み（current_day）と
+       突き合わせる。送った朝には advanceDay 済みなので、正規の
+       ボタンなら必ず day <= current_day になっている。 */
+    const progress = await learning.getProgress(conn, user.id, track);
+    if (!progress || day < 1 || day > Number(progress.current_day)) {
+      return { skipped: `${day} 日目はまだ学習していません`, userId: user.id, day };
+    }
+
+    /* 正答はサーバーの原稿にしか無い。data に載せない
+       （このファイルの冒頭 ── 載せると押す前に書き換えられる）。 */
+    const tpl = await learning.getTemplate(conn, track, day);
+    const q = tpl?.quiz;
+    if (!q || !Array.isArray(q.choices) || !Number.isInteger(q.answer)) {
+      return { skipped: "この日のクイズがありません", userId: user.id, day };
+    }
+
+    const passed = choice === q.answer;
+    const mark = ["①", "②", "③", "④"][q.answer] || `${q.answer + 1}`;
+    const replied = await reply(token, [{
+      type: "text",
+      text: passed
+        ? "⭕ 正解です！🎉"
+        : `❌ ざんねん…　正解は ${mark} ${q.choices[q.answer] ?? ""} でした`
+    }], send);
+    return { userId: user.id, action, day, choice, passed, replied };
+  }
+
   /* ---- クイズ ----------------------------------------------------- */
   if (action !== "quiz") {
     /* 知らない action は捨てるが、握りつぶしたことは返す。

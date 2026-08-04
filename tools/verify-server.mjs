@@ -950,6 +950,47 @@ check("dist に .env や .sql を混ぜない検査がある", () => {
 });
 
 
+/* ================================================================== */
+head("[配備]  配備タスクが server/content（唯一の原稿）を消せない");
+
+/* 原稿・クイズは公開リポジトリに無く、サーバーのここにしか無い
+   （plan-p4-content 決定⑤）。配備の 3 つの経路のどれか 1 つでも
+   除外が抜けると、配備が原稿を消し、気づくのは翌朝配信が止まって
+   から ── 文書の約束（STATUS §5「三経路が全部同一」）を、ここで
+   機械に見張らせる（2026-08-05 配備失敗の指示書 §3）。 */
+const PROTECTED = ["node_modules", ".env", ".env.local", "content", "tmp", "public", "stderr.log"];
+
+check(".cpanel.yml の rsync 分岐が 7 つ全部を除外", () => {
+  const yml = read(".cpanel.yml");
+  const line = yml.split("\n").find((l) => /"\$RSYNC"/.test(l));
+  assert(line, ".cpanel.yml に rsync 分岐が見つかりません");
+  for (const n of PROTECTED) {
+    assert(line.includes(`--exclude=${n}`), `rsync 分岐に --exclude=${n} がありません`);
+  }
+  return PROTECTED.join(" / ");
+});
+
+check(".cpanel.yml の find 分岐（rsync の無い今の本番はこちら）も同一", () => {
+  const yml = read(".cpanel.yml");
+  const line = yml.split("\n").find((l) => /find "\$APP"/.test(l));
+  assert(line, ".cpanel.yml に find 分岐が見つかりません");
+  for (const n of PROTECTED) {
+    assert(line.includes(`! -name ${n}`), `find 分岐に ! -name ${n} がありません`);
+  }
+  return "消してから写す側も 7 つ除外";
+});
+
+check("tools/deploy-server.sh の rsync も同一（手動経路）", () => {
+  const sh = read("tools/deploy-server.sh");
+  const m = sh.match(/rsync[\s\S]*?server\/ /);
+  assert(m, "deploy-server.sh に rsync が見つかりません");
+  for (const n of PROTECTED) {
+    assert(new RegExp(`--exclude[= ]'?${n.replace(".", "\\.")}'?`).test(m[0]),
+      `deploy-server.sh に --exclude ${n} がありません`);
+  }
+  return "自動・画面・手動の三経路が同じ 7 つを守る";
+});
+
 console.log(`\n${failed ? "✗" : "✓"} ${passed + failed} 項目中 ${passed} 件成功`
   + (failed ? ` / ${failed} 件失敗` : ""));
 process.exit(failed ? 1 : 0);

@@ -1060,7 +1060,7 @@ node db/smoke.mjs
 
 ### 1. 배포 관문 — 저장소에 있고, push 할 때마다 돌아갑니다
 
-`tools/verify-*.mjs` 19종 **541항목**. `.github/workflows/deploy.yml` 이 rsync 앞에
+`tools/verify-*.mjs` 19종 **544항목**. `.github/workflows/deploy.yml` 이 rsync 앞에
 세워 두었으므로, 하나라도 실패하면 배포가 멈춥니다. 루트에 `package.json` 이 없으므로
 의존 패키지도 없습니다 — 각 스크립트가 `vm` 으로 대상 `.js` 를 그대로 읽어 실행합니다.
 `server/` 만 `mysql2` 를 쓰지만 `lib/db.mjs` 한 곳에 갇혀 있어, `verify-server.mjs`
@@ -1077,7 +1077,7 @@ node db/smoke.mjs
 | `verify-amulet.mjs` | 28 | **`kanji.json` 2,136자** — 부적 한자의 한국음·훈음 12자 |
 | `verify-birth.mjs` | 17 | **약속 그 자체** — `sessionStorage` 만 씀 / 이름이 안 섞임 / 절기표와 같은 1930〜2030 |
 | `verify-pages.mjs` | 14 | 9페이지를 **가로로 늘어놓고** 대조 — 메타·링크·읽어주기 |
-| `verify-server.mjs` | 76 | **DB 없이 SQL 을 읽음** — JST 경계·결제 재전송·배치 이중기동·보유일수를 깎지 않는 약속 |
+| `verify-server.mjs` | 78 | **DB 없이 SQL 을 읽음** — JST 경계·결제 재전송·배치 이중기동·보유일수를 깎지 않는 약속 |
 | `verify-webhook.mjs` | 42 | **서명이 유일한 경계** — 생바이트·timingSafeEqual·검증 전 파싱 금지·postback data 불신 |
 | `verify-onboarding.mjs` | 47 | **OAuth 는 틀려도 성공처럼 보인다** — state 예측·재사용·CORS·XSS·채널 프로바이더 불일치 |
 | `verify-render.mjs` | 39 | **한글 완성형 11,172자 전수** — 받침·조사, 그리고 저녁 복습이 아침의 재전송이 아닌 것 |

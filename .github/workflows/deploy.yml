@@ -270,6 +270,9 @@ jobs:
       - name: Verify quiz
         run: node tools/verify-quiz.mjs
 
+      - name: Verify kana
+        run: node tools/verify-kana.mjs
+
       # ---------------------------------------------------------------
       # 公開ファイルを dist/ に集める。
       # このプロジェクトにビルドツールは無い（package.json も無い）。

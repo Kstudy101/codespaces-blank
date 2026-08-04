@@ -55,8 +55,10 @@ LLM 일반 행동 지침(가정 금지 / 단순하게 / 최소 변경 / 검증 �
 - **`advanceDay` 는 일자 확보와 일수 소비를 한 문장에서** 한다. 나누면 그 사이에 죽었을 때 하루가 공짜
 - **운세 엔진의 사본을 `server/` 에 두지 않는다.** `node:vm` 으로 사이트의 1부를 실행한다 —
   사본을 두면 웹과 LINE의 운세가 갈라지고, 양쪽 다 그럴듯해서 대조 전엔 모른다
+  (유일한 예외: `server/lib/kana2hangul.mjs` — 허가된 사본. `verify-kana` 가
+  index.html 실물과 전수 대조하므로, 한쪽을 고치면 관문이 다른쪽을 강제한다)
 - **`repo/` 는 `mysql2` 도 `node:` 내장도 읽지 않는다.** 넘겨받은 `conn.execute()` 만.
-  그 덕에 관문 18종이 `npm install` 없이 돈다
+  그 덕에 관문 19종이 `npm install` 없이 돈다
 - **의존은 `mysql2` 하나뿐.** Stripe SDK 도 LINE SDK 도 넣지 않았다
 - **폴리시와 코드가 어긋난 적이 4번 있다.** 저장 항목을 늘리면 `privacy.html` 제2항도 같은 커밋에서
 - **페이지를 추가하면 4곳을 고친다** — `build-site.sh` 의 `PUBLIC` / `set-site-url.py` 의
@@ -64,11 +66,11 @@ LLM 일반 행동 지침(가정 금지 / 단순하게 / 최소 변경 / 검증 �
 
 ## 검증
 
-관문 18종. DB도 `npm install` 도 필요 없다.
+관문 19종. DB도 `npm install` 도 필요 없다.
 
 ```bash
 for f in saju fortune study name omikuji gilbang amulet birth pages \
-         server webhook onboarding render push fortune-server evening billing quiz; do
+         server webhook onboarding render push fortune-server evening billing quiz kana; do
   node tools/verify-$f.mjs >/dev/null && echo "PASS $f" || echo "FAIL $f"
 done
 ```

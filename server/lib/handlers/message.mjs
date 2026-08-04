@@ -19,7 +19,8 @@
    ================================================================== */
 import { users, learning, entitlements } from "../repo/index.mjs";
 import { replyMessage } from "../line.mjs";
-import { nextStep, messageForStep } from "../onboarding.mjs";
+import { nextStep, messageForStep, confirmName, readingRetry } from "../onboarding.mjs";
+import { kanaNameToHangul } from "../kana2hangul.mjs";
 
 /* 受け取る文面は日本語。ひらがな・カタカナ・漢字が混ざるので
    単語の一致で見る（形態素解析は入れない）。 */
@@ -49,6 +50,40 @@ export async function handleMessage(conn, event) {
 
   const user = await users.findByLineUserId(conn, lineUserId);
   if (!user) return { skipped: "未登録の利用者です", lineUserId };
+
+  /* ---- ① で読み仮名を待っている人 ----------------------------------
+     「LINE の名前で／べつの名前で」を選んで韓国語表記がまだ無い、が
+     待っている印（name_source='line' かつ name_kr が空）。段の列は
+     持たない方針のまま、中身から導く（lib/onboarding.mjs）。
+
+     かなで読めたら候補を DB に置いて「〇〇 で OK?」を返す。確定は
+     handlers/postback.mjs が DB の候補から作り直す ── ここで
+     name_kr まで書かないのは、確認前の名前で配信が始まらないため。
+
+     読めなければ案内をもう一度。サイトのリンクは readingRetry の
+     末尾に**最後の手段**として載るだけで、主導線はあくまでトーク
+     （元の「必ずサイトへ戻す」が離脱のもとだった）。 */
+  if (user.name_source === "line" && !user.name_kr
+      /* 解約の言葉だけは素通しする。「やめたい」を名前の候補として
+         「야메타이 で OK?」と返すのは、いちばん悪いタイミングの冗談になる。
+         状況系（きょう 等）は素通しにしない ── きょう は実在の名前。 */
+      && !hit(text, ASK_STOP)) {
+    const reading = text.trim();
+    const kr = kanaNameToHangul(reading);
+    const out = kr ? confirmName({ reading, kr }) : readingRetry();
+    if (kr) {
+      await users.updateName(conn, user.id,
+        { nameKanji: null, nameReading: reading, nameKr: null });
+    }
+    if (replyToken && !isVerifyToken(replyToken)) {
+      try {
+        await replyMessage(replyToken, [out]);
+      } catch (e) {
+        return { userId: user.id, replied: false, error: e.message };
+      }
+    }
+    return { userId: user.id, replied: true, reading: kr ? "candidate" : "retry" };
+  }
 
   /* 始める前の 3 つ（名前・生年月日・コース）が残っていれば、
      状況を答えるより先にそれを出す。まだ 0 日目の人に

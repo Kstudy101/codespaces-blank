@@ -1462,8 +1462,11 @@ tasks 는 하나의 셸에서 이어 돌므로 export 가 뒤 행에도 미침.
   verify-quiz.mjs            12  3일 주기 복습 퀴즈 — 미학습 배제 /
                                  정답이 data 에 없음 / 무저장 /
                                  절목·기한예고의 아침과 안 겹침
+  verify-kana.mjs            14  가나→한글 사본의 담보 — index.html 실물과
+                                 570통 전수 대조 / step① 이 사이트로 안
+                                 돌려보냄 / postback data 의 이름 불신
   -----------------------  ----
-  합계                      521
+  합계                      535
 
   루트에 package.json 이 없으므로 의존 패키지가 없습니다 —
   각 스크립트가 vm 으로 대상 .js 를 그대로 읽어 실행합니다.
@@ -1472,7 +1475,7 @@ tasks 는 하나의 셸에서 이어 돌므로 export 가 뒤 행에도 미침.
   실행 방법:
     for t in name saju fortune study omikuji gilbang amulet birth pages \
              server webhook onboarding render push fortune-server evening \
-             billing quiz; do
+             billing quiz kana; do
       node tools/verify-$t.mjs
     done
     bash tools/build-site.sh
@@ -1541,7 +1544,7 @@ README.md 가 마지막 커밋 몇 개를 아직 못 따라잡았습니다.
   서버 운세 엔진                         배송에 연결됨. 문안 40개 입고 완료
                                          (서버에만 있음)
 
-  검증 관문                              18종 521항목
+  검증 관문                              19종 535항목
 
 ■ 아직인 것
 

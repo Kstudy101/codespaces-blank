@@ -14,7 +14,7 @@
 - LINE 배신 서버(`server/`)는 **ChemiCloud 에 배포 완료** (2026-08-04, `660915a`) —
   마이그레이션 002(되돌릴 수 없는 DROP COLUMN 포함)까지 본번 적용 끝. §9.2
 - 결제(선불 횟수권)는 **코드 완성, 의도적으로 잠겨 있음** — §3
-- 관문(자동 검증) **18종 전부 통과**
+- 관문(자동 검증) **19종 전부 통과**
 
 **다음에 할 일은 하나입니다.**
 
@@ -106,9 +106,9 @@ node tools/setup-richmenu.mjs --list              # 지금 뭐가 걸려 있나
 git clone https://github.com/Kstudy101/codespaces-blank.git
 cd codespaces-blank
 
-# 관문 18종. DB도 npm install 도 필요 없습니다 (의존은 mysql2 하나뿐)
+# 관문 19종. DB도 npm install 도 필요 없습니다 (의존은 mysql2 하나뿐)
 for f in saju fortune study name omikuji gilbang amulet birth pages \
-         server webhook onboarding render push fortune-server evening billing quiz; do
+         server webhook onboarding render push fortune-server evening billing quiz kana; do
   node tools/verify-$f.mjs >/dev/null && echo "PASS $f" || echo "FAIL $f"
 done
 ```
@@ -222,9 +222,11 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
    죽었을 때 하루가 공짜가 됩니다
 3. **운세 엔진(`saju.js`/`fortune.js`)의 사본을 `server/` 에 두지 마십시오.**
    `node:vm` 으로 사이트의 1부를 그대로 실행합니다. 사본을 두면 웹과 LINE의
-   운세가 갈라지고, 양쪽 다 그럴듯한 숫자라 대조 전엔 아무도 모릅니다
+   운세가 갈라지고, 양쪽 다 그럴듯한 숫자라 대조 전엔 아무도 모릅니다.
+   유일한 예외가 `server/lib/kana2hangul.mjs`(가나→한글) — **허가된 사본**이며,
+   `verify-kana` 가 index.html 실물과 전수 대조합니다(2026-08-05, Phase 1)
 4. **`repo/` 는 `mysql2` 도 `node:` 내장도 읽지 않습니다.** 넘겨받은 `conn.execute()` 만.
-   그 덕에 관문 18종이 `npm install` 없이 돕니다
+   그 덕에 관문 19종이 `npm install` 없이 돕니다
 5. **의존은 `mysql2` 하나뿐입니다.** Stripe SDK 도 LINE SDK 도 넣지 않았습니다
 6. **폴리시(privacy.html)와 코드가 어긋난 적이 4번 있습니다**(GA4·Clarity·LINE·성별).
    저장하는 항목을 늘리면 반드시 제2항도 같은 커밋에서 고치십시오

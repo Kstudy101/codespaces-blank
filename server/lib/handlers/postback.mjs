@@ -36,7 +36,9 @@
    ================================================================== */
 import { users, learning, billing, entitlements } from "../repo/index.mjs";
 import { replyMessage } from "../line.mjs";
-import { nextStep, messageForStep, nameRedo, birthRedo, serviceGuide } from "../onboarding.mjs";
+import { nextStep, messageForStep, askReading, confirmName, nameFixed,
+         birthRedo, serviceGuide } from "../onboarding.mjs";
+import { kanaNameToHangul } from "../kana2hangul.mjs";
 import {
   salesOpen, notReady, askCourse, priceList, startCheckout, checkoutLink,
   startTrialFor, applyResume, resumeDone, statusMessage, missingLegalConfig
@@ -131,25 +133,74 @@ export async function handlePostback(conn, event, { send = replyMessage } = {}) 
   /* ---- 名前 ------------------------------------------------------ */
   if (action === "name") {
     const use = params.use;
-    if (use !== "web" && use !== "line") {
-      return { skipped: `name の use が読めません: ${use}`, userId: user.id };
-    }
 
-    await users.setNameSource(conn, user.id, use);
-
-    if (use === "line") {
-      /* ハングル表記はサイトでしか作れない（lib/onboarding.mjs の
-         注記）。今ある名前は本人が選ばなかったものなので消す ──
-         残すと、案内を無視した人にその名前で 101 日ぶんが届く。
-         消すと render.mjs が名前案内へ切り替わるので、分岐は増えない。 */
-      await users.updateName(conn, user.id,
-        { nameKanji: null, nameReading: null, nameKr: null });
-      const replied = await reply(token, [nameRedo()], send);
+    if (use === "web") {
+      await users.setNameSource(conn, user.id, "web");
+      const replied = await reply(token, [await followUp(conn, user.id)], send);
       return { userId: user.id, action, use, replied };
     }
 
-    const replied = await reply(token, [await followUp(conn, user.id)], send);
-    return { userId: user.id, action, use, replied };
+    /* LINE の表示名で。かなならその場で変換して確認へ、かなで
+       なければ（ローマ字・絵文字など）読み仮名を 1 行もらう ──
+       **サイトへは戻さない**（以前ここで再診断へ送っていて離脱が
+       起きていた。lib/onboarding.mjs の注記）。
+
+       候補の読みは DB（name_reading）に置き、name_kr は確定まで
+       空のまま。data に名前を載せないための置き場で、確定時は
+       ここから作り直す。name_kr が空のあいだは配信の文面が
+       名前案内側に倒れるので、未確定の名前で 101 日が始まる
+       ことはない（lib/render.mjs）。 */
+    if (use === "line") {
+      await users.setNameSource(conn, user.id, "line");
+      const disp = String(user.display_name || "").trim();
+      const kr = kanaNameToHangul(disp);
+      if (kr) {
+        await users.updateName(conn, user.id,
+          { nameKanji: null, nameReading: disp, nameKr: null });
+        const replied = await reply(token, [confirmName({ reading: disp, kr })], send);
+        return { userId: user.id, action, use, pendingConfirm: true, replied };
+      }
+      await users.updateName(conn, user.id,
+        { nameKanji: null, nameReading: null, nameKr: null });
+      const replied = await reply(token, [askReading()], send);
+      return { userId: user.id, action, use, askedReading: true, replied };
+    }
+
+    /* べつの名前で ── 読みをかなで入れてもらう（handlers/message.mjs が受ける）。 */
+    if (use === "other") {
+      await users.setNameSource(conn, user.id, "line");
+      await users.updateName(conn, user.id,
+        { nameKanji: null, nameReading: null, nameKr: null });
+      const replied = await reply(token, [askReading()], send);
+      return { userId: user.id, action, use, askedReading: true, replied };
+    }
+
+    /* 「〇〇 で OK?」の答え。名前は data からではなく、DB に置いた
+       候補（name_reading）から**作り直す** ── data は利用者の端末を
+       経由して戻るので、そこに載せた名前は信じられない（冒頭）。 */
+    if (use === "confirm") {
+      const ok = params.ok === "1";
+      const fresh = await users.findById(conn, user.id);
+      const reading = fresh?.name_reading ? String(fresh.name_reading).trim() : null;
+      const kr = ok && reading ? kanaNameToHangul(reading) : null;
+
+      if (!kr) {
+        /* 入れ直したい・候補が無い・候補が壊れている。どれも
+           「もう一度読みから」で同じ。 */
+        await users.updateName(conn, user.id,
+          { nameKanji: null, nameReading: null, nameKr: null });
+        const replied = await reply(token, [askReading()], send);
+        return { userId: user.id, action, use, ok, replied };
+      }
+
+      await users.updateName(conn, user.id,
+        { nameKanji: null, nameReading: reading, nameKr: kr });
+      const replied = await reply(token,
+        [nameFixed(kr), await followUp(conn, user.id)], send);
+      return { userId: user.id, action, use, ok: true, nameKr: kr, replied };
+    }
+
+    return { skipped: `name の use が読めません: ${use}`, userId: user.id };
   }
 
   /* ---- 生年月日 --------------------------------------------------- */

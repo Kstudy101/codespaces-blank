@@ -167,19 +167,16 @@ export function serviceGuide({ nameJa = null } = {}) {
    ウェブで入れた名前と、LINE の表示名を並べて見せる。
 
    【LINE の名前を選んだらどうなるか】
-   その場では確定できない。韓国語表記（다나카）を作るには、
-   サイトが持っている読み仮名とハングルの対応表（index.html の
-   hanja_db / kanji.json）が要る。サーバーには置いていない ──
-   .cpanel.yml が写すのは saju.js / fortune.js / solar-terms.json の
-   3 つだけで、変換表は入っていない。
+   かな → ハングルの変換はサーバーにもある（lib/kana2hangul.mjs。
+   index.html の移植で、乖離は tools/verify-kana.mjs が全表突き合わせで
+   見張る）。表示名がかなならその場で変換して「〇〇 で OK?」と確認し、
+   かなでなければ（ローマ字・絵文字など）読み仮名を 1 行だけ
+   トークで入れてもらう ── **サイトへは戻さない**。以前はここで
+   サイトの再診断へ送っていて、そこで離脱が起きていた。
 
-   写して 2 部にすると、ウェブと LINE で同じ名前が違うハングルに
-   なりうる。それは運勢の食い違い（lib/fortune.mjs の注記）と同じ
-   性質の壊れ方で、並べて見るまで気づけない。
-
-   なので「LINE の名前で」を選んだ人には、その名前でもう一度
-   診断してもらう。遠回りに見えるが、変換はサイトの 1 部だけが行う、
-   を守る唯一の形になっている。 */
+   確定した名前は必ずサーバー側の値（DB の候補）から作り直す。
+   postback の data は端末を経由して戻るので、そこに名前を載せて
+   信じてはいけない（handlers/postback.mjs の冒頭）。 */
 export function askName({ webName, webNameKr = null, lineName }) {
   /* ハングル表記も並べる。会話文に出るのはこちらなので、
      漢字だけ見せて選ばせると「そう読まれるとは思わなかった」が
@@ -203,26 +200,73 @@ export function askName({ webName, webNameKr = null, lineName }) {
       { label: `${String(webName).slice(0, 12)}で`, data: "action=name&use=web",
         displayText: `${webName} で進めます` },
       { label: "LINEの名前にする", data: "action=name&use=line",
-        displayText: "LINEの名前にします" }
+        displayText: "LINEの名前にします" },
+      { label: "べつの名前にする", data: "action=name&use=other",
+        displayText: "べつの名前にします" }
     ])
   };
 }
 
-/* LINE の名前を選んだ人への返し。サイトへ送る。 */
-export function nameRedo() {
+/* 読み仮名を 1 行入れてもらう。ここでサイトへ送らない ──
+   リンクは繰り返し失敗したときの最後の手段（readingRetry）だけ。 */
+export function askReading() {
   return {
     type: "text",
     text: [
-      "承知しました。",
+      "お使いになるお名前の**読み方**を、ひらがな か カタカナで",
+      "1行お送りください。",
       "",
-      "お名前のハングル表記は、サイトの診断でつくります。",
-      "（読み方から一文字ずつ変換するので、こちらでは作れません）",
+      "　例）はなこ ／ タロウ",
       "",
-      "▼ 使いたいお名前で、もう一度どうぞ（1分ほど）",
-      SITE_URL,
-      "",
-      "診断のあと「LINEで受け取る」を押すと、こちらに反映されます。"
+      "そのままハングルの表記をおつくりします。"
     ].join("\n")
+  };
+}
+
+/* かなで読めなかったときの返し。案内はもう 1 度だけ挟み、
+   サイトは**最後の手段**として添える（元の「必ずサイトへ戻す」が
+   離脱のもとだったので、主役にはしない）。 */
+export function readingRetry() {
+  return {
+    type: "text",
+    text: [
+      "読み取れませんでした。",
+      "ひらがな か カタカナ**だけ**で、もう一度お送りください。",
+      "",
+      "　例）はなこ ／ タロウ",
+      "",
+      "うまくいかない場合は、サイトの診断からも登録できます：",
+      SITE_URL
+    ].join("\n")
+  };
+}
+
+/* 「〇〇 で OK?」。押された答えの処理は handlers/postback.mjs ──
+   data に名前は載せない。確定はサーバーが DB の候補から作り直す。 */
+export function confirmName({ reading, kr }) {
+  return {
+    type: "text",
+    text: [
+      "ハングル表記はこちらになります：",
+      "",
+      `　${reading} → ${kr}`,
+      "",
+      "このお名前でお届けしてよろしいですか？"
+    ].join("\n"),
+    quickReply: quick([
+      { label: "はい、これで", data: "action=name&use=confirm&ok=1",
+        displayText: "はい、この名前で" },
+      { label: "入れ直す", data: "action=name&use=confirm&ok=0",
+        displayText: "入れ直します" }
+    ])
+  };
+}
+
+/* 確定の報せ。このあと followUp（次の段）が続く。 */
+export function nameFixed(kr) {
+  return {
+    type: "text",
+    text: `お名前は「${kr}」でお届けします。毎日の会話文に登場します。`
   };
 }
 

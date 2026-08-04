@@ -17,7 +17,7 @@
    通知だけ増えて読まれなくなるため。朝夕 2 通が本体で、
    そこに雑音を混ぜたくない。
    ================================================================== */
-import { users, billing, learning, entitlements } from "../repo/index.mjs";
+import { users, learning, entitlements } from "../repo/index.mjs";
 import { replyMessage } from "../line.mjs";
 import { nextStep, messageForStep } from "../onboarding.mjs";
 

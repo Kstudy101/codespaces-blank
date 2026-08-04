@@ -34,7 +34,35 @@
 
 | 경로 | 역할 |
 |---|---|
+| **`STATUS.md`** | **현재 상태와 다음 작업. 세션을 이어받을 때 여기부터 읽을 것** |
 | `instruction.txt` | 협업 지침 원본 |
 | `docs/research*.md` | 리서치 보고서 |
 | `docs/plan-*.md` | 계획 문서. 작업 이력이자 의사결정 기록 |
 | `docs/system-overview.txt` | 시스템 전반 설명 |
+
+## 이 저장소에서 특히 조심할 것
+
+전부 「동작은 하는데 조용히 틀리는」 종류입니다. 자세한 이유는 각 파일 머리말에 있습니다.
+
+- **잔여 일수는 `days_entitled - days_used`.** `current_day` 로 세면 「1일차부터 다시」에서
+  받은 일수가 공짜가 된다
+- **`advanceDay` 는 일자 확보와 일수 소비를 한 문장에서** 한다. 나누면 그 사이에 죽었을 때 하루가 공짜
+- **운세 엔진의 사본을 `server/` 에 두지 않는다.** `node:vm` 으로 사이트의 1부를 실행한다 —
+  사본을 두면 웹과 LINE의 운세가 갈라지고, 양쪽 다 그럴듯해서 대조 전엔 모른다
+- **`repo/` 는 `mysql2` 도 `node:` 내장도 읽지 않는다.** 넘겨받은 `conn.execute()` 만.
+  그 덕에 관문 17종이 `npm install` 없이 돈다
+- **의존은 `mysql2` 하나뿐.** Stripe SDK 도 LINE SDK 도 넣지 않았다
+- **폴리시와 코드가 어긋난 적이 4번 있다.** 저장 항목을 늘리면 `privacy.html` 제2항도 같은 커밋에서
+- **페이지를 추가하면 4곳을 고친다** — `build-site.sh` 의 `PUBLIC` / `set-site-url.py` 의
+  `TARGETS` / `sitemap.xml` / `deploy.yml` 의 스모크 테스트
+
+## 검증
+
+관문 17종. DB도 `npm install` 도 필요 없다.
+
+```bash
+for f in saju fortune study name omikuji gilbang amulet birth pages \
+         server webhook onboarding render push fortune-server evening billing; do
+  node tools/verify-$f.mjs >/dev/null && echo "PASS $f" || echo "FAIL $f"
+done
+```

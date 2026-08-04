@@ -23,7 +23,7 @@
    リンクが先の人も居る。users への書き込みは upsertOnFollow を
    通すので、どちらが先でも 2 人にならない。
    ================================================================== */
-import { users, links, billing, learning, pushlogs } from "../repo/index.mjs";
+import { users, links, pushlogs } from "../repo/index.mjs";
 import { newState, hashState, looksLikeState } from "../token.mjs";
 import { authorizeUrl, exchangeCode, loginProfile, revoke } from "../linelogin.mjs";
 import { getProfile, pushMessage, isUnreachable } from "../line.mjs";

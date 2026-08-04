@@ -15,7 +15,7 @@
    「保有日数を削らない」「status を落とさない」といった取り決めが
    repo とここの 2 箇所に散る。
    ================================================================== */
-import { users, billing, learning } from "../repo/index.mjs";
+import { users } from "../repo/index.mjs";
 import { getProfile, replyMessage } from "../line.mjs";
 import { serviceGuide, nextStep, messageForStep } from "../onboarding.mjs";
 

@@ -37,7 +37,7 @@
    ================================================================== */
 import { createHash } from "node:crypto";
 import { getPool, closePool } from "../lib/db.mjs";
-import { users, learning, pushlogs } from "../lib/repo/index.mjs";
+import { users, learning, pushlogs, entitlements, lapses } from "../lib/repo/index.mjs";
 import { pushMessage, isUnreachable } from "../lib/line.mjs";
 import { jstDate, jstDateTime } from "../lib/jst.mjs";
 import { renderDay, nameMissingNotice } from "../lib/render.mjs";
@@ -45,6 +45,7 @@ import { TOTAL_DAYS } from "../lib/repo/learning.mjs";
 import { blockingStep, messageForStep } from "../lib/onboarding.mjs";
 import { fortuneFor } from "../lib/fortune.mjs";
 import { loadLines, fortuneMessage } from "../lib/fortune-text.mjs";
+import { EXPIRING_AT, expiringNotice, completionNotice } from "../lib/handlers/checkout.mjs";
 
 /* ---- 引数 --------------------------------------------------------- */
 const argv = process.argv.slice(2);
@@ -245,20 +246,59 @@ export async function deliverOne(conn, u, { send = pushMessage, load = loadLines
   const today = Number(u.current_day) || 0;
   const next  = today + 1;
 
+  /* コースが無い行は listDeliverable から出て来ない（active_track で
+     JOIN しているため）。それでも先に見るのは、来てしまったときに
+     ここで例外にしないため ── getTemplate は未知の track で throw し、
+     main() の try/catch が「処理中の異常」に数える。cron は毎朝
+     失敗で終わるのに、本人には何も届かない。数えて降りるほうがよい。 */
+  if (!u.track) return "コース未選択";
+
   /* 既に今日ぶんを送っていれば何もしない。二重起動の 1 段目。
      advanceDay だけでも防げるが、そこまで行くと送信の直前まで
      進んでしまう ── 先に分かるものは先に見る。 */
   if (await pushlogs.sentToday(conn, u.id, "learning", DATE)) return "既送";
 
-  /* 修了。101 日を超えて進めない。
-     completion の文面は P4-c で決める。ここでは進めずに数える ──
-     数えていないと「終わった人がいる」ことに気づけない。 */
-  if (today >= TOTAL_DAYS) return "修了済";
+  /* ---- 修了 --------------------------------------------------------
+     101 日を超えて進めない。ここが最後の接点で、次のコースを
+     勧める唯一の場所でもある ── 今まで何も送っていなかったので、
+     101 日目の翌朝から、ただ静かに何も来なくなっていた。
 
-  /* 保有日数。体験は 3 日、購入で伸びる。切れた人は upsell の対象で、
-     このバッチの担当ではない（別の便で送る）。 */
-  const entitled = Number(u.total_days_entitled) || 0;
-  if (next > entitled) return "日数切れ";
+     1 度だけ送る。日は進めないので、送ったかどうかは push_logs の
+     completion で数える。 */
+  if (today >= TOTAL_DAYS) {
+    if (await pushlogs.countByType(conn, u.id, "completion")) return "修了済";
+    if (DRY || DISABLED) return "予定:修了";
+    try {
+      const owned = (await entitlements.listByUser(conn, u.id)).map((e) => e.track);
+      await send(u.line_user_id, [completionNotice(u.track, { owned })],
+        { retryKey: retryKey(u.id, TOTAL_DAYS, "completion") });
+      await pushlogs.logSent(conn, u.id, { dayNumber: TOTAL_DAYS, pushType: "completion" });
+      return "修了の案内";
+    } catch (e) {
+      if (isUnreachable(e)) await users.markUnfollowed(conn, u.line_user_id);
+      await pushlogs.logFailed(conn, u.id,
+        { dayNumber: TOTAL_DAYS, pushType: "completion", error: String(e.message || e).slice(0, 500) });
+      return "送信失敗";
+    }
+  }
+
+  /* ---- 残り日数 ----------------------------------------------------
+     前払いの回数券（migrations/002）。買った日数（days_entitled）から
+     実際に送った日数（days_used）を引く。
+
+     ★ current_day では引かない。「1 日目からやり直す」で戻るのは
+     current_day だけなので、そちらで数えるとやり直した人の残りが
+     復活し、受け取ったぶんが無料になる（repo/learning.mjs）。 */
+  const remaining = Number(u.days_entitled ?? 0) - Number(u.days_used ?? 0);
+  if (remaining <= 0) {
+    /* 切れたことを 1 度だけ台帳に残す。開いている行があれば書かない
+       ので、切れているあいだ毎朝増えることはない（repo/lapses.mjs）。 */
+    if (!DRY && !DISABLED) {
+      await lapses.openIfAbsent(conn, u.id, u.track,
+        { lastDay: today, daysBought: Number(u.days_entitled ?? 0) });
+    }
+    return "日数切れ";
+  }
 
   /* 始める前に決まっていないといけないものを訊く。
      日は進めない ── 進めると、決まる前の日が中身の無いまま
@@ -334,16 +374,44 @@ export async function deliverOne(conn, u, { send = pushMessage, load = loadLines
   const fortune = fortuneSection(u, tpl, { load });
   if (fortune) messages = [...messages, fortune];
 
+  /* ---- 期限の予告 ---------------------------------------------------
+     今日ぶんを送ると残りが EXPIRING_AT になる、という日に 1 度だけ
+     足す。別便にせず本文の後ろに付けるのは、通知をもう一度
+     鳴らさないため ── pushMessage は配列を受けるので通知は 1 回。
+
+     二度出さない仕組みに新しい表を作らない。push_logs の day_number へ
+     「そのときの days_entitled」を入れておけば countForDay で判定できる。
+     追加購入で days_entitled が変われば値も変わるので、次の期限は
+     改めて予告される ── それが正しい動き。 */
+  const willRemain = remaining - 1;
+  const entitledNow = Number(u.days_entitled ?? 0);
+  let warned = false;
+  if (willRemain === EXPIRING_AT
+      && !(await pushlogs.countForDay(conn, u.id, entitledNow, "expiring"))) {
+    messages = [...messages,
+      expiringNotice(u.track, { remaining: EXPIRING_AT, currentDay: next })];
+    warned = true;
+  }
+
   if (DRY || DISABLED) return `${DRY ? "予定" : "停止中"}:${next}日目`;
 
-  /* 日を確保する。負けたら送らない。 */
-  const { claimed } = await learning.advanceDay(conn, u.id, today);
+  /* 日を確保する。負けたら送らない。
+     days_used もこの 1 文で増える ── 別の文にすると、確保したのに
+     使った日数が増えていない瞬間ができ、そこで落ちると 1 日ぶんが
+     無料になる（repo/learning.mjs）。 */
+  const { claimed } = await learning.advanceDay(conn, u.id, u.track, today);
   if (!claimed) return "他が確保";
 
   try {
     await send(u.line_user_id, messages,
       { retryKey: retryKey(u.id, next, "learning") });
     await pushlogs.logSent(conn, u.id, { dayNumber: next, pushType: "learning" });
+    /* 予告を出したことは別に数える。learning と同じ行にすると、
+       「何日目を送ったか」と「どの残り数で予告したか」が混ざる。 */
+    if (warned) {
+      await pushlogs.logSent(conn, u.id,
+        { dayNumber: entitledNow, pushType: "expiring" });
+    }
     return `送信:${next}日目`;
   } catch (e) {
     /* ブロック・退会は障害ではない。配信対象から外して、次から引かない。
@@ -354,6 +422,33 @@ export async function deliverOne(conn, u, { send = pushMessage, load = loadLines
       { dayNumber: next, pushType: "learning", error: String(e.message || e).slice(0, 500) });
     return gone ? "届かない" : "送信失敗";
   }
+}
+
+/* ---- 1 人だけ、いますぐ ---------------------------------------------
+   決済が終わった直後に呼ばれる（lib/handlers/checkout.mjs）。
+   時刻に関係なく 1 日目を送るための入口で、cron とは別の道。
+
+   【二重に送らない仕組みを新しく作らない】
+   deliverOne の先頭に sentToday があるので、今日ぶんを既に受け取って
+   いる人はそこで "既送" になる。だから:
+
+     22:00 決済 → ここで 1 日目 + push_logs(learning, 今日)
+     翌 07:00  → sentToday=true → "既送"
+     翌々 07:00 → 2 日目
+
+   追加購入で、その日の分をもう受け取っている人はここで "既送" が
+   返る。1 日に 2 回レッスンは元から無いので、それでよい ──
+   呼ぶ側が「明日の朝から続きます」と伝える。
+
+   listDeliverable と同じ形の行が要る。1 人ぶんだけ引き直す
+   （findDeliverable。一覧を引いて絞ると 501 人目から見つからない）。 */
+export async function deliverNow(conn, userId, { send = pushMessage, load = loadLines } = {}) {
+  const u = await users.findDeliverable(conn, userId);
+  /* ここに居ないなら、買ったのに配信の条件が揃っていない ──
+     active_track が入っていないか、進みの器が無いか、status が
+     trial / active でない。呼ぶ側がログに残せるように言葉で返す。 */
+  if (!u) return "対象外";
+  return deliverOne(conn, u, { send, load });
 }
 
 /* ---- 全員 --------------------------------------------------------- */

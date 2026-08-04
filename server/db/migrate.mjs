@@ -35,7 +35,9 @@ const EXPECTED = [
   "users", "saju_profiles", "purchases", "subscriptions",
   "learning_progress", "content_templates", "push_logs", "quiz_checkpoints",
   /* P3 で足した。ウェブの占い結果を、LINE 認証から戻るまで預かる表。 */
-  "pending_links"
+  "pending_links",
+  /* 002 で足した。前払いの回数券をコース別に持つ。 */
+  "course_entitlements", "lapse_log"
 ];
 
 /* migrations が入れる列。流れたかどうかを名前で確かめる。
@@ -45,7 +47,14 @@ const EXPECTED_COLUMNS = [
   ["content_templates",  "fortune_bridge"],
   ["learning_progress",  "track"],
   ["users",              "name_source"],
-  ["saju_profiles",      "birth_confirmed"]
+  ["saju_profiles",      "birth_confirmed"],
+  /* 002。ここが流れていないと、配信が「残り日数」を数えられない。 */
+  ["learning_progress",  "days_used"],
+  ["users",              "active_track"],
+  ["purchases",          "track"],
+  ["subscriptions",      "trial_track"],
+  ["course_entitlements", "days_entitled"],
+  ["lapse_log",          "lapsed_at"]
 ];
 
 /* 「もう当たっている」を表すものだけ。

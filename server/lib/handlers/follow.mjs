@@ -59,7 +59,8 @@ function welcomeForNameless() {
       SITE_URL,
       "診断のあと「LINEで受け取る」を押すと、ここに繋がります。",
       "",
-      "お名前が登録できたら、コースをお訊きします。"
+      "お名前が登録できたら、下のメニューの［受講料］から",
+      "コースをお選びください。無料でお試しいただけます。"
     ].join("\n")
   };
 }
@@ -88,23 +89,23 @@ export async function handleFollow(conn, event,
   const displayName = await displayNameOf(lineUserId, profile);
   const { user, created } = await users.upsertOnFollow(conn, { lineUserId, displayName });
 
-  /* 体験と進捗の器を用意する。どちらも既にあれば何もしない。
-     ここを friendly に「作り直す」と、ブロック→再追加のたびに
-     体験が延び、進捗が 0 に戻る。 */
-  const trial = await billing.startTrial(conn, user.id);
-  await learning.ensureProgress(conn, user.id);
+  /* ---- 体験も進捗も、ここでは作らない（migrations/002）--------------
+     前は友だち追加した瞬間に 3 日分を配り、進捗の器も作っていた。
+     やめた理由が 2 つある。
 
-  /* 再追加のときの status。upsertOnFollow は触らないので、ここで決める。
+       ・コースを選ぶ前に始まる。中級を受けたい人に初級の 3 日が届く
+       ・進捗は (user_id, track) が鍵になったので、「まだコースが
+         決まっていない」行が置けない
 
-     'unfollowed' のまま放置すると配信対象（trial / active）に戻らず、
-     戻ってきた人に何も届かない。かといって一律 'trial' にすると
-     101 日買った人が体験に落ちる（repo/users.mjs の注釈）。
-     払った履歴があるかで決める。 */
-  if (!created && user.status === "unfollowed") {
-    const sub = trial.subscription;
-    const paid = sub && sub.payment_status === "paid";
-    await users.setStatus(conn, user.id, paid ? "active" : "trial");
-  }
+     体験はリッチメニューの［受講料］からコースを選んで始める
+     （handlers/checkout.mjs）。ここでするのは users に居ることを
+     確かにするところまで。
+
+     再追加のときの status も、ここでは戻さない。買った人が戻って
+     きたかどうかは、買い直した時点で checkout.mjs が判断する ──
+     ここで一律 'trial' に戻すと、日数を持たない人が配信対象の
+     顔をして listDeliverable に並ぶ（並んでも entitlements の
+     JOIN で外れるが、数えるときに紛れる）。 */
 
   /* 何を返すかは、名前があるかで分かれる。
 
@@ -138,25 +139,25 @@ export async function handleFollow(conn, event,
   return {
     userId: user.id,
     created,
-    trialStarted: trial.created,
     displayName,
     welcomed
   };
 }
 
 /* 講座の案内 ＋ 次に訊くこと 1 つ。訊くことが無ければ案内だけ。
-   段は lib/onboarding.mjs が中身から導く（列で持たない）。 */
+   段は lib/onboarding.mjs が中身から導く（列で持たない）。
+
+   コースはここで訊かない ── 買うときに選ぶので、まだ何も持って
+   いない人に「初級 / 中級 / 上級」だけ出しても進む先が無い。
+   代わりにリッチメニューが常に画面下に出ている。 */
 async function onboardingMessages(conn, user) {
-  const [saju, prog] = await Promise.all([
-    users.getSajuProfile(conn, user.id),
-    learning.getProgress(conn, user.id)
-  ]);
+  const saju = await users.getSajuProfile(conn, user.id);
   const state = {
     ...user,
     birth_date: saju ? saju.birth_date : null,
     birth_time: saju ? saju.birth_time : null,
     birth_confirmed: saju ? saju.birth_confirmed : false,
-    track: prog ? prog.track : null
+    track: user.active_track || null
   };
   return [
     serviceGuide({ nameJa: user.name_reading || user.name_kanji }),

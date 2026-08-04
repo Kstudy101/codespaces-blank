@@ -17,7 +17,7 @@
    通知だけ増えて読まれなくなるため。朝夕 2 通が本体で、
    そこに雑音を混ぜたくない。
    ================================================================== */
-import { users, billing, learning } from "../repo/index.mjs";
+import { users, billing, learning, entitlements } from "../repo/index.mjs";
 import { replyMessage } from "../line.mjs";
 import { nextStep, messageForStep } from "../onboarding.mjs";
 
@@ -69,16 +69,23 @@ export async function handleMessage(conn, event) {
   let reply = null;
 
   if (hit(text, ASK_STATUS)) {
-    const [sub, prog] = await Promise.all([
-      billing.getSubscription(conn, user.id),
-      learning.getProgress(conn, user.id)
-    ]);
-    const done = prog ? Number(prog.current_day) : 0;
-    const entitled = sub ? Number(sub.total_days_entitled) : 0;
-    const left = Math.max(0, entitled - done);
-    reply = left > 0
-      ? `いま ${done} 日目まで進んでいます。残り ${left} 日ぶんお届けできます（全 ${learning.TOTAL_DAYS} 日）。`
-      : `いま ${done} 日目まで進んでいます。お届けできる日数を使い切りました。続きはこちらから追加できます。`;
+    /* 残りは course_entitlements と days_used の引き算で出る
+       （migrations/002）。current_day では出せない ──
+       「1 日目からやり直す」で戻るのは current_day だけなので、
+       そちらで数えるとやり直した人の残りが増えて見える。 */
+    const track = user.active_track;
+    const ent = track ? await entitlements.get(conn, user.id, track) : null;
+
+    if (!ent) {
+      reply = "まだ受講が始まっていません。"
+            + "\n下のメニューの［受講料］からコースをお選びください。";
+    } else {
+      const left = Math.max(0, ent.remaining);
+      reply = left > 0
+        ? `いま ${ent.currentDay} 日目まで進んでいます。残り ${left} 日ぶんお届けできます（全 ${learning.TOTAL_DAYS} 日）。`
+        : `いま ${ent.currentDay} 日目まで進んでいます。お届けできる日数を使い切りました。`
+          + `\n下のメニューの［受講料］から追加できます。`;
+    }
   } else if (hit(text, ASK_STOP)) {
     /* こちらから status を変えない。ブロックすれば unfollow が来て、
        そこで配信対象から外れる（handlers/follow.mjs）。
@@ -106,16 +113,13 @@ export async function handleMessage(conn, event) {
    段は lib/onboarding.mjs が中身から導く（列で持たない）ので、
    ここも handlers/postback.mjs も配信バッチも、同じものを見る。 */
 async function pendingStep(conn, user) {
-  const [saju, prog] = await Promise.all([
-    users.getSajuProfile(conn, user.id),
-    learning.getProgress(conn, user.id)
-  ]);
+  const saju = await users.getSajuProfile(conn, user.id);
   const state = {
     ...user,
     birth_date: saju ? saju.birth_date : null,
     birth_time: saju ? saju.birth_time : null,
     birth_confirmed: saju ? saju.birth_confirmed : false,
-    track: prog ? prog.track : null
+    track: user.active_track || null
   };
   const step = nextStep(state);
   return step ? messageForStep(step, state) : null;

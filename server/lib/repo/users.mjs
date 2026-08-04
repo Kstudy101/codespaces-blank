@@ -11,9 +11,14 @@
    ================================================================== */
 import { one, all, run, insertNew, fromJson, toJson, nn } from "./util.mjs";
 import { jstDateTime } from "../jst.mjs";
+/* コースの一覧はここでも要る（active_track）。写しを作らず、
+   learning.mjs の 1 部を読む ── 2 つ持つと、片方だけ増やしたときに
+   「入るのに配信対象から外れる」コースができる。 */
+import { TRACKS } from "./learning.mjs";
 
 const COLS = `id, line_user_id, display_name, name_kanji, name_reading,
-              name_kr, name_source, followed_at, status, created_at, updated_at`;
+              name_kr, name_source, followed_at, status, active_track,
+              created_at, updated_at`;
 
 export async function findById(conn, id) {
   return one(conn, `SELECT ${COLS} FROM users WHERE id = ?`, [id]);
@@ -147,28 +152,75 @@ function int(v, fallback) {
 
    birth_time も取る。運勢は生まれた時刻で時柱が変わるので、
    これが抜けていると全員が同じ時柱で占われる。 */
+/* ---- コース別になった（migrations/002）------------------------------
+   1 人が複数のコースを持つので、「どれを配るか」を決める列が要る。
+   それが u.active_track で、ここは**それ 1 つだけ**を見る。
+
+   同時に 2 コースを配らないのは、1 日に 2 通の「今日の 1 日目」が
+   届く形になるため。他のコースの残りは course_entitlements に
+   そのまま残るので、あとで戻って来られる。
+
+   active_track が NULL の人は、まだ何も始めていない（買っても
+   体験もしていない）。JOIN で自然に外れる。
+
+   subscriptions は JOIN しない。買った日数はコース別の
+   course_entitlements が持つようになり、あちらは体験の記録だけに
+   なったので、配信の判断には要らない ── INNER のまま残すと、
+   体験を使っていない人が丸ごと対象から消える。 */
+const DELIVERABLE_SQL = `
+  SELECT u.id, u.line_user_id, u.display_name,
+         u.name_kanji, u.name_reading, u.name_kr, u.name_source, u.status,
+         u.active_track AS track,
+         p.current_day, p.days_used, p.current_semester,
+         e.days_entitled,
+         e.days_entitled - p.days_used AS remaining,
+         j.ohaeng_main, j.raw_result_json, j.birth_date, j.birth_time,
+         j.birth_confirmed, j.lucky_hour_display
+    FROM users u
+    JOIN learning_progress   p ON p.user_id = u.id AND p.track = u.active_track
+    JOIN course_entitlements e ON e.user_id = u.id AND e.track = u.active_track
+    LEFT JOIN saju_profiles  j ON j.user_id = u.id
+   WHERE u.status IN ('trial', 'active') AND u.active_track IS NOT NULL`;
+
+/* BOOLEAN は TINYINT(1) で返る。0 を falsy として使うのは効いては
+   いるが、意図してそう書いたのかが読めなくなる。 */
+const shapeDeliverable = (r) => ({
+  ...r,
+  raw_result_json: fromJson(r.raw_result_json),
+  birth_confirmed: !!r.birth_confirmed
+});
+
 export async function listDeliverable(conn, { limit = 500, offset = 0 } = {}) {
-  return all(conn,
-    `SELECT u.id, u.line_user_id, u.display_name,
-            u.name_kanji, u.name_reading, u.name_kr, u.name_source, u.status,
-            s.total_days_entitled, s.trial_end, s.payment_status,
-            p.track, p.current_day, p.current_semester,
-            j.ohaeng_main, j.raw_result_json, j.birth_date, j.birth_time,
-            j.birth_confirmed, j.lucky_hour_display
-       FROM users u
-       JOIN subscriptions     s ON s.user_id = u.id
-       JOIN learning_progress p ON p.user_id = u.id
-       LEFT JOIN saju_profiles j ON j.user_id = u.id
-      WHERE u.status IN ('trial', 'active')
+  const rows = await all(conn,
+    `${DELIVERABLE_SQL}
       ORDER BY u.id
-      LIMIT ${int(limit, 500)} OFFSET ${int(offset, 0)}`)
-    .then((rows) => rows.map((r) => ({
-      ...r,
-      raw_result_json: fromJson(r.raw_result_json),
-      /* BOOLEAN は TINYINT(1) で返る。0 を falsy として使うのは
-         効いてはいるが、意図してそう書いたのかが読めなくなる。 */
-      birth_confirmed: !!r.birth_confirmed
-    })));
+      LIMIT ${int(limit, 500)} OFFSET ${int(offset, 0)}`);
+  return rows.map(shapeDeliverable);
+}
+
+/* 1 人だけ。決済の直後に「いますぐ 1 日目」を送るのに使う
+   （db/push-daily.mjs の deliverNow）。
+
+   listDeliverable を引いて絞り込む形にはしない ── 501 人目から
+   見つからなくなり、しかも「買ったのに何も来ない」という、
+   人数が増えてから出る壊れ方をする。 */
+export async function findDeliverable(conn, userId) {
+  const row = await one(conn, `${DELIVERABLE_SQL} AND u.id = ?`, [userId]);
+  return row ? shapeDeliverable(row) : null;
+}
+
+/* ---- いま受けているコースを切り替える --------------------------------
+   購入と体験開始のときに呼ぶ。ここを通らずに配信が始まることは無い
+   （listDeliverable が active_track で JOIN しているため）。
+
+   前のコースの残りは消えない。course_entitlements に残るので、
+   戻ってきて買い足せば続きから受けられる。 */
+export async function setActiveTrack(conn, id, track) {
+  if (track !== null && !TRACKS.includes(track)) {
+    throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")} のどれか）`);
+  }
+  const r = await run(conn, `UPDATE users SET active_track = ? WHERE id = ?`, [track, id]);
+  return r.affectedRows > 0;
 }
 
 /* 退会。外部キーが CASCADE なので、四柱・購入・進捗・ログも一緒に消える。

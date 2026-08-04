@@ -1,0 +1,567 @@
+#!/usr/bin/env node
+/* ==================================================================
+   verify-billing.mjs — 前払いの回数券（migrations/002）
+
+   ここの誤りは、どれも画面に出ない。請求は通り、ログも普通に見え、
+   利用者が言ってくるまで分からない:
+
+     ・「1 日目からやり直す」で残りが復活する → 受け取ったぶんが無料
+     ・webhook の再送で日数が二度積まれる    → 決済 1 件で 2 倍
+     ・署名を確かめずに通す                  → 誰でも日数を積める
+     ・古い署名を通す                        → 一度漏れた要求を投げ直せる
+     ・data の値段を信じる                   → 100 円で 101 日分
+     ・コースを変えると前のコースの残りが消える
+     ・表示の義務を満たす前に売れてしまう
+
+   DB も Stripe も要らない。repo/ は渡された接続の execute() しか
+   呼ばない約束なので、偽物を渡して SQL を読む。
+   ================================================================== */
+import fs from "node:fs";
+import crypto from "node:crypto";
+
+let failed = 0, passed = 0;
+const check = (label, fn) => {
+  try { const d = fn(); passed++; console.log(`  ✓ ${label}${d ? "  " + d : ""}`); }
+  catch (e) { failed++; console.log(`  ✗ ${label}\n      ${e.message}`); }
+};
+const acheck = async (label, fn) => {
+  try { const d = await fn(); passed++; console.log(`  ✓ ${label}${d ? "  " + d : ""}`); }
+  catch (e) { failed++; console.log(`  ✗ ${label}\n      ${e.message}`); }
+};
+const assert = (c, m) => { if (!c) throw new Error(m || "満たしていません"); };
+const head = (s) => console.log(`\n${s}`);
+const read = (p) => fs.readFileSync(p, "utf8");
+const stripComments = (src) => src
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+const { verifyStripeSignature, readCheckoutEvent } = await import("../server/lib/stripe.mjs");
+const { entitlements, learning, billing, lapses } = await import("../server/lib/repo/index.mjs");
+const checkout = await import("../server/lib/handlers/checkout.mjs");
+
+/* 偽の接続。SQL の見た目で返すものを決め、実行された SQL は
+   全部 calls に残るので順番も後から読める。 */
+function fakeConn(rows = {}) {
+  const calls = [];
+  return {
+    calls,
+    sql: () => calls.map((c) => c.sql.replace(/\s+/g, " ").trim()),
+    async execute(sql, params = []) {
+      calls.push({ sql, params });
+      for (const [pattern, value] of Object.entries(rows)) {
+        if (new RegExp(pattern, "i").test(sql)) {
+          return [typeof value === "function" ? value(sql, params) : value, []];
+        }
+      }
+      if (/^\s*(INSERT|UPDATE|DELETE)/i.test(sql)) return [{ affectedRows: 1, insertId: 1 }, []];
+      return [[], []];
+    }
+  };
+}
+const dupErr = () => Object.assign(new Error("Duplicate entry"), { errno: 1062, code: "ER_DUP_ENTRY" });
+
+
+/* ================================================================== */
+head("[やり直し]  ここを外すと、受け取ったぶんが無料になる");
+
+check("残りは days_used で数える。current_day では数えない", () => {
+  const src = stripComments(read("server/lib/repo/entitlements.mjs"));
+  assert(/days_entitled\s*-\s*COALESCE\(p\.days_used/.test(src),
+    "残りの計算に days_used を使っていません");
+  assert(!/days_entitled\s*-\s*COALESCE\(p\.current_day/.test(src),
+    "残りを current_day で数えています。やり直すと残りが復活します");
+  return "days_entitled - days_used";
+});
+
+await acheck("resetProgress は days_used に触らない", async () => {
+  const conn = fakeConn();
+  await learning.resetProgress(conn, 7, "beginner", 0);
+  const sql = conn.sql().join(" ");
+  assert(/UPDATE learning_progress/i.test(sql), "更新していません");
+  assert(!/days_used/i.test(sql),
+    `days_used を書き換えています ── やり直しで残りが復活します: ${sql}`);
+  return "current_day だけ戻る";
+});
+
+await acheck("advanceDay は日を確保するのと同じ 1 文で days_used を増やす", async () => {
+  const conn = fakeConn({ "UPDATE learning_progress": { affectedRows: 1 } });
+  await learning.advanceDay(conn, 7, "beginner", 3);
+  const stmt = conn.calls.find((c) => /UPDATE learning_progress/i.test(c.sql));
+  assert(stmt, "更新していません");
+  const s = stmt.sql.replace(/\s+/g, " ");
+  assert(/days_used\s*=\s*days_used\s*\+\s*1/.test(s), `days_used を増やしていません: ${s}`);
+  assert(/WHERE .*current_day = \?/.test(s),
+    "読んだ値のままかを見ていません（二重起動で 2 日進みます）");
+  return "1 文で確保と消費";
+});
+
+await acheck("確保に負けたら days_used も増えない", async () => {
+  const conn = fakeConn({ "UPDATE learning_progress": { affectedRows: 0 } });
+  const r = await learning.advanceDay(conn, 7, "beginner", 3);
+  assert(r.claimed === false, "負けたのに勝ったと返しました");
+  return "claimed=false";
+});
+
+
+/* ================================================================== */
+head("[再送]  Stripe は同じイベントを何度も送る（仕様であって障害ではない）");
+
+await acheck("同じ Session を二度処理しても日数は増えない", async () => {
+  let insertCount = 0;
+  const conn = fakeConn({
+    "INSERT INTO purchases": () => {
+      insertCount++;
+      if (insertCount > 1) throw dupErr();          // 2 度目は一意制約に当たる
+      return { affectedRows: 1, insertId: 1 };
+    },
+    "FROM course_entitlements": [{ track: "beginner", days_entitled: 30, days_used: 0,
+                                   current_day: 0, remaining: 30 }]
+  });
+
+  const first = await billing.creditPurchase(conn, 7, "beginner", "30days",
+    { paymentRef: "cs_test_ABC" });
+  assert(first.created === true, "1 度目が入りませんでした");
+
+  const second = await billing.creditPurchase(conn, 7, "beginner", "30days",
+    { paymentRef: "cs_test_ABC" });
+  assert(second.created === false, "2 度目も新規として扱いました（日数が二度積まれます）");
+  assert(second.daysGranted === 0, `2 度目で ${second.daysGranted} 日積みました`);
+
+  /* 積む SQL が 1 回しか出ていないこと。created の値だけ見て
+     安心すると、その後ろで積んでいても気づけない。 */
+  const grants = conn.sql().filter((s) => /INSERT INTO course_entitlements/i.test(s));
+  assert(grants.length === 1, `日数を ${grants.length} 回積みました`);
+  return "1062 で弾く / 積むのは 1 回";
+});
+
+check("再送を affectedRows で見分けていない", () => {
+  const src = stripComments(read("server/lib/repo/billing.mjs"));
+  /* 閉じ括弧が行頭に来る所が 2 つある ── 分割代入の引数
+     「} = {}) {」も行頭の } なので、\n} だけで切ると本文の手前で
+     終わってしまう。1 行に } だけがある所まで取る。 */
+  const fn = src.match(/export async function creditPurchase[\s\S]*?\n}\n/)[0];
+  assert(/insertNew/.test(fn), "insertNew（1062 を捕まえる形）を使っていません");
+  assert(!/affectedRows/.test(fn),
+    "affectedRows で見分けています。mysql2 の既定では新規も重複も 1 です");
+  return "insertNew の created で見る";
+});
+
+check("台帳に入ってから積む（順番）", () => {
+  const src = stripComments(read("server/lib/repo/billing.mjs"));
+  /* 閉じ括弧が行頭に来る所が 2 つある ── 分割代入の引数
+     「} = {}) {」も行頭の } なので、\n} だけで切ると本文の手前で
+     終わってしまう。1 行に } だけがある所まで取る。 */
+  const fn = src.match(/export async function creditPurchase[\s\S]*?\n}\n/)[0];
+  const ins = fn.indexOf("INSERT INTO purchases");
+  const grant = fn.indexOf("entitlements.grant");
+  assert(ins >= 0 && grant >= 0, "どちらかがありません");
+  assert(ins < grant,
+    "先に日数を積んでいます。落ちると「もらったが払った記録が無い」が残ります");
+  return "purchases → grant";
+});
+
+
+/* ================================================================== */
+head("[署名]  この口が緩むと、誰でも日数を積める");
+
+const SECRET = "whsec_test";
+const sign = (body, t, secret = SECRET) =>
+  crypto.createHmac("sha256", secret).update(`${t}.`).update(body).digest("hex");
+
+check("正しい署名は通る", () => {
+  const body = Buffer.from(JSON.stringify({ type: "x" }), "utf8");
+  const t = Math.floor(Date.now() / 1000);
+  assert(verifyStripeSignature(body, `t=${t},v1=${sign(body, t)}`, SECRET), "通りません");
+  return "t + v1";
+});
+
+check("本文が 1 バイトでも違えば通らない", () => {
+  const t = Math.floor(Date.now() / 1000);
+  const a = Buffer.from('{"a":1}', "utf8"), b = Buffer.from('{"a":2}', "utf8");
+  assert(!verifyStripeSignature(b, `t=${t},v1=${sign(a, t)}`, SECRET), "通ってしまいました");
+  return "改竄を弾く";
+});
+
+check("別のシークレットで作った署名は通らない", () => {
+  const body = Buffer.from("{}", "utf8");
+  const t = Math.floor(Date.now() / 1000);
+  assert(!verifyStripeSignature(body, `t=${t},v1=${sign(body, t, "whsec_other")}`, SECRET),
+    "通ってしまいました");
+  return "鍵違いを弾く";
+});
+
+check("古い要求は通らない（再生攻撃）", () => {
+  const body = Buffer.from("{}", "utf8");
+  const old = Math.floor(Date.now() / 1000) - 3600;
+  assert(!verifyStripeSignature(body, `t=${old},v1=${sign(body, old)}`, SECRET),
+    "1 時間前の要求が通りました。一度漏れた要求を投げ直せます");
+  /* 許容の内側なら通ること。厳しすぎると時計のずれで全部落ちる。 */
+  const near = Math.floor(Date.now() / 1000) - 60;
+  assert(verifyStripeSignature(body, `t=${near},v1=${sign(body, near)}`, SECRET),
+    "1 分前が通りません。時計の誤差で全部落ちます");
+  return "既定 5 分";
+});
+
+check("先の時刻も通さない", () => {
+  const body = Buffer.from("{}", "utf8");
+  const future = Math.floor(Date.now() / 1000) + 3600;
+  assert(!verifyStripeSignature(body, `t=${future},v1=${sign(body, future)}`, SECRET),
+    "1 時間先の要求が通りました");
+  return "絶対値で見る";
+});
+
+check("=== ではなく timingSafeEqual で比べる", () => {
+  const src = stripComments(read("server/lib/stripe.mjs"));
+  assert(/timingSafeEqual/.test(src),
+    "=== で比べています。先頭から何文字目で違うかが所要時間に出ます");
+  return "timingSafeEqual";
+});
+
+check("hex で作る（base64 ではない）", () => {
+  const src = stripComments(read("server/lib/stripe.mjs"));
+  assert(/digest\("hex"\)/.test(src),
+    "Stripe は hex です。LINE の base64 を写すと全部 401 になります");
+  return "hex";
+});
+
+check("文字列を渡したら投げる（再シリアライズを防ぐ）", () => {
+  let threw = false;
+  try { verifyStripeSignature("{}", "t=1,v1=x", SECRET); } catch { threw = true; }
+  assert(threw, "文字列を受け付けました。JSON を組み直すと署名が合いません");
+  return "Buffer のみ";
+});
+
+check("署名を確かめてから JSON.parse する", () => {
+  const src = stripComments(read("server/app.mjs"));
+  const fn = src.match(/async function onStripeWebhook[\s\S]*?\n}/)[0];
+  const verify = fn.indexOf("verifyStripeSignature");
+  const parse = fn.indexOf("JSON.parse");
+  assert(verify >= 0 && parse >= 0, "どちらかがありません");
+  assert(verify < parse, "署名を確かめる前に本文を解釈しています");
+  return "verify → parse";
+});
+
+check("シークレット未設定なら webhook を止める", () => {
+  const src = stripComments(read("server/app.mjs"));
+  const fn = src.match(/async function onStripeWebhook[\s\S]*?\n}/)[0];
+  assert(/STRIPE_WEBHOOK_SECRET/.test(fn) && /500/.test(fn),
+    "未設定のまま素通りします");
+  return "500 で拒否";
+});
+
+check("未払いの completed は日数に替えない", () => {
+  const paid = readCheckoutEvent({ type: "checkout.session.completed",
+    data: { object: { id: "cs_1", payment_status: "paid",
+                      metadata: { user_id: "7", track: "beginner", package: "30days" } } } });
+  assert(paid && paid.sessionId === "cs_1", "払った分を落としました");
+  const unpaid = readCheckoutEvent({ type: "checkout.session.completed",
+    data: { object: { id: "cs_2", payment_status: "unpaid",
+                      metadata: { user_id: "7", track: "beginner", package: "30days" } } } });
+  assert(unpaid === null, "未払いを通しました（銀行振込などで起こります）");
+  return "payment_status を見る";
+});
+
+
+/* ================================================================== */
+head("[値段]  data は利用者の端末を通って戻る");
+
+check("pkg から値段を引く。data の金額を使わない", () => {
+  const src = stripComments(read("server/lib/handlers/postback.mjs"));
+  const fn = src.match(/if \(action === "buy"\)[\s\S]*?\n  }/)[0];
+  assert(/PACKAGES\[pkg\]/.test(fn), "PACKAGES で引き当てていません");
+  assert(!/params\.(price|amount|yen)/.test(fn),
+    "data から金額を読んでいます。書き換えれば 100 円で買えます");
+  return "PACKAGES の表から";
+});
+
+check("金額の出どころは PACKAGES の 1 か所だけ", () => {
+  const chk = stripComments(read("server/lib/handlers/checkout.mjs"));
+  assert(/PACKAGES\[packageType\]/.test(chk), "PACKAGES を引いていません");
+  /* 決済セッションを作るところに数字を直接書いていないこと。 */
+  assert(!/unit_amount[^)]*\d{3,}/.test(chk), "金額を直に書いています");
+  return "PACKAGES";
+});
+
+await acheck("知らない track / package は DB に届く前に弾く", async () => {
+  const conn = fakeConn();
+  let threw = 0;
+  try { await billing.creditPurchase(conn, 7, "Beginner", "30days", {}); } catch { threw++; }
+  try { await billing.creditPurchase(conn, 7, "beginner", "90days", {}); } catch { threw++; }
+  assert(threw === 2, `${threw} 件しか弾きませんでした`);
+  assert(!conn.calls.length, "DB を触りました");
+  return "ENUM 外・表に無い package を拒否";
+});
+
+
+/* ================================================================== */
+head("[コース]  1 つを買っても、他のコースの残りは消えない");
+
+check("保有日数はコース別の表に持つ", () => {
+  const src = stripComments(read("server/lib/repo/entitlements.mjs"));
+  assert(/PRIMARY KEY|user_id = \? AND e?\.?track = \?|e\.user_id = \? AND e\.track = \?/.test(src)
+      || /WHERE e\.user_id = \? AND e\.track = \?/.test(src),
+    "コース別に引いていません");
+  const mig = read("server/db/migrations/002-per-course-billing.sql");
+  assert(/PRIMARY KEY \(user_id, track\)/.test(mig),
+    "course_entitlements の鍵が (user_id, track) ではありません");
+  return "(user_id, track)";
+});
+
+check("進みもコース別（1 人が初級 → 中級 と続けられる）", () => {
+  const mig = read("server/db/migrations/002-per-course-billing.sql");
+  assert(/DROP INDEX uq_progress_user\b/.test(mig), "1 人 1 行のままです");
+  assert(/UNIQUE KEY uq_progress_user_track \(user_id, track\)/.test(mig),
+    "(user_id, track) の一意キーがありません");
+  return "uq_progress_user_track";
+});
+
+check("配信は active_track の 1 コースだけを見る", () => {
+  const src = stripComments(read("server/lib/repo/users.mjs"));
+  assert(/p\.track = u\.active_track/.test(src) && /e\.track = u\.active_track/.test(src),
+    "active_track で結んでいません。3 コース持つ人に 3 通届きます");
+  return "listDeliverable";
+});
+
+check("夕方の復習も同じコースを見る", () => {
+  const src = stripComments(read("server/lib/repo/pushlogs.mjs"));
+  const fn = src.match(/export async function listReviewTargets[\s\S]*?\n}/)[0];
+  assert(/p\.track = u\.active_track/.test(fn),
+    "track で結んでいません。コースの数だけ復習が届きます");
+  return "listReviewTargets";
+});
+
+
+/* ================================================================== */
+head("[体験]  1 アカウント 1 回。コースを変えて 3 回もらえない");
+
+await acheck("2 回目の体験は入らない", async () => {
+  let n = 0;
+  const conn = fakeConn({
+    "INSERT INTO subscriptions": () => {
+      n++;
+      if (n > 1) throw dupErr();
+      return { affectedRows: 1, insertId: 1 };
+    },
+    "FROM subscriptions": [{ user_id: 7, trial_start: "2026-08-04", trial_track: "beginner" }]
+  });
+  const a = await billing.startTrial(conn, 7, "beginner");
+  assert(a.created === true, "1 回目が入りませんでした");
+  const b = await billing.startTrial(conn, 7, "intermediate");
+  assert(b.created === false, "コースを変えたら 2 回目が通りました（9 日ぶん無料になります）");
+
+  const grants = conn.sql().filter((s) => /INSERT INTO course_entitlements/i.test(s));
+  assert(grants.length === 1, `体験の日数を ${grants.length} 回積みました`);
+  return "user_id の一意制約で 1 回";
+});
+
+check("体験は purchases に入れない（0 円の行で売上が狂う）", () => {
+  const src = stripComments(read("server/lib/repo/billing.mjs"));
+  const fn = src.match(/export async function startTrial[\s\S]*?\n}/)[0];
+  assert(!/INSERT INTO purchases/i.test(fn), "体験を購入台帳に入れています");
+  return "entitlements だけ";
+});
+
+
+/* ================================================================== */
+head("[門]  表示の義務を満たす前に売らない");
+
+check("特商法の表記と返金規定が無ければ売らない", () => {
+  const keep = { t: process.env.TOKUSHOHO_URL, r: process.env.REFUND_POLICY,
+                 s: process.env.STRIPE_SECRET_KEY, w: process.env.STRIPE_WEBHOOK_SECRET };
+  try {
+    delete process.env.TOKUSHOHO_URL;
+    assert(!checkout.salesOpen(), "表記の URL が無いのに売れます");
+    assert(checkout.missingLegalConfig().some((m) => /TOKUSHOHO/.test(m)),
+      "何が足りないか名前で出していません");
+
+    process.env.TOKUSHOHO_URL = "https://example/tokushoho";
+    delete process.env.REFUND_POLICY;
+    assert(!checkout.salesOpen(), "返金規定が無いのに売れます");
+
+    process.env.REFUND_POLICY = "…";
+    process.env.STRIPE_SECRET_KEY = "sk_test";
+    process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
+    assert(checkout.salesOpen(), "全部揃っているのに売れません");
+  } finally {
+    for (const [k, v] of [["TOKUSHOHO_URL", keep.t], ["REFUND_POLICY", keep.r],
+                          ["STRIPE_SECRET_KEY", keep.s], ["STRIPE_WEBHOOK_SECRET", keep.w]]) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  }
+  return "4 つ揃って初めて開く";
+});
+
+check("価格表を出す前に門を通る", () => {
+  const src = stripComments(read("server/lib/handlers/postback.mjs"));
+  for (const a of ["plans", "plan", "buy"]) {
+    const fn = src.match(new RegExp(`if \\(action === "${a}"\\)[\\s\\S]*?\\n  }`))[0];
+    assert(/salesOpen\(\)/.test(fn), `action=${a} が門を通っていません`);
+  }
+  return "plans / plan / buy";
+});
+
+check("価格表に法が求める項目が入っている", () => {
+  process.env.TOKUSHOHO_URL ||= "https://example/tokushoho";
+  process.env.REFUND_POLICY ||= "返金の説明";
+  const m = checkout.priceList("beginner", { trialAvailable: false });
+  const t = m.text;
+  for (const [what, re] of [
+    ["分量",     /全 101 日/],
+    ["税込表示", /税込/],
+    ["支払時期", /申込時|お支払い/],
+    ["自動更新なし", /自動更新はありません/],
+    ["提供時期", /ご入金後すぐに 1 日目/],
+    ["返金",     /返金/],
+    ["事業者表記", /販売者の表記/]
+  ]) assert(re.test(t), `${what} がありません`);
+  assert(m.quickReply.items.length <= 13, "quickReply が 13 個を超えています");
+  for (const i of m.quickReply.items) {
+    assert(i.action.label.length <= 20, `label が 20 字を超えています: ${i.action.label}`);
+  }
+  return "7 項目";
+});
+
+
+/* ================================================================== */
+head("[入金のあと]  払ったのに何も起きない、を作らない");
+
+check("入金したら、時刻に関係なくその場で 1 日目", () => {
+  const src = stripComments(read("server/app.mjs"));
+  assert(/creditFromStripe\(pool, ev, \{ deliver: deliverNow \}\)/.test(src),
+    "入金から即時配信へ繋がっていません");
+  const chk = stripComments(read("server/lib/handlers/checkout.mjs"));
+  assert(/deliver\(conn, user\.id\)/.test(chk), "deliver を呼んでいません");
+  return "webhook → deliverNow";
+});
+
+check("二重送信の判定を新しく作っていない（sentToday を使う）", () => {
+  const src = stripComments(read("server/db/push-daily.mjs"));
+  const fn = src.match(/export async function deliverNow[\s\S]*?\n}/)[0];
+  assert(/deliverOne/.test(fn), "deliverOne を通していません");
+  assert(!/sentToday/.test(fn), "独自の判定を足しています（deliverOne が既に見ています）");
+  return "deliverOne の既送判定に乗る";
+});
+
+check("1 人だけ引く（一覧を絞り込まない）", () => {
+  const src = stripComments(read("server/db/push-daily.mjs"));
+  const fn = src.match(/export async function deliverNow[\s\S]*?\n}/)[0];
+  assert(/findDeliverable/.test(fn), "findDeliverable を使っていません");
+  assert(!/listDeliverable/.test(fn),
+    "一覧を引いて絞っています。501 人目から見つからなくなります");
+  return "findDeliverable";
+});
+
+check("送信に失敗しても入金は残す", () => {
+  const src = stripComments(read("server/lib/handlers/checkout.mjs"));
+  const fn = src.match(/export async function creditFromStripe[\s\S]*?\n}/)[0];
+  const credit = fn.indexOf("creditPurchase");
+  const send = fn.indexOf("send(user.line_user_id");
+  assert(credit >= 0 && send >= 0 && credit < send,
+    "送ってから積んでいます。送信が落ちると払ったのに日数が無い状態になります");
+  assert(/catch/.test(fn), "送信の失敗を捕まえていません");
+  return "credit → send";
+});
+
+
+/* ================================================================== */
+head("[期限と離脱]");
+
+check("残り 2 日で 1 度だけ予告する", () => {
+  assert(checkout.EXPIRING_AT === 2, `EXPIRING_AT=${checkout.EXPIRING_AT}`);
+  const src = stripComments(read("server/db/push-daily.mjs"));
+  assert(/willRemain === EXPIRING_AT/.test(src), "残りで判定していません");
+  assert(/countForDay\(conn, u\.id, entitledNow, "expiring"\)/.test(src),
+    "二度出さない判定がありません（days_entitled を鍵にする）");
+  return "countForDay で 1 回";
+});
+
+check("予告はレッスンと同じ 1 通の便に乗せる", () => {
+  const src = stripComments(read("server/db/push-daily.mjs"));
+  assert(/messages = \[\.\.\.messages,\s*\n?\s*expiringNotice/.test(src.replace(/\s+/g, " "))
+      || /messages = \[\.\.\.messages, expiringNotice/.test(src.replace(/\s+/g, " ")),
+    "別便で送っています（通知が 2 回鳴ります）");
+  return "同じ push に足す";
+});
+
+await acheck("切れたことは 1 度だけ台帳に残る", async () => {
+  const openRow = [{ id: 1, user_id: 7, track: "beginner", resumed_at: null }];
+  const conn = fakeConn({ "FROM lapse_log": openRow });
+  const r = await lapses.openIfAbsent(conn, 7, "beginner", { lastDay: 12, daysBought: 30 });
+  assert(r.created === false, "開いている行があるのに、もう 1 行書きました");
+  assert(!conn.sql().some((s) => /INSERT INTO lapse_log/i.test(s)), "INSERT しました");
+  return "開いている行があれば書かない";
+});
+
+await acheck("同じ朝に二重起動しても 1 行（一意制約）", async () => {
+  const conn = fakeConn({
+    "FROM lapse_log": [],                                  // 開いている行は無い
+    "INSERT INTO lapse_log": () => { throw dupErr(); }      // 先に走ったほうが入れた
+  });
+  const r = await lapses.openIfAbsent(conn, 7, "beginner", { lastDay: 12, daysBought: 30 });
+  assert(r.created === false, "1062 を新規として扱いました");
+  return "(user_id, track, lapsed_on)";
+});
+
+check("買い直したら台帳を閉じる", () => {
+  const src = stripComments(read("server/lib/handlers/checkout.mjs"));
+  const fn = src.match(/export async function creditFromStripe[\s\S]*?\n}/)[0];
+  assert(/lapses\.markResumed/.test(fn), "台帳を閉じていません");
+  return "markResumed";
+});
+
+check("台帳に名前も生年月日も出さない", () => {
+  const src = read("server/db/lapsed.mjs");
+  for (const bad of ["name_kr", "name_kanji", "birth_date", "display_name"]) {
+    assert(!src.includes(bad), `${bad} を出しています（配置ログは誰でも読めます）`);
+  }
+  return "id と日数だけ";
+});
+
+
+/* ================================================================== */
+head("[修了]  101 日目の翌朝、静かに何も来なくなる、を作らない");
+
+check("修了の案内を送る", () => {
+  const src = stripComments(read("server/db/push-daily.mjs"));
+  assert(/completionNotice/.test(src), "修了の文面を送っていません");
+  assert(/countByType\(conn, u\.id, "completion"\)/.test(src),
+    "二度送らない判定がありません");
+  return "1 度だけ";
+});
+
+check("修了の案内から次のコースへ行ける", () => {
+  const m = checkout.completionNotice("beginner", { owned: ["beginner"] });
+  assert(m.quickReply && m.quickReply.items.length >= 1, "次への導線がありません");
+  assert(m.quickReply.items.some((i) => /action=plan&track=/.test(i.action.data)),
+    "価格表へ繋がっていません");
+  return "次のコース / もう一度";
+});
+
+
+/* ================================================================== */
+head("[依存]  関門が install なしで走り続けること");
+
+check("Stripe SDK を入れていない", () => {
+  const pkg = JSON.parse(read("server/package.json"));
+  const deps = Object.keys(pkg.dependencies || {});
+  assert(deps.length === 1 && deps[0] === "mysql2",
+    `依存が増えています: ${deps.join(", ")}`);
+  const src = read("server/lib/stripe.mjs");
+  assert(!/from ["']stripe["']/.test(src), "stripe を import しています");
+  assert(/fetch\(/.test(src), "fetch を使っていません");
+  return "mysql2 だけ";
+});
+
+check("repo/ は渡された conn しか使わない（新しい 2 つも）", () => {
+  for (const f of ["server/lib/repo/entitlements.mjs", "server/lib/repo/lapses.mjs"]) {
+    const src = read(f);
+    assert(!/from ["']mysql2/.test(src), `${f} が mysql2 を読んでいます`);
+    assert(!/from ["']node:/.test(src), `${f} が node の組み込みを読んでいます`);
+  }
+  return "entitlements / lapses";
+});
+
+
+console.log(`\n${failed ? "✗" : "✓"} ${passed + failed} 項目中 ${passed} 件成功`
+  + (failed ? ` / ${failed} 件失敗` : ""));
+process.exit(failed ? 1 : 0);

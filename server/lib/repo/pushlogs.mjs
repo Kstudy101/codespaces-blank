@@ -22,8 +22,11 @@ import { jstDate, jstDateTime, jstDayRange } from "../jst.mjs";
    onboarding は名前・生年月日・コースの確認。数えるために種別を
    分けている ── 答えない人に毎朝送り続けるとブロックされ、
    ブロックは取り消せない。 */
+/* expiring … 残り 2 日の予告（migrations/002）
+   resume   … 買い直したときの「続きから / 最初から」の確認 */
 export const PUSH_TYPES = Object.freeze(
-  ["learning", "review", "quiz", "upsell", "completion", "onboarding"]);
+  ["learning", "review", "quiz", "upsell", "completion", "onboarding",
+   "expiring", "resume"]);
 
 function assertType(t) {
   if (!PUSH_TYPES.includes(t)) {
@@ -146,20 +149,29 @@ export async function todaysLearningDay(conn, userId, date = null) {
    実際に本文が行った日が取れる。 */
 export async function listReviewTargets(conn, date = null) {
   const [from, to] = jstDayRange(date || jstDate());
+  /* learning_progress はコース別に 1 行ずつになった（migrations/002）。
+     track で絞らずに join すると、3 コース持っている人が 3 行になり、
+     夕方だけ 3 通届く ── しかも 2 通は別のコースの復習になる。
+     朝が配ったのは active_track のぶんなので、そこで結ぶ。
+
+     users も active_track で見る。朝の便が active_track を見て
+     配っているので、ここが別のものを見ると朝夕で内容がずれる。 */
   return all(conn,
     `SELECT l.user_id AS id, MAX(l.day_number) AS day_number,
             u.line_user_id, u.name_kanji, u.name_reading, u.name_kr,
-            p.track,
+            u.active_track AS track,
             j.ohaeng_main, j.raw_result_json
        FROM push_logs l
        JOIN users u ON u.id = l.user_id
-       JOIN learning_progress p ON p.user_id = u.id
+       JOIN learning_progress p
+              ON p.user_id = u.id AND p.track = u.active_track
        LEFT JOIN saju_profiles j ON j.user_id = u.id
       WHERE l.push_type = 'learning' AND l.status = 'sent'
         AND l.sent_at >= ? AND l.sent_at < ?
         AND u.status IN ('trial', 'active')
+        AND u.active_track IS NOT NULL
       GROUP BY l.user_id, u.line_user_id, u.name_kanji, u.name_reading, u.name_kr,
-               p.track, j.ohaeng_main, j.raw_result_json
+               u.active_track, j.ohaeng_main, j.raw_result_json
       ORDER BY l.user_id`,
     [from, to])
     .then((rows) => rows.map((r) => ({ ...r, raw_result_json: fromJson(r.raw_result_json) })));

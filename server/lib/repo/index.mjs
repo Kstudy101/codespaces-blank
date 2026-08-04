@@ -20,3 +20,12 @@ export * as pushlogs from "./pushlogs.mjs";
 /* links だけは利用者に紐づかない。ウェブで四柱が出た時点では
    まだ LINE の誰かが分からないので、揃うまでの預かり場所（P3）。 */
 export * as links from "./links.mjs";
+
+/* 前払いの回数券（migrations/002）。billing が「払った台帳」なのに対し、
+   こちらは「いま何日ぶん持っているか」。分けたのは寿命が違うため ──
+   台帳は消さないが、保有日数は買うたびに動く。 */
+export * as entitlements from "./entitlements.mjs";
+
+/* 途中で切れて戻って来ない人の台帳。状態は持たず、出来事だけ。
+   理由は lapses.mjs の頭に書いた。 */
+export * as lapses from "./lapses.mjs";

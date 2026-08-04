@@ -142,17 +142,16 @@ export async function startLink(conn, input) {
    もう終わっていて、やり直すと state は使用済みなので通らない
    ── 「連携できたのに、できなかったと言われる」が起きる。 */
 async function greet(conn, user, { send = pushMessage } = {}) {
-  const [saju, prog] = await Promise.all([
-    users.getSajuProfile(conn, user.id),
-    learning.getProgress(conn, user.id)
-  ]);
+  const saju = await users.getSajuProfile(conn, user.id);
 
   const state = {
     ...user,
     birth_date: saju ? saju.birth_date : null,
     birth_time: saju ? saju.birth_time : null,
     birth_confirmed: saju ? saju.birth_confirmed : false,
-    track: prog ? prog.track : null
+    /* 進みはコース別になったので（migrations/002）、いま受けている
+       コースは users.active_track が持つ。買う前は NULL。 */
+    track: user.active_track || null
   };
 
   const step = nextStep(state);
@@ -240,10 +239,13 @@ export async function completeLink(conn, { code, state, error, errorDescription 
     rawResult: pending.raw_result_json
   });
 
-  /* 器も用意しておく。友だち追加が後になる人は、この時点では
-     follow イベントが来ていないため。どちらも既にあれば何もしない。 */
-  await billing.startTrial(conn, user.id);
-  await learning.ensureProgress(conn, user.id);
+  /* 体験も進捗も、ここでは作らない（migrations/002）。
+     どちらもコースが決まって初めて置ける ── 進みの鍵が
+     (user_id, track) になったため。コースはリッチメニューの
+     ［受講料］で選ぶ（handlers/checkout.mjs）。
+
+     ここまでで名前と四柱は入っているので、選んだ瞬間に
+     1 日目が作れる状態にはなっている。 */
 
   /* ---- チャネルの取り違えを、ここで見つける --------------------
      Login で得た userId を Messaging API 側に問い合わせる。

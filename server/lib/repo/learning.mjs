@@ -71,44 +71,43 @@ export function semesterForDay(day) {
 
 /* ---- 進み具合 ----------------------------------------------------- */
 
-export async function getProgress(conn, userId) {
+/* ---- コース別になった（migrations/002）------------------------------
+   1 人が初級 101 日を終えて中級へ進めるようにしたので、進みは
+   (user_id, track) ごとに 1 行ある。track は必ず要る ── 既定を
+   置くと、渡し忘れた呼び出しが初級の行を触って動いてしまう。 */
+export async function getProgress(conn, userId, track) {
+  if (!isTrack(track)) throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")}）`);
   const row = await one(conn,
-    `SELECT id, user_id, track, current_day, current_semester, last_sent_at, quiz_pass_log
-       FROM learning_progress WHERE user_id = ?`, [userId]);
+    `SELECT id, user_id, track, current_day, days_used, current_semester,
+            last_sent_at, quiz_pass_log
+       FROM learning_progress WHERE user_id = ? AND track = ?`, [userId, track]);
   if (!row) return null;
   return { ...row, quiz_pass_log: fromJson(row.quiz_pass_log) };
 }
 
-/* コースを決める。1 度だけ ── 進んだあとに変えると、
-   別のコースの 20 日目からいきなり始まる。
-
-   WHERE track IS NULL を付けているのがその 1 度きりで、
-   2 回目のボタンは affectedRows = 0 で戻る。押した人には
-   「もう決まっています」と返せる（handlers/postback.mjs）。
-
-   選び直しは運営者が resetProgress と一緒に行う想定。ここに
-   「まだ 0 日目なら変えてよい」を入れなかったのは、0 日目かどうかで
-   挙動が変わると、押した人に何が起きたのか説明できないため。 */
-export async function setTrack(conn, userId, track) {
-  if (!isTrack(track)) {
-    throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")} のどれか）`);
-  }
-  const r = await run(conn,
-    `UPDATE learning_progress SET track = ? WHERE user_id = ? AND track IS NULL`,
-    [track, userId]);
-  return { claimed: r.affectedRows > 0, track };
+/* その人が持っている進み全部。「初級は終わった、中級は 12 日目」を
+   一度に出すのに使う。 */
+export async function listProgress(conn, userId) {
+  const rows = await all(conn,
+    `SELECT track, current_day, days_used, current_semester, last_sent_at
+       FROM learning_progress WHERE user_id = ?
+      ORDER BY FIELD(track, 'beginner','intermediate','advanced')`, [userId]);
+  return rows;
 }
 
-/* 0 日目の行を用意する。既にあれば触らない ── 既存の行を
-   上書きする形にすると、オンボーディングをやり直しただけで
-   進みが 0 に戻る。 */
-export async function ensureProgress(conn, userId) {
-  /* 一意キーは user_id 1 本なので、1062 は「もう在る」だけを意味する。
-     affectedRows で見分けないのは util.mjs の insertNew に書いた理由。 */
+/* 0 日目の行を用意する。既にあれば触らない ── 上書きする形にすると、
+   買い直しただけで進みが 0 に戻り、受け取った日が二度と来なくなる。
+
+   呼ぶのは購入（と体験開始）の時点。友だち追加では作らない ──
+   track が鍵の一部になったので、「まだ選んでいない」行が置けない。 */
+export async function ensureProgress(conn, userId, track) {
+  if (!isTrack(track)) throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")}）`);
+  /* 一意キーは (user_id, track) 1 本なので、1062 は「もう在る」だけを
+     意味する。affectedRows で見分けないのは util.mjs の insertNew の理由。 */
   const ins = await insertNew(conn,
-    `INSERT INTO learning_progress (user_id, current_day, current_semester)
-     VALUES (?, 0, 1)`, [userId]);
-  return { created: ins.created, progress: await getProgress(conn, userId) };
+    `INSERT INTO learning_progress (user_id, track, current_day, days_used, current_semester)
+     VALUES (?, ?, 0, 0, 1)`, [userId, track]);
+  return { created: ins.created, progress: await getProgress(conn, userId, track) };
 }
 
 /* 1 日進める。読んだときの値（fromDay）を渡してもらい、
@@ -126,26 +125,45 @@ export async function ensureProgress(conn, userId) {
    返り値を必ず見ること。true のときだけ送る、が正しい順番 ──
    送ってから進めると、送信は成功したのに進められなかったとき
    同じ日が翌朝もう一度届く。 */
-export async function advanceDay(conn, userId, fromDay) {
+/* days_used も同じ 1 文で増やす。ここを別の文にすると、日を確保した
+   のに使った日数だけ増えていない瞬間が生まれ、そこで落ちると
+   1 日ぶんが無料になる。確保に勝った側だけが両方を動かす。 */
+export async function advanceDay(conn, userId, track, fromDay) {
+  if (!isTrack(track)) throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")}）`);
   const next = Number(fromDay) + 1;
   const r = await run(conn,
     `UPDATE learning_progress
-        SET current_day = ?, current_semester = ?, last_sent_at = ?
-      WHERE user_id = ? AND current_day = ?`,
-    [next, semesterForDay(next), jstDateTime(), userId, fromDay]);
+        SET current_day = ?, days_used = days_used + 1,
+            current_semester = ?, last_sent_at = ?
+      WHERE user_id = ? AND track = ? AND current_day = ?`,
+    [next, semesterForDay(next), jstDateTime(), userId, track, fromDay]);
   return { claimed: r.affectedRows > 0, day: next };
 }
 
-/* 運営者が特定の人だけやり直させるときに使う（計画書 5-3 / P9）。
-   通常の流れからは呼ばない。 */
-export async function resetProgress(conn, userId, day = 0) {
+/* ---- 「1 日目からやり直す」------------------------------------------
+   買い直した人が選べる（handlers/checkout.mjs の resume）。
+
+   ★ days_used には触らない。ここが計画書 §3.2 そのもので、
+   触ると残りが復活する:
+
+     30 日購入 → 10 日目まで受け取る → やり直し → current_day = 0
+       days_used も 0 にすると  残り = 30 - 0  = 30   ← 10 日ぶん無料
+       days_used を残せば      残り = 30 - 10 = 20   ← 正しい
+
+   やり直しても日数は使う。そのほうが正直で、説明もできる。
+
+   運営者が特定の人だけ戻すときにも同じ関数を使う（計画書 5-3 / P9）。 */
+export async function resetProgress(conn, userId, track, day = 0) {
+  if (!isTrack(track)) throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")}）`);
   const d = Number(day);
   if (!Number.isInteger(d) || d < 0 || d > TOTAL_DAYS) {
     throw new Error(`current_day の範囲外: ${day}（0〜${TOTAL_DAYS}）`);
   }
   const r = await run(conn,
-    `UPDATE learning_progress SET current_day = ?, current_semester = ? WHERE user_id = ?`,
-    [d, semesterForDay(d || 1), userId]);
+    `UPDATE learning_progress
+        SET current_day = ?, current_semester = ?
+      WHERE user_id = ? AND track = ?`,
+    [d, semesterForDay(d || 1), userId, track]);
   return r.affectedRows > 0;
 }
 
@@ -162,7 +180,8 @@ export async function resetProgress(conn, userId, day = 0) {
    JSON_MERGE_PATCH なら差し替える中身ごと ? で渡せて、両方立つ。
    MySQL 8 でも MariaDB 10.11 でも同じ結果になることを確かめてある
    （CAST(? AS JSON) は MariaDB に無いので使えない）。 */
-export async function setQuizResult(conn, userId, semester, passed) {
+export async function setQuizResult(conn, userId, track, semester, passed) {
+  if (!isTrack(track)) throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")}）`);
   const s = Number(semester);
   if (!Number.isInteger(s) || s < 1 || s > SEMESTERS.length) {
     throw new Error(`未知の semester: ${semester}（1〜${SEMESTERS.length}）`);
@@ -170,8 +189,8 @@ export async function setQuizResult(conn, userId, semester, passed) {
   const r = await run(conn,
     `UPDATE learning_progress
         SET quiz_pass_log = JSON_MERGE_PATCH(COALESCE(quiz_pass_log, '{}'), ?)
-      WHERE user_id = ?`,
-    [JSON.stringify({ [`semester${s}`]: !!passed }), userId]);
+      WHERE user_id = ? AND track = ?`,
+    [JSON.stringify({ [`semester${s}`]: !!passed }), userId, track]);
   return r.affectedRows > 0;
 }
 

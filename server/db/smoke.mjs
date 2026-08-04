@@ -21,7 +21,7 @@
    1 件だけで、始めと終わりに消す。
    ================================================================== */
 import { getPool, closePool } from "../lib/db.mjs";
-import { users, billing, learning, pushlogs } from "../lib/repo/index.mjs";
+import { users, billing, learning, pushlogs, entitlements } from "../lib/repo/index.mjs";
 import { jstDate } from "../lib/jst.mjs";
 
 const TEST_LINE_ID = "U_smoke_test_kstudy101";
@@ -134,57 +134,64 @@ try {
   /* ---- 体験と購入 -------------------------------------------------- */
   head("[金額]  再送で保有日数を二度足さない ── MySQL の返し方に依存する所");
 
-  const t1 = await billing.startTrial(pool, uid, jstDate());
-  check("体験は 3 日", () => {
+  const T = "beginner";
+
+  const t1 = await billing.startTrial(pool, uid, T, jstDate());
+  const e1 = await entitlements.get(pool, uid, T);
+  check("体験は 3 日。コースを選んでから始まる", () => {
     assert(t1.created === true, "既にありました");
-    assert(t1.subscription.total_days_entitled === 3, `${t1.subscription.total_days_entitled} 日`);
-    return "3 日";
+    assert(e1 && e1.daysEntitled === 3, `${e1 && e1.daysEntitled} 日`);
+    return "beginner 3 日";
   });
 
-  const t2 = await billing.startTrial(pool, uid);
-  check("体験は延びない", () => {
+  /* コースを変えても 2 度目は通らない。通ると 3 コース ×3 日 = 9 日を
+     無料で受け取れる。一意キーは subscriptions.user_id 1 本なので、
+     1062 は「もう体験を使った」だけを意味すると確定できる。 */
+  const t2 = await billing.startTrial(pool, uid, "intermediate");
+  const e2 = await entitlements.get(pool, uid, "intermediate");
+  check("体験は 1 アカウント 1 回（コースを変えても増えない）", () => {
     assert(t2.created === false, "2 度目が通りました");
-    assert(t2.subscription.total_days_entitled === 3,
-      `${t2.subscription.total_days_entitled} 日になりました`);
-    return "3 日のまま";
+    assert(e2 === null, `中級にも ${e2 && e2.daysEntitled} 日積みました`);
+    return "1 回だけ";
   });
 
-  const p1 = await billing.creditPurchase(pool, uid, "30days", { paymentRef: "pi_smoke_1" });
+  const p1 = await billing.creditPurchase(pool, uid, T, "30days", { paymentRef: "pi_smoke_1" });
   check("初回の決済で +30 日", () => {
     assert(p1.created === true, "created=false でした");
     assert(p1.daysGranted === 30, `${p1.daysGranted} 日`);
-    assert(p1.subscription.total_days_entitled === 33,
-      `${p1.subscription.total_days_entitled} 日（3+30=33 のはず）`);
-    assert(p1.subscription.payment_status === "paid", p1.subscription.payment_status);
-    return "33 日 / paid";
+    assert(p1.entitlement.daysEntitled === 33,
+      `${p1.entitlement.daysEntitled} 日（3+30=33 のはず）`);
+    return "33 日";
   });
 
-  const p2 = await billing.creditPurchase(pool, uid, "30days", { paymentRef: "pi_smoke_1" });
+  const p2 = await billing.creditPurchase(pool, uid, T, "30days", { paymentRef: "pi_smoke_1" });
+  const e3 = await entitlements.get(pool, uid, T);
   check("同じ取引 ID の再送は加算しない ← ここが本番で効く", () => {
     assert(p2.created === false,
       "created=true でした。一意制約違反（1062）を捕まえられていません");
     assert(p2.daysGranted === 0, `${p2.daysGranted} 日足しました`);
-    assert(p2.subscription.total_days_entitled === 33,
-      `${p2.subscription.total_days_entitled} 日に増えました。決済 1 件で二重に付与されています`);
+    assert(e3.daysEntitled === 33,
+      `${e3.daysEntitled} 日に増えました。決済 1 件で二重に付与されています`);
     return "33 日のまま";
   });
 
-  const p3 = await billing.creditPurchase(pool, uid, "7days", { paymentRef: "pi_smoke_2" });
+  const p3 = await billing.creditPurchase(pool, uid, T, "7days", { paymentRef: "pi_smoke_2" });
   check("別の取引 ID なら積み上がる", () => {
     assert(p3.created === true, "created=false でした");
-    assert(p3.subscription.total_days_entitled === 40,
-      `${p3.subscription.total_days_entitled} 日（33+7=40 のはず）`);
+    assert(p3.entitlement.daysEntitled === 40,
+      `${p3.entitlement.daysEntitled} 日（33+7=40 のはず）`);
     return "40 日";
   });
 
   const purchases = await billing.listPurchases(pool, uid);
   check("台帳は 2 件（再送のぶんは増えない）", () => {
     assert(purchases.length === 2, `${purchases.length} 件`);
+    assert(purchases.every((x) => x.track === T), "コースが記録されていません");
     return purchases.map((p) => p.package_type).join(" + ");
   });
 
-  const drift = await billing.recountEntitledDays(pool, uid);
-  check("合計の写しと台帳が一致する", () => {
+  const drift = await billing.recountEntitledDays(pool, uid, T);
+  check("保有日数と台帳が一致する", () => {
     assert(drift.drift === 0, `${drift.stored} と ${drift.expected} がずれています`);
     return `${drift.stored} 日`;
   });
@@ -192,21 +199,21 @@ try {
   /* ---- 進み -------------------------------------------------------- */
   head("[進み]  二重起動しても同じ日を二度送らない");
 
-  await learning.ensureProgress(pool, uid);
-  const a1 = await learning.advanceDay(pool, uid, 0);
+  await learning.ensureProgress(pool, uid, T);
+  const a1 = await learning.advanceDay(pool, uid, T, 0);
   check("0 → 1 日目を取れる", () => {
     assert(a1.claimed === true && a1.day === 1, JSON.stringify(a1));
     return "claimed";
   });
 
-  const a2 = await learning.advanceDay(pool, uid, 0);
+  const a2 = await learning.advanceDay(pool, uid, T, 0);
   check("同じ値で二度目は取れない ← 二重起動の防ぎ方そのもの", () => {
     assert(a2.claimed === false,
       "二度目も通りました。バッチが重なると同じ日が二度届き、次の日が飛びます");
     return "claimed=false";
   });
 
-  const prog = await learning.getProgress(pool, uid);
+  const prog = await learning.getProgress(pool, uid, T);
   check("進みは 1 日ぶんだけ動いた", () => {
     assert(prog.current_day === 1, `${prog.current_day} 日目`);
     assert(prog.last_sent_at && prog.last_sent_at.startsWith(jstDate()),
@@ -214,9 +221,9 @@ try {
     return `current_day=1 / ${prog.last_sent_at}`;
   });
 
-  await learning.setQuizResult(pool, uid, 1, true);
-  await learning.setQuizResult(pool, uid, 2, false);
-  const q = await learning.getProgress(pool, uid);
+  await learning.setQuizResult(pool, uid, T, 1, true);
+  await learning.setQuizResult(pool, uid, T, 2, false);
+  const q = await learning.getProgress(pool, uid, T);
   check("学期ごとに積める。合否は boolean で入る（前の結果を消さない）", () => {
     assert(q.quiz_pass_log.semester1 === true,
       `${JSON.stringify(q.quiz_pass_log)} ── 1/0 なら JSON の boolean になっていません`);

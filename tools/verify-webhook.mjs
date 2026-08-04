@@ -269,25 +269,30 @@ check("イベントは直列に処理する（順番が入れ替わらない）"
 /* ================================================================== */
 head("[再送]  同じイベントが二度来ても結果が変わらない");
 
-await acheck("follow を 2 回処理しても体験は 1 回だけ", async () => {
+/* 友だち追加では体験も進捗も作らない（migrations/002）。
+   どちらもコースが決まって初めて置ける ── 進みの鍵が
+   (user_id, track) になったため。コースはリッチメニューの
+   ［受講料］で選ぶ（lib/handlers/checkout.mjs）。
+
+   ここで作ってしまうと、中級を受けたい人に初級の 3 日が届く。 */
+await acheck("friend 追加では、体験も進捗も作らない", async () => {
   let inserted = 0;
   const conn = fakeConn({
     "INSERT INTO users": () => {
       if (inserted++ === 0) return { affectedRows: 1, insertId: 7 };
       throw Object.assign(new Error("Duplicate"), { code: "ER_DUP_ENTRY", errno: 1062 });
     },
-    "INSERT INTO subscriptions": () => {
-      throw Object.assign(new Error("Duplicate"), { code: "ER_DUP_ENTRY", errno: 1062 });
-    },
-    "FROM users": USER_ROW,
-    "FROM subscriptions": [{ user_id: 7, total_days_entitled: 3, payment_status: "trial" }]
+    "FROM users": USER_ROW
   });
   const ev = { type: "follow", source: { userId: "U_test" } };
-  const a = await handleEvent(conn, ev);
-  const b = await handleEvent(conn, ev);
-  assert(a.trialStarted === false && b.trialStarted === false,
-    `体験が始まりました: ${a.trialStarted} / ${b.trialStarted}`);
-  return "2 回とも延びない";
+  await handleEvent(conn, ev);
+  await handleEvent(conn, ev);
+
+  for (const t of ["subscriptions", "learning_progress", "course_entitlements"]) {
+    assert(!conn.calls.some((c) => new RegExp(`INSERT INTO ${t}`, "i").test(c.sql)),
+      `${t} に行を作りました。コースが決まる前に始まってしまいます`);
+  }
+  return "users だけ";
 });
 
 check("再送を弾く表を作っていない（何度でも同じ結果で足りる）", () => {
@@ -344,11 +349,10 @@ await acheck("節目でない日を名乗られても採点しない", async () 
 
 await acheck("正答が未入稿なら「不正解」にせず pending で返す", async () => {
   const conn = fakeConn({
-    "FROM users": USER_ROW,
-    "FROM quiz_checkpoints": [{ day_number: 30 }],
-    /* コースが決まっていないと原稿を引けない（引く先が決まらない）。
+    /* 受けているコースは users.active_track（migrations/002）。
        採点はその人が受け取った原稿から正答を取るので、ここが要る。 */
-    "FROM learning_progress": [{ user_id: 1, track: "beginner", current_day: 30 }],
+    "FROM users": [{ ...USER_ROW[0], active_track: "beginner" }],
+    "FROM quiz_checkpoints": [{ day_number: 30 }],
     "FROM content_templates": [{ day_number: 30, track: "beginner", semester: 1 }]
   });
   const r = await handlePostback(conn, {
@@ -424,10 +428,17 @@ await acheck("答えた段は、もう訊かない（次の段が返る）", asy
   await handlePostback(conn, { source: { userId: "U_test" }, replyToken: "t2",
     postback: { data: "action=birth&ok=1" } }, { send });
   assert(st.saju.birth_confirmed === 1, `書けていません: ${st.saju.birth_confirmed}`);
-  assert(/コースを選んでください/.test(sent[1][0].text),
-    `次の段がコースではありません: ${sent[1][0].text.split("\n")[0]}`);
 
-  return "名前 → 生年月日 → コース";
+  /* ここで段は終わり。コースは買うときに選ぶので（migrations/002）、
+     この先に「コースを選んでください」は来ない ── 来ると、まだ何も
+     買っていない人が押しても進む先が無い。 */
+  const after = sent.slice(1).flat();
+  assert(!after.some((m) => /コースを選んでください/.test(m.text || "")),
+    "コース選択がまだ段に残っています（押しても買う所へ行けません）");
+  assert(!after.some((m) => /action=track&pick=/.test(JSON.stringify(m))),
+    "廃止した action=track のボタンが残っています");
+
+  return "名前 → 生年月日 → 終わり";
 });
 
 
@@ -506,30 +517,35 @@ await acheck("名前がある人には、講座の案内と次に訊くことを
 
      いまは案内 1 通と、始める前に決まっていないこと 1 通を返す。 */
   const { r, sent } = await follow(NAMED);
-  assert(sent && sent.length === 2, `返した通数: ${sent ? sent.length : 0}`);
+  assert(sent && sent.length >= 1, `返した通数: ${sent ? sent.length : 0}`);
 
   const guide = sent[0].text;
   assert(/名前/.test(guide), "名前で進む講座であることに触れていません");
   assert(/初級|中級|上級/.test(guide), "コースの説明がありません");
   assert(/7時/.test(guide) && /6時/.test(guide), "朝夕の時刻が書かれていません");
+  /* コースを選ぶ場所を必ず言う ── リッチメニューに気づかない人が
+     いるので、案内の中で名指ししておく。 */
+  assert(/受講料/.test(guide), "コースをどこで選ぶのかが書かれていません");
 
-  /* 2 通目は「次に訊くこと」。この人はコース未選択なので、その質問。 */
-  const ask = sent[1];
-  assert(/コース/.test(ask.text), `2 通目がコースの質問ではありません: ${ask.text.slice(0, 40)}`);
-  assert(ask.quickReply && ask.quickReply.items.length === 3,
-    "3 つのコースのボタンが付いていません");
-  for (const t of ["beginner", "intermediate", "advanced"]) {
-    assert(ask.quickReply.items.some((i) => i.action.data === `action=track&pick=${t}`),
-      `${t} のボタンがありません`);
+  /* 2 通目は「次に訊くこと」。コースはもう段に無い（買うときに選ぶ）
+     ので、出るとすれば名前か生年月日の確認だけ。 */
+  if (sent.length === 2) {
+    const ask = sent[1];
+    assert(/お名前の確認|生年月日の確認/.test(ask.text),
+      `2 通目が確認ではありません: ${ask.text.slice(0, 40)}`);
+    assert(!/action=track&pick=/.test(JSON.stringify(ask)),
+      "コース選択のボタンが残っています（買う所へ行けません）");
   }
   assert(r.welcomed === true, JSON.stringify(r));
-  return "案内 + コース選択";
+  return `案内${sent.length === 2 ? " + 確認" : "のみ"}`;
 });
 
 await acheck("コースが決まっている人には、もう訊かない", async () => {
   const conn = fakeConn({
-    "FROM users": NAMED,
-    "FROM learning_progress": [{ user_id: 8, track: "beginner", current_day: 12 }]
+    /* コースは users.active_track が持つ（migrations/002）。 */
+    "FROM users": [{ ...NAMED[0], active_track: "beginner",
+                     name_source: "web" }],
+    "FROM saju_profiles": [{ user_id: 8, birth_date: "1995-04-12", birth_confirmed: 1 }]
   });
   const { handleFollow } = await import("../server/lib/handlers/follow.mjs");
   let sent = null;

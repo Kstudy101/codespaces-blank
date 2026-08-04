@@ -12,6 +12,8 @@
    ================================================================== */
 import { one, all, run, insertNew, nn } from "./util.mjs";
 import { jstDate, addDays } from "../jst.mjs";
+import { isTrack, TRACKS } from "./learning.mjs";
+import * as entitlements from "./entitlements.mjs";
 
 /* パッケージの定義。計画書 1-1 の価格表そのもの。
    ここを唯一の出どころにする ── 決済ページと配信側で別々に
@@ -32,23 +34,50 @@ export const TRIAL_DAYS = 3;
 
 export async function getSubscription(conn, userId) {
   return one(conn,
-    `SELECT id, user_id, trial_start, trial_end, total_days_entitled, payment_status
+    `SELECT id, user_id, trial_start, trial_end, trial_track, payment_status
        FROM subscriptions WHERE user_id = ?`, [userId]);
 }
 
-/* 体験の開始。3 日間なので trial_end は +2 日（開始日を 1 日目に数える）。
-   既にある人は触らない ── ブロック → 再追加のたびに体験が
-   延びると、無料で 101 日ぶんを読めてしまう。 */
-export async function startTrial(conn, userId, startDate = null) {
+/* ---- 体験は「コースを選んでから」始める ------------------------------
+   友だち追加した瞬間に配る形をやめた。コースを選ぶ前に始めると、
+   中級を受けたい人に初級の 3 日が届く（計画書 §2）。
+
+   ★ 1 アカウント 1 回だけ。コース別にすると、コースを変えるだけで
+   3 コース ×3 日 = 9 日を無料で受け取れる。trial_start が入って
+   いれば「もう使った」と見る ── subscriptions の一意キーは
+   user_id 1 本なので、1062 はそれだけを意味すると確定できる。
+
+   trial_end は日付で持つが、配信を止めているのは日数（残り）の方。
+   ここは「いつ使ったか」の記録として残す。 */
+export async function startTrial(conn, userId, track, startDate = null) {
+  if (!isTrack(track)) throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")}）`);
   const start = startDate || jstDate();
+
   const ins = await insertNew(conn,
     `INSERT INTO subscriptions
-       (user_id, trial_start, trial_end, total_days_entitled, payment_status)
+       (user_id, trial_start, trial_end, trial_track, payment_status)
      VALUES (?, ?, ?, ?, 'trial')`,
-    [userId, start, addDays(start, TRIAL_DAYS - 1), TRIAL_DAYS]);
-  /* 既にあれば何もしない。subscriptions の一意キーは user_id 1 本なので、
-     1062 は「もう体験が始まっている」だけを意味する。 */
-  return { created: ins.created, subscription: await getSubscription(conn, userId) };
+    [userId, start, addDays(start, TRIAL_DAYS - 1), track]);
+
+  if (!ins.created) {
+    /* もう使っている。どのコースで使ったかを返して、呼ぶ側が
+       「体験は 1 回だけです」と言えるようにする。 */
+    return { created: false, subscription: await getSubscription(conn, userId) };
+  }
+
+  /* 体験ぶんの日数は購入と同じ入れ物に積む。別枠にすると、残りを
+     数えるのに 2 か所を足し合わせることになり、片方を忘れる。
+     purchases には入れない ── あちらは「払った」台帳なので、
+     0 円の行が混ざると売上の集計が狂う。 */
+  await entitlements.grant(conn, userId, track, TRIAL_DAYS);
+
+  return { created: true, subscription: await getSubscription(conn, userId) };
+}
+
+/* 体験を使ったか。使っていれば trial_start が入っている。 */
+export async function trialUsed(conn, userId) {
+  const s = await getSubscription(conn, userId);
+  return !!(s && s.trial_start);
 }
 
 export async function setPaymentStatus(conn, userId, status) {
@@ -71,9 +100,12 @@ export async function setPaymentStatus(conn, userId, status) {
    アプリ側の「先に SELECT して無ければ INSERT」では止まらない。
    webhook が同時に 2 本来ると、両方の SELECT が「無い」を見てから
    両方が INSERT へ進むため ── 一意制約だけが確実に止められる。 */
-export async function creditPurchase(conn, userId, packageType, {
+export async function creditPurchase(conn, userId, track, packageType, {
   paymentRef = null, pricePaid = null, purchasedAt = null
 } = {}) {
+  if (!isTrack(track)) {
+    throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")}）`);
+  }
   const pkg = PACKAGES[packageType];
   if (!pkg) {
     throw new Error(`未知の package_type: ${packageType}（${Object.keys(PACKAGES).join(" / ")}）`);
@@ -87,63 +119,65 @@ export async function creditPurchase(conn, userId, packageType, {
 
      affectedRows では見分けられない。mysql2 の既定では新規も重複も
      1 を返すため（util.mjs の insertNew に実測を書いた）。
-     ここを取り違えると、決済 1 件で日数が二度足される。 */
+     ここを取り違えると、決済 1 件で日数が二度足される。
+
+     Stripe の webhook は同じイベントを何度も送ってくる。再送は仕様で
+     あって障害ではないので、「二度目が来ない」前提では書けない。 */
   const ins = await insertNew(conn,
     `INSERT INTO purchases
-       (user_id, package_type, days_granted, price_paid, payment_ref, purchased_at)
-     VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`,
-    [userId, packageType, pkg.days, price, nn(paymentRef), nn(purchasedAt)]);
+       (user_id, track, package_type, days_granted, price_paid, payment_ref, purchased_at)
+     VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`,
+    [userId, track, packageType, pkg.days, price, nn(paymentRef), nn(purchasedAt)]);
 
-  const created = ins.created;
-
-  if (!created) {
+  if (!ins.created) {
     /* 再送。日数は足さない。呼び出し側が「無視した」と分かるように返す。 */
-    return {
-      created: false,
-      daysGranted: 0,
-      subscription: await getSubscription(conn, userId)
-    };
+    return { created: false, daysGranted: 0, track, entitlement: await entitlements.get(conn, userId, track) };
   }
 
+  /* 行が実際に増えたときだけ積む。この順番が要る ── 先に積んで
+     から台帳に書くと、途中で落ちた日に「もらったが払った記録が無い」
+     が残り、あとから区別できない。 */
+  const entitlement = await entitlements.grant(conn, userId, track, pkg.days);
   await run(conn,
-    `UPDATE subscriptions
-        SET total_days_entitled = total_days_entitled + ?,
-            payment_status      = 'paid'
-      WHERE user_id = ?`,
-    [pkg.days, userId]);
+    `UPDATE subscriptions SET payment_status = 'paid' WHERE user_id = ?`, [userId]);
 
   return {
     created: true,
     daysGranted: pkg.days,
+    track,
     purchaseId: ins.insertId,
-    subscription: await getSubscription(conn, userId)
+    entitlement
   };
 }
 
 export async function listPurchases(conn, userId) {
   return all(conn,
-    `SELECT id, package_type, days_granted, price_paid, purchased_at, payment_ref
+    `SELECT id, track, package_type, days_granted, price_paid, purchased_at, payment_ref
        FROM purchases WHERE user_id = ? ORDER BY purchased_at, id`, [userId]);
 }
 
 export async function findByPaymentRef(conn, paymentRef) {
   return one(conn,
-    `SELECT id, user_id, package_type, days_granted, price_paid, purchased_at
+    `SELECT id, user_id, track, package_type, days_granted, price_paid, purchased_at
        FROM purchases WHERE payment_ref = ?`, [paymentRef]);
 }
 
 
 /* ---- 合計の突き合わせ ----------------------------------------------
-   total_days_entitled は purchases の合計 + 体験 3 日を写したもの。
-   写しである以上ずれうるので、ずれを見つける手立てを持っておく。
+   course_entitlements.days_entitled は
+     purchases の合計（そのコースぶん）＋ 体験 3 日（使ったコースだけ）
+   を写したもの。写しである以上ずれうるので、見つける手立てを持つ。
 
    ずれ方は片側にしか起きない ── 購入は入ったが加算の前に落ちた場合、
-   利用者は払ったのに日数が足りない。逆（多すぎる）は一意制約が
-   止めているので、まず起きない。運営者が気づけないのは前者の方で、
-   放っておくと問い合わせになる。
+   利用者は払ったのに日数が足りない。逆（多すぎる）は payment_ref の
+   一意制約が止めているので、まず起きない。運営者が気づけないのは
+   前者の方で、放っておくと問い合わせになる。
 
    P10 の監視から日次で呼ぶ想定。ここでは直さず、差だけ返す。
-   自動で直すと、原因が残ったまま数字だけ合ってしまう。 */
+   自動で直すと、原因が残ったまま数字だけ合ってしまう。
+
+   コース別に見る。合計で数えると、初級が 3 日多くて中級が 3 日
+   少ない状態が「差 0」に見える。 */
 /* 別名を stored にしない。MySQL 8.0 では STORED が予約語
    （GENERATED ALWAYS AS (…) STORED の方）なので、AS stored と書くと
    1064 で落ちる。エラーは「文法が違う」としか出ず、指す位置も
@@ -155,27 +189,32 @@ export async function findByPaymentRef(conn, paymentRef) {
    埋めるのはこのファイルの const（3）なので注入の余地は無い。 */
 const T = Number(TRIAL_DAYS);
 
-export async function recountEntitledDays(conn, userId) {
-  const row = await one(conn,
-    `SELECT s.total_days_entitled AS stored_days,
-            ${T} + COALESCE((SELECT SUM(days_granted) FROM purchases WHERE user_id = s.user_id), 0)
-              AS expected_days
-       FROM subscriptions s
-      WHERE s.user_id = ?`, [userId]);
+/* 体験ぶんは「体験を使ったコース」にだけ乗る。s が無い（体験を
+   使っていない）人は s.trial_track が NULL なので、比較が NULL に
+   なり IF は 0 を返す ── 別に IS NULL を書かなくてよい。 */
+const EXPECTED = `COALESCE(p.total, 0) + IF(s.trial_track = e.track, ${T}, 0)`;
+
+const DRIFT_SQL = `
+  SELECT e.user_id, e.track,
+         e.days_entitled AS stored_days,
+         ${EXPECTED}     AS expected_days
+    FROM course_entitlements e
+    LEFT JOIN (SELECT user_id, track, SUM(days_granted) AS total
+                 FROM purchases GROUP BY user_id, track) p
+           ON p.user_id = e.user_id AND p.track = e.track
+    LEFT JOIN subscriptions s ON s.user_id = e.user_id`;
+
+export async function recountEntitledDays(conn, userId, track) {
+  if (!isTrack(track)) throw new Error(`未知の track: ${track}`);
+  const row = await one(conn, `${DRIFT_SQL} WHERE e.user_id = ? AND e.track = ?`,
+    [userId, track]);
   if (!row) return null;
   const stored = Number(row.stored_days), expected = Number(row.expected_days);
-  return { stored, expected, drift: stored - expected };
+  return { track, stored, expected, drift: stored - expected };
 }
 
 /* 全員ぶん。合っている人は返さない ── 毎日出る通知が
    「異常なし」ばかりだと、本当の異常も読み飛ばされる。 */
 export async function findEntitlementDrift(conn) {
-  return all(conn,
-    `SELECT s.user_id,
-            s.total_days_entitled AS stored_days,
-            ${T} + COALESCE(p.total, 0) AS expected_days
-       FROM subscriptions s
-       LEFT JOIN (SELECT user_id, SUM(days_granted) AS total
-                    FROM purchases GROUP BY user_id) p ON p.user_id = s.user_id
-      WHERE s.total_days_entitled <> ${T} + COALESCE(p.total, 0)`);
+  return all(conn, `${DRIFT_SQL} WHERE e.days_entitled <> ${EXPECTED}`);
 }

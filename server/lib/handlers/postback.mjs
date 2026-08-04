@@ -1,34 +1,48 @@
 /* ==================================================================
    handlers/postback.mjs — ボタンが押された
 
-   受けるのは 4 つ。
+   受けるのは 8 つ。
 
-     action=quiz&day=30&choice=2     節目のクイズ（計画書 5-4）
-     action=name&use=web|line        どちらの名前で呼ぶか
-     action=birth&ok=1|0             生年月日が本人のものか
-     action=track&pick=beginner…     コース
+     始める前の確認
+       action=name&use=web|line        どちらの名前で呼ぶか
+       action=birth&ok=1|0             生年月日が本人のものか
+
+     リッチメニューと受講料（migrations/002）
+       action=about                    講座の案内
+       action=status                   いまの進み具合
+       action=plans                    コースを選ぶ
+       action=plan&track=…             価格表（＝最終確認画面）
+       action=buy&track=…&pkg=…        決済ページへ
+       action=trial&track=…            体験 3 日
+       action=resume&track=…&mode=…    買い直した人の「続き / 最初から」
+
+     節目
+       action=quiz&day=30&choice=2     クイズ（計画書 5-4）
 
    data は利用者の端末を経由して戻ってくる文字列で、こちらが
    送ったものがそのまま返る保証は無い（作り替えられる）。
    正解番号を data に入れてはいけない ── 入れると、押す前に
    書き換えれば必ず正解になる。正答は必ずサーバー側で引く。
 
-   同じ理由で、track も pick の値をそのまま DB へ入れない。
-   repo/learning.mjs の setTrack が ENUM の 3 つと突き合わせる ──
-   ENUM に無い値を MySQL へ渡すと、設定によっては例外ではなく
-   空文字が入り、その人だけ配信対象から静かに外れる。
+   同じ理由で、track も pkg も値をそのまま使わない。isTrack と
+   PACKAGES の鍵で突き合わせる ── ENUM に無い値を MySQL へ渡すと、
+   設定によっては例外ではなく空文字が入り、その人だけ配信対象から
+   静かに外れる。金額も同じで、pkg を信じると値段を書き換えられる。
 
    【押したあと、次を続けて訊く】
    1 つ答えたら、その場で次の段を返す。返さないと、答えたのに
    何も起きていないように見えて、次のボタンは翌朝まで来ない。
    段そのものは lib/onboarding.mjs が中身から導く（列で持たない）。
    ================================================================== */
-import { users, learning } from "../repo/index.mjs";
+import { users, learning, billing, entitlements } from "../repo/index.mjs";
 import { replyMessage } from "../line.mjs";
+import { nextStep, messageForStep, nameRedo, birthRedo, serviceGuide } from "../onboarding.mjs";
 import {
-  nextStep, messageForStep,
-  nameRedo, birthRedo, trackChosen, trackAlready
-} from "../onboarding.mjs";
+  salesOpen, notReady, askCourse, priceList, startCheckout, checkoutLink,
+  startTrialFor, applyResume, resumeDone, statusMessage, missingLegalConfig
+} from "./checkout.mjs";
+import { PACKAGES } from "../repo/billing.mjs";
+import { isTrack } from "../repo/learning.mjs";
 
 /* "a=1&b=2" を読む。URLSearchParams を使うのは、
    自前で split すると値に & や = が入ったときに崩れるため。 */
@@ -64,10 +78,9 @@ const int = (v) => {
    handlers/link.mjs の completeLink は同じ理由で findById を
    挟み直している（あちらの注記）。 */
 async function stateOf(conn, userId) {
-  const [user, saju, prog] = await Promise.all([
+  const [user, saju] = await Promise.all([
     users.findById(conn, userId),
-    users.getSajuProfile(conn, userId),
-    learning.getProgress(conn, userId)
+    users.getSajuProfile(conn, userId)
   ]);
   if (!user) return null;
   return {
@@ -75,7 +88,10 @@ async function stateOf(conn, userId) {
     birth_date: saju ? saju.birth_date : null,
     birth_time: saju ? saju.birth_time : null,
     birth_confirmed: saju ? saju.birth_confirmed : false,
-    track: prog ? prog.track : null
+    /* 段にコースはもう無い（買うときに選ぶ）。それでも track を
+       入れておくのは、listDeliverable の 1 行と同じ形にするため ──
+       形が違うと、片方でだけ段が進む。 */
+    track: user.active_track || null
   };
 }
 
@@ -153,25 +169,102 @@ export async function handlePostback(conn, event, { send = replyMessage } = {}) 
     return { userId: user.id, action, ok, replied };
   }
 
-  /* ---- コース ----------------------------------------------------- */
-  if (action === "track") {
-    const pick = params.pick;
-    if (!learning.isTrack(pick)) {
-      return { skipped: `未知の track: ${pick}`, userId: user.id };
-    }
+  /* ---- リッチメニュー：講座の案内 ----------------------------------- */
+  if (action === "about") {
+    const replied = await reply(token,
+      [serviceGuide({ nameJa: user.name_reading || user.name_kanji })], send);
+    return { userId: user.id, action, replied };
+  }
 
-    /* setTrack は track IS NULL のときだけ書き換える。
-       二度目のボタン（連打・古い画面をさかのぼって押した）は
-       claimed=false で戻るので、既にあるコースをそのまま伝える。 */
-    const { claimed } = await learning.setTrack(conn, user.id, pick);
-    if (!claimed) {
-      const prog = await learning.getProgress(conn, user.id);
-      const replied = await reply(token, [trackAlready(prog?.track || pick)], send);
-      return { userId: user.id, action, pick, claimed, replied };
-    }
+  /* ---- リッチメニュー：いまの進み具合 ------------------------------- */
+  if (action === "status") {
+    const replied = await reply(token, [await statusMessage(conn, user)], send);
+    return { userId: user.id, action, replied };
+  }
 
-    const replied = await reply(token, [trackChosen(pick)], send);
-    return { userId: user.id, action, pick, claimed, replied };
+  /* ---- 受講料：① コースを選ぶ --------------------------------------
+     売る用意が整っていなければ、ここで止める。表示の義務を満たす前に
+     決済へ進める道を作らない（handlers/checkout.mjs の門）。 */
+  if (action === "plans") {
+    if (!salesOpen()) {
+      console.error("[checkout] 設定が足りません:", missingLegalConfig().join(" / "));
+      return { userId: user.id, action, blocked: "設定不足",
+               replied: await reply(token, [notReady()], send) };
+    }
+    const owned = (await entitlements.listByUser(conn, user.id)).map((e) => e.track);
+    const replied = await reply(token, [askCourse({ owned })], send);
+    return { userId: user.id, action, replied };
+  }
+
+  /* ---- 受講料：② 価格表（＝最終確認画面）--------------------------- */
+  if (action === "plan") {
+    if (!salesOpen()) {
+      console.error("[checkout] 設定が足りません:", missingLegalConfig().join(" / "));
+      return { userId: user.id, action, blocked: "設定不足",
+               replied: await reply(token, [notReady()], send) };
+    }
+    const track = params.track;
+    if (!isTrack(track)) return { skipped: `未知の track: ${track}`, userId: user.id };
+
+    /* 体験を使っていない人にだけ、無料の入口も並べる。 */
+    const trialAvailable = !(await billing.trialUsed(conn, user.id));
+    const replied = await reply(token, [priceList(track, { trialAvailable })], send);
+    return { userId: user.id, action, track, replied };
+  }
+
+  /* ---- 受講料：③ 決済ページへ --------------------------------------
+     pkg をそのまま金額にしない。PACKAGES の鍵で引き当てて、値段は
+     こちらの表から取る ── data は書き換えられるので、金額を載せると
+     100 円で 101 日ぶんを買える。 */
+  if (action === "buy") {
+    if (!salesOpen()) {
+      console.error("[checkout] 設定が足りません:", missingLegalConfig().join(" / "));
+      return { userId: user.id, action, blocked: "設定不足",
+               replied: await reply(token, [notReady()], send) };
+    }
+    const track = params.track, pkg = params.pkg;
+    if (!isTrack(track)) return { skipped: `未知の track: ${track}`, userId: user.id };
+    if (!PACKAGES[pkg])  return { skipped: `未知の package: ${pkg}`, userId: user.id };
+
+    let r;
+    try {
+      r = await startCheckout(conn, user, { track, packageType: pkg });
+    } catch (e) {
+      /* 決済会社が落ちていても、こちらの webhook 処理は壊れない。
+         押した人には「もう一度」とだけ伝える。 */
+      console.error("[checkout] セッションを作れません:", e.message);
+      return { userId: user.id, action, error: e.message,
+               replied: await reply(token, [notReady()], send) };
+    }
+    if (!r.ok) return { skipped: r.reason, userId: user.id };
+
+    const replied = await reply(token, [checkoutLink(track, pkg, r.url)], send);
+    return { userId: user.id, action, track, pkg, sessionId: r.sessionId, replied };
+  }
+
+  /* ---- 受講料：④ 体験 ---------------------------------------------- */
+  if (action === "trial") {
+    const track = params.track;
+    if (!isTrack(track)) return { skipped: `未知の track: ${track}`, userId: user.id };
+
+    const r = await startTrialFor(conn, user, track);
+    if (!r.ok) {
+      const replied = await reply(token, [{ type: "text",
+        text: "無料でお試しいただけるのは 1 回までです。\n［受講料］から日数をお選びください。" }], send);
+      return { userId: user.id, action, track, kind: r.kind, replied };
+    }
+    const replied = await reply(token, [{ type: "text",
+      text: `無料体験を始めます。まず ${r.days} 日分をお届けします。\nこのあとすぐ 1 日目が届きます。` }], send);
+    return { userId: user.id, action, track, started: true, replied };
+  }
+
+  /* ---- ⑥ 続きから / 最初から ---------------------------------------- */
+  if (action === "resume") {
+    const r = await applyResume(conn, user, { track: params.track, mode: params.mode });
+    if (!r.ok) return { skipped: r.reason, userId: user.id };
+    const replied = await reply(token,
+      [resumeDone(r.track, r.mode, r.currentDay)], send);
+    return { userId: user.id, action, track: r.track, mode: r.mode, replied };
   }
 
   /* ---- クイズ ----------------------------------------------------- */
@@ -196,21 +289,25 @@ export async function handlePostback(conn, event, { send = replyMessage } = {}) 
   const semester = learning.semesterForDay(day);
 
   /* 正答はサーバー側にしか無い。コースごとに原稿が違うので、
-     その人のコースで引く ── 引かずに初級で採点すると、
-     中級の人が自分の受け取った問題と違う答えで採点される。 */
-  const prog = await learning.getProgress(conn, user.id);
-  if (!prog || !prog.track) {
-    return { skipped: "コース未選択です", userId: user.id, day };
+     その人がいま受けているコースで引く ── 引かずに初級で採点すると、
+     中級の人が自分の受け取った問題と違う答えで採点される。
+
+     進みはコース別になったので（migrations/002）、どの行を見るかは
+     active_track が決める。ここを取り違えると、初級を修了した人の
+     中級のクイズが初級の合否欄に入る。 */
+  const track = user.active_track;
+  if (!track) {
+    return { skipped: "受講中のコースがありません", userId: user.id, day };
   }
 
-  const answer = await lookupAnswer(conn, prog.track, day);
+  const answer = await lookupAnswer(conn, track, day);
   if (answer === null) {
     return { pending: "正答が未入稿です（P4）", userId: user.id, day, semester, choice };
   }
 
   const passed = choice === answer;
-  await learning.setQuizResult(conn, user.id, semester, passed);
-  return { userId: user.id, day, semester, choice, passed };
+  await learning.setQuizResult(conn, user.id, track, semester, passed);
+  return { userId: user.id, track, day, semester, choice, passed };
 }
 
 /* 正答の置き場所は P4 の入稿設計で決まる（content_templates の

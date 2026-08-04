@@ -348,29 +348,32 @@ const dupError = () => Object.assign(new Error("Duplicate entry"), {
 await acheck("初めての決済 → 購入を記録し、保有日数を足す", async () => {
   const conn = fakeConn((sql) => {
     if (/INSERT INTO purchases/.test(sql)) return { affectedRows: 1, insertId: 11 };
+    if (/INSERT INTO course_entitlements/.test(sql)) return { affectedRows: 1 };
     if (/UPDATE subscriptions/.test(sql)) return { affectedRows: 1 };
-    return [{ user_id: 1, total_days_entitled: 33, payment_status: "paid" }];
+    return [{ track: "beginner", days_entitled: 30, days_used: 0, current_day: 0, remaining: 30 }];
   });
-  const r = await billing.creditPurchase(conn, 1, "30days", { paymentRef: "pi_ABC" });
+  const r = await billing.creditPurchase(conn, 1, "beginner", "30days", { paymentRef: "pi_ABC" });
   assert(r.created === true, "created が false です");
   assert(r.daysGranted === 30, `daysGranted=${r.daysGranted}`);
-  const upd = conn.calls.find((c) => /UPDATE subscriptions/.test(c.sql));
-  assert(upd, "subscriptions を更新していません");
-  assert(upd.params[0] === 30, `足した日数が ${upd.params[0]} です`);
-  return "+30 日 / payment_status=paid";
+  /* 日数はコース別の表へ積む（migrations/002）。subscriptions は
+     体験の記録だけになったので、そちらは触らない。 */
+  const grant = conn.calls.find((c) => /INSERT INTO course_entitlements/.test(c.sql));
+  assert(grant, "course_entitlements に積んでいません");
+  assert(grant.params[1] === "beginner", `コースが ${grant.params[1]} です`);
+  assert(grant.params[2] === 30, `足した日数が ${grant.params[2]} です`);
+  return "+30 日 / beginner";
 });
 
 await acheck("同じ payment_ref が再送 → 日数を足さない", async () => {
   const conn = fakeConn((sql) => {
     if (/INSERT INTO purchases/.test(sql)) throw dupError();
-    if (/UPDATE subscriptions/.test(sql)) return { affectedRows: 1 };
-    return [{ user_id: 1, total_days_entitled: 33 }];
+    return [{ track: "beginner", days_entitled: 33, days_used: 0, current_day: 0, remaining: 33 }];
   });
-  const r = await billing.creditPurchase(conn, 1, "30days", { paymentRef: "pi_ABC" });
+  const r = await billing.creditPurchase(conn, 1, "beginner", "30days", { paymentRef: "pi_ABC" });
   assert(r.created === false, "created が true です");
   assert(r.daysGranted === 0, `daysGranted=${r.daysGranted}`);
-  assert(!conn.calls.some((c) => /UPDATE subscriptions/.test(c.sql)),
-    "再送なのに subscriptions を更新しました。保有日数が二重に増えます");
+  assert(!conn.calls.some((c) => /INSERT INTO course_entitlements/.test(c.sql)),
+    "再送なのに日数を積みました。決済 1 件で二重に増えます");
   return "加算なし";
 });
 
@@ -408,14 +411,14 @@ check("insertNew は 1062 だけを飲み込み、他の例外は通す", () => 
 
 await acheck("接続エラーは握らずに投げる", async () => {
   const conn = fakeConn(() => { throw Object.assign(new Error("read ECONNRESET"), { errno: -104 }); });
-  assert(await rejects(() => billing.creditPurchase(conn, 1, "7days", { paymentRef: "x" })),
+  assert(await rejects(() => billing.creditPurchase(conn, 1, "beginner", "7days", { paymentRef: "x" })),
     "接続断が「再送」として黙って処理されました");
   return "そのまま投げる";
 });
 
 await acheck("purchases の INSERT が素の 1 文（先に SELECT しない）", async () => {
   const conn = fakeConn(() => ({ affectedRows: 1, insertId: 1 }));
-  await billing.creditPurchase(conn, 1, "7days", { paymentRef: "x" });
+  await billing.creditPurchase(conn, 1, "beginner", "7days", { paymentRef: "x" });
   const ins = conn.calls[0].sql;
   assert(/INSERT INTO purchases/.test(ins), `最初の SQL が ${ins.slice(0, 40)} です`);
   assert(!/SELECT/i.test(ins),
@@ -439,7 +442,7 @@ check("insertNew を使う 4 表は、一意キーが PK 以外に 1 本だけ",
 await acheck("知らないパッケージ名は投げる（日数 0 で通さない）", async () => {
   const conn = fakeConn(() => ({ affectedRows: 1 }));
   let threw = false;
-  try { await billing.creditPurchase(conn, 1, "90days", {}); } catch { threw = true; }
+  try { await billing.creditPurchase(conn, 1, "beginner", "90days", {}); } catch { threw = true; }
   assert(threw, "例外になりませんでした");
   assert(conn.calls.length === 0, "投げる前に SQL を実行しました");
   return "SQL に届く前に止まる";
@@ -448,24 +451,26 @@ await acheck("知らないパッケージ名は投げる（日数 0 で通さな
 await acheck("体験は 1 回だけ。再追加で延びない", async () => {
   const conn = fakeConn((sql) => {
     if (/INSERT INTO subscriptions/.test(sql)) throw dupError();
-    return [{ user_id: 1, trial_start: "2026-08-01", total_days_entitled: 3 }];
+    return [{ user_id: 1, trial_start: "2026-08-01", trial_track: "beginner" }];
   });
-  const r = await billing.startTrial(conn, 1, "2026-08-03");
+  const r = await billing.startTrial(conn, 1, "beginner", "2026-08-03");
   assert(r.created === false, "既にあるのに created が true です");
   assert(!conn.calls.some((c) => /UPDATE subscriptions/.test(c.sql)),
     "既存行を上書きしています。ブロック→再追加のたびに体験が延びます");
-  return "上書きしない";
+  assert(!conn.calls.some((c) => /INSERT INTO course_entitlements/.test(c.sql)),
+    "2 回目の体験で日数を積みました。コースを変えるだけで 9 日ぶん無料になります");
+  return "上書きしない / 積まない";
 });
 
 await acheck("保有日数の突き合わせが ? を式の先頭に置かない", async () => {
   const conn = fakeConn(() => [{ stored_days: 33, expected_days: 33 }]);
-  await billing.recountEntitledDays(conn, 1);
+  await billing.recountEntitledDays(conn, 1, "beginner");
   const { sql, params } = conn.calls[0];
   /* SELECT の式の先頭に来た ? は型が決まらず、MySQL が 1064 で撥ねる。
      他の ? と同じ書き方なのにここだけ落ちるので、気づきにくい。 */
   assert(!/SELECT[\s\S]*?,\s*\?\s*\+/.test(sql),
     "? を式の先頭に置いています。prepared statement が 1064 になります");
-  assert(params.length === 1, `params が ${params.length} 個です（user_id だけのはず）`);
+  assert(params.length === 2, `params が ${params.length} 個です（user_id と track のはず）`);
   return "定数は埋め込み";
 });
 
@@ -475,10 +480,14 @@ head("[進み]  配信バッチが二重に走っても、同じ日を二度送�
 
 await acheck("advanceDay は「読んだときの値」を条件に入れる", async () => {
   const conn = fakeConn(() => ({ affectedRows: 1 }));
-  const r = await learning.advanceDay(conn, 1, 5);
+  const r = await learning.advanceDay(conn, 1, "beginner", 5);
   const { sql, params } = conn.calls[0];
-  assert(/WHERE user_id = \? AND current_day = \?/.test(sql.replace(/\s+/g, " ")),
-    "WHERE に current_day の照合がありません。二重起動で同じ日が二度届きます");
+  assert(/WHERE user_id = \? AND track = \? AND current_day = \?/.test(sql.replace(/\s+/g, " ")),
+    "WHERE に track と current_day の照合がありません。二重起動で同じ日が二度届きます");
+  /* 使った日数も同じ 1 文で増える。別の文にすると、確保したのに
+     消費していない瞬間ができ、そこで落ちると 1 日ぶんが無料になる。 */
+  assert(/days_used = days_used \+ 1/.test(sql.replace(/\s+/g, " ")),
+    "days_used を同じ文で増やしていません");
   assert(params[params.length - 1] === 5, `照合する値が ${params[params.length - 1]} です`);
   assert(r.claimed === true && r.day === 6, JSON.stringify(r));
   return "UPDATE … WHERE current_day = 5 → 6 日目";
@@ -486,7 +495,7 @@ await acheck("advanceDay は「読んだときの値」を条件に入れる", a
 
 await acheck("競り負けたら claimed=false ── 送らずに降りられる", async () => {
   const conn = fakeConn(() => ({ affectedRows: 0 }));
-  const r = await learning.advanceDay(conn, 1, 5);
+  const r = await learning.advanceDay(conn, 1, "beginner", 5);
   assert(r.claimed === false, "0 行なのに claimed が true です");
   return "false";
 });
@@ -504,7 +513,7 @@ check("学期の切れ目が計画書 1-2 のとおり", () => {
 
 await acheck("advanceDay は学期も一緒に動かす", async () => {
   const conn = fakeConn(() => ({ affectedRows: 1 }));
-  await learning.advanceDay(conn, 1, 30);   // → 31 日目 = 2 学期
+  await learning.advanceDay(conn, 1, "beginner", 30);   // → 31 日目 = 2 学期
   assert(conn.calls[0].params[1] === 2,
     `31 日目の学期が ${conn.calls[0].params[1]} です`);
   return "31 日目 → 2 学期";
@@ -557,20 +566,30 @@ check("pushlogs.mjs は進捗も保有日数も書き換えない", () => {
   return `書き込み ${writes.length} 件、すべて push_logs`;
 });
 
-check("total_days_entitled を増やすのは購入のときだけ", () => {
-  const BILLING_SRC = read("server/lib/repo/billing.mjs");
-  const adds = [...BILLING_SRC.matchAll(/total_days_entitled\s*=\s*total_days_entitled\s*\+/g)];
+check("保有日数を増やすのは 1 箇所だけ", () => {
+  /* total_days_entitled は course_entitlements へ移した
+     （migrations/002）。積む SQL が散らばると、どこかで二重に
+     足しても気づけない ── 金額が絡むので、出どころを 1 つに縛る。 */
+  const ENT_SRC = read("server/lib/repo/entitlements.mjs");
+  const adds = [...ENT_SRC.matchAll(/days_entitled\s*=\s*days_entitled\s*\+/g)];
   assert(adds.length === 1, `加算が ${adds.length} 箇所あります`);
-  for (const f of SERVER_FILES.filter((f) => !f.endsWith("billing.mjs"))) {
-    assert(!/total_days_entitled\s*=\s*total_days_entitled/.test(read(f)),
+
+  for (const f of SERVER_FILES.filter((f) => !f.endsWith("entitlements.mjs"))) {
+    assert(!/days_entitled\s*=\s*days_entitled/.test(read(f)),
       `${f} が保有日数を書き換えています`);
   }
-  return "creditPurchase の 1 箇所";
+  /* 移し終えたのに古い列が残っていないか。読まれない列に古い数字が
+     入っていると、次に触る人はそれを信じる。 */
+  for (const f of SERVER_FILES) {
+    assert(!/total_days_entitled/.test(read(f)),
+      `${f} に total_days_entitled が残っています（migrations/002 で落とした列）`);
+  }
+  return "entitlements.grant の 1 箇所";
 });
 
 await acheck("クイズの記録は quiz_pass_log だけを触る", async () => {
   const conn = fakeConn(() => ({ affectedRows: 1 }));
-  await learning.setQuizResult(conn, 1, 2, true);
+  await learning.setQuizResult(conn, 1, "beginner", 2, true);
   const sql = conn.calls[0].sql.replace(/\s+/g, " ");
   assert(/SET quiz_pass_log = JSON_MERGE_PATCH/.test(sql), sql);
   assert(!/current_day/.test(sql), "クイズの採点が current_day を動かしています");
@@ -579,8 +598,8 @@ await acheck("クイズの記録は quiz_pass_log だけを触る", async () => 
 
 await acheck("合否は JSON の boolean で入る（1 / 0 にならない）", async () => {
   const conn = fakeConn(() => ({ affectedRows: 1 }));
-  await learning.setQuizResult(conn, 1, 2, true);
-  await learning.setQuizResult(conn, 1, 3, false);
+  await learning.setQuizResult(conn, 1, "beginner", 2, true);
+  await learning.setQuizResult(conn, 1, "beginner", 3, false);
   /* ドライバは JS の true を整数 1 として送るので、? に真偽値を
      渡すと {"semester2": 1} が入る。中身ごと JSON 文字列で渡す。 */
   assert(conn.calls[0].params[0] === '{"semester2":true}', conn.calls[0].params[0]);
@@ -638,15 +657,15 @@ await acheck("夕方の対象は「今朝の学習配信が届いた人」だけ
   return "learning / sent / trial・active";
 });
 
-await acheck("push_type は 6 種。ENUM に無い値を DB へ通さない", async () => {
-  assert(pushlogs.PUSH_TYPES.length === 6, pushlogs.PUSH_TYPES.join(", "));
+await acheck("push_type は 8 種。ENUM に無い値を DB へ通さない", async () => {
+  assert(pushlogs.PUSH_TYPES.length === 8, pushlogs.PUSH_TYPES.join(", "));
 
-  /* ENUM は 2 か所にある。schema.sql が作るときの形で、
-     migrations/001 が onboarding を足した後の形。新しい方と
-     突き合わせる ── 古い方だけ見ていると、足した種別が
-     「コードにはあるが DB に無い」まま通る。 */
-  const M001 = read("server/db/migrations/001-tracks-and-onboarding.sql");
-  const inSchema = M001.match(/push_type[\s\S]*?ENUM\(([^)]*)\)/)[1];
+  /* ENUM は 3 か所にある。schema.sql が作るときの形、001 が
+     onboarding を足した形、002 が expiring / resume を足した形。
+     いちばん新しい方と突き合わせる ── 古い方だけ見ていると、
+     足した種別が「コードにはあるが DB に無い」まま通る。 */
+  const M002 = read("server/db/migrations/002-per-course-billing.sql");
+  const inSchema = M002.match(/push_type[\s\S]*?ENUM\(([^)]*)\)/)[1];
   for (const t of pushlogs.PUSH_TYPES) {
     assert(inSchema.includes(`'${t}'`), `${t} が migrations/001 の ENUM にありません`);
   }
@@ -806,18 +825,10 @@ await acheck("コースは 3 つ。ENUM の外を DB へ通さない", async () 
   return "3 つ以外を拒否（入れる側・引く側とも）";
 });
 
-await acheck("コースは一度だけ決まる（進んだあとに変わらない）", async () => {
-  const conn = fakeConn(() => ({ affectedRows: 1 }));
-  await learning.setTrack(conn, 7, "intermediate");
-  const flat = conn.calls[0].sql.replace(/\s+/g, " ");
-  assert(/track IS NULL/.test(flat),
-    "選び直しが通ります。別のコースの途中の日からいきなり始まります");
-
-  const busy = fakeConn(() => ({ affectedRows: 0 }));
-  const r = await learning.setTrack(busy, 7, "advanced");
-  assert(r.claimed === false, "2 回目が通りました");
-  return "track IS NULL のときだけ";
-});
+/* コースを 1 度だけ決める setTrack は廃止した（migrations/002）。
+   コースは買うときに選ぶようになり、1 人が初級 101 日を終えてから
+   中級へ進めるようになったので、「1 度きり」という決めごとそのものが
+   無くなっている。買った側の検査は tools/verify-billing.mjs にある。 */
 
 await acheck("原稿の範囲は 1〜101", async () => {
   const conn = fakeConn(() => ({ affectedRows: 1 }));

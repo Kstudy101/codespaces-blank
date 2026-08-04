@@ -61,7 +61,12 @@ const USER = {
   id: 7, line_user_id: "U_test",
   name_kanji: "田中", name_reading: "たなか", name_kr: "다나카",
   name_source: "web", track: "beginner",
-  status: "active", total_days_entitled: 101, current_day: 3, current_semester: 1,
+  status: "active", current_day: 3, days_used: 3, current_semester: 1,
+  /* 前払いの回数券（migrations/002）。残りは買った日数から
+     使った日数を引く ── current_day では引かない。「1 日目から
+     やり直す」で戻るのは current_day だけなので、そちらで数えると
+     やり直した人の残りが復活する。 */
+  days_entitled: 101,
   /* この講座は四柱で韓国語を教えるので、配信の対象を引くところから
      五行と干支が付いてくる（repo/users.mjs の listDeliverable）。 */
   ohaeng_main: "목", raw_result_json: { zodiac: "돼지" }
@@ -134,29 +139,41 @@ await check("今日ぶんを既に送っていれば、何もしない", async (
 await check("保有日数を超えたら送らない", async () => {
   const conn = fakeConn(READY);
   let sent = false;
-  const r = await deliverOne(conn, { ...USER, total_days_entitled: 3 },
+  const r = await deliverOne(conn, { ...USER, days_entitled: 3, days_used: 3 },
     { send: async () => { sent = true; return {}; } });
   assert(!sent && r === "日数切れ", `${r} / 送信=${sent}`);
-  return "3 日ぶんで 4 日目は送らない";
+  return "3 日使い切ったら送らない";
 });
 
 await check("体験の 3 日目までは送る（境界を 1 日ずらしていない）", async () => {
   const conn = fakeConn({ ...READY, "FROM content_templates": [{ ...TPL[0], day_number: 3 }] });
   let sent = false;
-  await deliverOne(conn, { ...USER, current_day: 2, total_days_entitled: 3 },
+  await deliverOne(conn, { ...USER, current_day: 2, days_used: 2, days_entitled: 3 },
     { send: async () => { sent = true; return {}; } });
   assert(sent, "3 日ぶん持っている人の 3 日目が送られません");
-  return "entitled=3 → 3 日目まで";
+  return "残り 1 → 3 日目まで";
 });
 
-await check("101 日を終えた人は進めない", async () => {
+await check("101 日を終えた人は進めない（修了の案内を 1 度だけ）", async () => {
+  /* 前は何も送らずに数えるだけだった ── 101 日目の翌朝から、
+     ただ静かに何も来なくなっていた。いまは修了を伝え、次のコースへ
+     繋ぐ（lib/handlers/checkout.mjs の completionNotice）。 */
   const conn = fakeConn(READY);
-  let sent = false;
-  const r = await deliverOne(conn, { ...USER, current_day: 101 },
-    { send: async () => { sent = true; return {}; } });
-  assert(!sent && r === "修了済", `${r} / 送信=${sent}`);
+  let sent = null;
+  const r = await deliverOne(conn, { ...USER, current_day: 101, days_used: 101 },
+    { send: async (_t, m) => { sent = m; return {}; } });
+  assert(sent, "修了しても何も送っていません");
+  assert(/修了/.test(r), r);
   assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)), "102 日目へ進めています");
-  return "101 で止まる";
+
+  /* 2 度目は送らない。push_logs の completion で数える。 */
+  const again = fakeConn({ ...READY,
+    "SELECT COUNT\\(\\*\\) AS n FROM push_logs": [{ n: 1 }] });
+  let sent2 = false;
+  const r2 = await deliverOne(again, { ...USER, current_day: 101, days_used: 101 },
+    { send: async () => { sent2 = true; return {}; } });
+  assert(!sent2 && r2 === "修了済", `${r2} / 送信=${sent2}`);
+  return "案内 1 回 → 以後は黙る";
 });
 
 console.log("\n[原稿が無い日]  P4-c が終わるまで、実際に起こる");
@@ -383,36 +400,31 @@ await check("LINE が受け取る UUID の形をしている", () => {
   return k;
 });
 
-console.log("\n[始める前]  名前とコースが決まるまで、日を消費しない");
+console.log("\n[始める前]  名前が決まるまで、日を消費しない");
 
-/* 決まっていない人。1 つずつ崩して、何を訊きに行くかを見る。 */
-const NO_TRACK = { ...USER, track: null };
+/* コースはもう段に無い（migrations/002）。買うときに選ぶので、
+   バッチが止まるのは名前だけになった ── 名前が決まらないと
+   会話文が作れず、その日の中身そのものが無い。 */
 const NO_NAMESRC = { ...USER, name_source: null, display_name: "たなか" };
 
-await check("コースが決まっていなければ、日を進めない", async () => {
+await check("コースが無い行では、例外にせず数えて降りる", async () => {
+  /* listDeliverable は active_track で JOIN するので、ここに来ない
+     はずの行。それでも throw すると main() が「処理中の異常」に数え、
+     cron が毎朝失敗で終わる ── 本人には何も届かないのに、
+     理由はどこにも出ない。 */
   const conn = fakeConn(READY);
-  let msgs = null;
-  const r = await deliverOne(conn, NO_TRACK, { send: async (_t, m) => { msgs = m; return {}; } });
-  assert(/track/.test(r), r);
-  assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)),
-    "コース未選択のまま日を進めました（その日は誰にも届かず消えます）");
-  assert(msgs && /コース/.test(msgs[0].text), JSON.stringify(msgs));
-  return "advanceDay を呼ばない";
-});
-
-await check("コースを訊くときは、3 つのボタンを付ける", async () => {
-  const conn = fakeConn(READY);
-  let msgs = null;
-  await deliverOne(conn, NO_TRACK, { send: async (_t, m) => { msgs = m; return {}; } });
-  const q = msgs[0].quickReply;
-  assert(q && q.items.length === 3, JSON.stringify(q));
-  for (const t of ["beginner", "intermediate", "advanced"]) {
-    assert(q.items.some((i) => i.action.data === `action=track&pick=${t}`), `${t} が無い`);
+  let sent = false;
+  let r;
+  try {
+    r = await deliverOne(conn, { ...USER, track: null },
+      { send: async () => { sent = true; return {}; } });
+  } catch (e) {
+    throw new Error(`例外で落ちました: ${e.message}`);
   }
-  /* label は 20 字まで。超えると LINE が 400 を返し、
-     その人だけ案内が届かないまま止まる。 */
-  for (const i of q.items) assert(i.action.label.length <= 20, i.action.label);
-  return "初級 / 中級 / 上級";
+  assert(r === "コース未選択", r);
+  assert(!sent, "送りました");
+  assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)), "日を進めました");
+  return "数えて降りる";
 });
 
 await check("名前をどちらにするかは、選べる人にだけ訊く", async () => {
@@ -422,12 +434,14 @@ await check("名前をどちらにするかは、選べる人にだけ訊く", a
   assert(/name/.test(r), r);
   assert(msgs[0].text.includes("다나카") && msgs[0].text.includes("たなか"),
     `両方の名前を見せていません: ${msgs[0].text}`);
+  assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)),
+    "名前が決まらないまま日を進めました");
 
   /* LINE の表示名が取れない人には訊かない ── 比べる相手が無く、
      答えようが無い質問になる。その人はそのまま進む。 */
   const noDisplay = fakeConn(READY);
   let sent = false;
-  await deliverOne(noDisplay, { ...USER, name_source: null },
+  await deliverOne(noDisplay, { ...USER, name_source: null, display_name: null },
     { send: async () => { sent = true; return {}; } });
   assert(sent, "選択肢が無いのに止まりました");
   assert(noDisplay.sql().some((s) => /UPDATE learning_progress/i.test(s)),
@@ -446,48 +460,25 @@ await check("生年月日の未確認では、レッスンを止めない", asyn
   return "運勢だけ落ちる";
 });
 
-/* ---- 止めない段が、止める段を隠さないこと ---------------------------
-   ここが lib/onboarding.mjs に blockingStep を足した理由。
-
-   nextStep は「次に訊くこと」を 1 つだけ返し、順番は
-   name → birth → track。だから生年月日を飛ばした人は、コースが
-   空でも "birth" が返る。バッチが name と track だけを見ていると、
-   その人は素通りして track=null のまま原稿を引き、
-   「未知の track: null」で落ちる。
-
-   落ち方が悪い。例外は main() の try/catch が拾って「処理中の異常」に
-   数えるので、cron は毎朝失敗で終わる。本人には何も届かないが、
-   届かない理由はどこにも出ない ── 受け取る側からは
-   「今日は来ないな」としか見えない。
-
-   生年月日を飛ばす人は珍しくない。ボタンを見て後回しにするだけで
-   この状態になる。 */
-await check("生年月日を飛ばした人にも、コースは訊く（止める段が隠れない）", async () => {
-  const skippedBirth = {
-    ...USER,
-    name_source: "web",                                   /* ① 名前は答えた */
-    birth_date: "1995-04-12", birth_confirmed: false,     /* ② 生年月日は飛ばした */
-    track: null                                           /* ③ コースはまだ */
-  };
+/* 生年月日は配信を止めない段なので、そこが返ってきたからといって
+   バッチが待ってはいけない。nextStep は 1 つしか返さないので、
+   止める段は別の口（blockingStep）で見ている ── そこを nextStep に
+   戻すと、生年月日を飛ばした人がレッスンを受け取れなくなる。 */
+await check("生年月日を飛ばした人でも、レッスンは進む", async () => {
   const conn = fakeConn(READY);
-  let msgs = null;
-  let r;
-  try {
-    r = await deliverOne(conn, skippedBirth, { send: async (_t, m) => { msgs = m; return {}; } });
-  } catch (e) {
-    throw new Error(`例外で落ちました: ${e.message} ── 毎朝この人だけ配信が異常終了します`);
-  }
-  assert(/track/.test(r), `コースを訊いていません: ${r}`);
-  assert(msgs && /コース/.test(msgs[0].text), JSON.stringify(msgs));
-  assert(!conn.sql().some((s) => /UPDATE learning_progress SET current_day/i.test(s)),
-    "コース未選択のまま日を進めました");
-  return "birth が track を隠さない";
+  let sent = false;
+  const r = await deliverOne(conn,
+    { ...USER, name_source: "web", birth_date: "1995-04-12", birth_confirmed: false },
+    { send: async () => { sent = true; return {}; } });
+  assert(sent, `止まりました: ${r}`);
+  assert(/送信/.test(r), r);
+  return "birth は止めない";
 });
 
 await check("促すのは 3 回まで（ブロックは取り消せない）", async () => {
   const conn = fakeConn({ ...READY, "SELECT COUNT\\(\\*\\) AS n FROM push_logs": [{ n: 3 }] });
   let sent = false;
-  const r = await deliverOne(conn, NO_TRACK, { send: async () => { sent = true; return {}; } });
+  const r = await deliverOne(conn, NO_NAMESRC, { send: async () => { sent = true; return {}; } });
   assert(!sent, "4 回目を送りました");
   assert(/待ち/.test(r), r);
   assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)),

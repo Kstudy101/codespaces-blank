@@ -4,14 +4,15 @@
      node server/app.js          （cPanel も同じ入口を使う）
      PORT=3000 node server/app.js
 
-   経路は 4 つだけ。
+   経路は 5 つだけ。
 
      POST /line/webhook      LINE からの通知
      POST /line/link/start   ウェブの占い結果を預かる（P3）
      GET  /line/callback     LINE Login の戻り先（P3）
+     POST /stripe/webhook    入金の通知（migrations/002）
      GET  /health            生きているか（cPanel と外形監視から）
 
-   フレームワークを入れないのは、経路が 4 つしか無いため。
+   フレームワークを入れないのは、経路が 5 つしか無いため。
    Express を足すと依存が 60 個ほど増え、検証に install が要る
    範囲が広がる（README「検証は設置なしで走る」）。
 
@@ -31,6 +32,9 @@ import { handleWebhookBody } from "./lib/webhook.mjs";
 import { startLink, completeLink } from "./lib/handlers/link.mjs";
 import { resultPage } from "./lib/pages.mjs";
 import { jstDateTime } from "./lib/jst.mjs";
+import { verifyStripeSignature, readCheckoutEvent } from "./lib/stripe.mjs";
+import { creditFromStripe, missingLegalConfig } from "./lib/handlers/checkout.mjs";
+import { deliverNow } from "./db/push-daily.mjs";
 
 loadEnv();
 
@@ -41,6 +45,7 @@ const PORT = Number(process.env.PORT || 3000);
 const PATH_WEBHOOK  = process.env.LINE_WEBHOOK_PATH  || "/line/webhook";
 const PATH_CALLBACK = process.env.LINE_CALLBACK_PATH || "/line/callback";
 const PATH_START    = process.env.LINE_LINK_START_PATH || "/line/link/start";
+const PATH_STRIPE   = process.env.STRIPE_WEBHOOK_PATH || "/stripe/webhook";
 
 /* ---- CORS ---------------------------------------------------------
    占いページは Xserver（www.kstudy101.jp）、この API は ChemiCloud に
@@ -247,6 +252,61 @@ async function onCallback(req, res, url) {
   }
 }
 
+/* ---- 入金の通知 -----------------------------------------------------
+   webhook の URL は公開されていて誰でも POST できる。ここが緩むと
+   「支払いました」を他人が名乗れて、日数が無料で積まれる。
+   LINE の webhook と同じ扱いにする ── 署名を確かめるまで本文を
+   解釈しない。
+
+   Stripe は応答が遅いと再送してくる（それは仕様であって障害ではない）。
+   LINE と同じく、署名を確かめた時点で 200 を返し、中身は後ろで処理する。
+   再送で日数が二度積まれないのは purchases.payment_ref の一意制約が
+   見ている（repo/billing.mjs）ので、200 を先に返して構わない。 */
+async function onStripeWebhook(req, res) {
+  if (req.method !== "POST") return send(res, 405, "POST のみ");
+
+  let raw;
+  try { raw = await readRawBody(req); }
+  catch (e) { return send(res, e.statusCode || 400, "本文を読めません"); }
+
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) {
+    /* 設定漏れ。誰でも通る状態にするより、止まっている方がよい。 */
+    logErr("STRIPE_WEBHOOK_SECRET が未設定です。webhook を拒否します");
+    return send(res, 500, "設定不足");
+  }
+
+  if (!verifyStripeSignature(raw, req.headers["stripe-signature"], secret)) {
+    /* 本文は残さない。誰でも POST できる口なので、
+       ログが他人の投げ込みで埋まる。 */
+    logErr("Stripe の署名が一致しません", { ip: req.socket.remoteAddress, bytes: raw.length });
+    return send(res, 401, "署名が一致しません");
+  }
+
+  let event;
+  try { event = JSON.parse(raw.toString("utf8")); }
+  catch { return send(res, 400, "JSON ではありません"); }
+
+  send(res, 200, "OK");                       // ここで先に返す
+
+  const ev = readCheckoutEvent(event);
+  if (!ev) {
+    log(`stripe: 扱わない種類（${event?.type || "?"}）`);
+    return;
+  }
+
+  try {
+    const pool = await getPool();
+    const r = await creditFromStripe(pool, ev, { deliver: deliverNow });
+    if (!r.ok) logErr("入金の処理に失敗", JSON.stringify(r));
+    else log("入金", JSON.stringify(r));
+  } catch (e) {
+    /* 200 は返してしまっているので再送は来ない。必ず残す ──
+       ここが落ちると「払ったのに日数が無い」になる。 */
+    logErr("入金の処理に失敗", e && e.stack ? e.stack : e);
+  }
+}
+
 async function onHealth(req, res) {
   /* DB まで見る。プロセスが生きていても DB が落ちていれば
      配信は止まるので、「生きている」の定義に入れる。 */
@@ -266,6 +326,7 @@ const server = http.createServer((req, res) => {
   if (url.pathname === PATH_WEBHOOK)  return void onWebhook(req, res);
   if (url.pathname === PATH_START)    return void onLinkStart(req, res);
   if (url.pathname === PATH_CALLBACK) return void onCallback(req, res, url);
+  if (url.pathname === PATH_STRIPE)   return void onStripeWebhook(req, res);
   if (url.pathname === "/health")     return void onHealth(req, res);
 
   send(res, 404, "not found");
@@ -295,7 +356,7 @@ try {
 
    明示的に ALLOW_FAKE_LINE=1 を置いたときだけ許す。置き忘れても
    起動時に大きく出るので、本番で気づかず動き続けることはない。 */
-for (const key of ["LINE_API_BASE", "LINE_AUTH_BASE"]) {
+for (const key of ["LINE_API_BASE", "LINE_AUTH_BASE", "STRIPE_API_BASE"]) {
   const v = process.env[key];
   if (!v) continue;
   if (process.env.ALLOW_FAKE_LINE === "1") {
@@ -314,8 +375,20 @@ server.listen(PORT, () => {
   log(`  webhook    ${PATH_WEBHOOK}`);
   log(`  link start ${PATH_START}`);
   log(`  callback   ${PATH_CALLBACK}`);
+  log(`  stripe     ${PATH_STRIPE}`);
   log(`  health     /health`);
   log(`  許可オリジン ${ALLOWED_ORIGINS.join(" / ")}`);
+
+  /* 売る用意が整っているか。足りなければ価格表そのものを出さない
+     （lib/handlers/checkout.mjs の門）ので、起動時に名前で出しておく
+     ── 「押しても準備中と返る」の理由が、ここにしか無い。 */
+  const missing = missingLegalConfig();
+  if (missing.length) {
+    logErr("! 受講料の案内は止まっています。足りない設定:");
+    for (const m of missing) logErr(`    ・${m}`);
+  } else {
+    log("  受講料の案内 有効");
+  }
 });
 
 export default server;

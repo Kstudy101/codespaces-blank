@@ -16,9 +16,14 @@
 - 결제(선불 횟수권)는 **코드 완성, 의도적으로 잠겨 있음** — §3
 - 관문(자동 검증) **19종 전부 통과**
 
-**다음에 할 일은 하나입니다.**
+**다음에 할 일은 두 가지입니다.**
 
-1. **§3의 값 3개를 정한다** — 그게 없으면 결제가 안 열립니다
+1. **자동 배포를 활성화한다** — cPanel API 토큰을 만들어 GitHub Secrets 3개
+   (`CPANEL_HOST`/`CPANEL_USER`/`CPANEL_TOKEN`) 등록 → Actions 의 `deploy-server` 를
+   Run workflow ([docs/plan-deploy-auto.md](docs/plan-deploy-auto.md) §4).
+   첫 실행이 밀린 커밋(이름 교정·절목 퀴즈)을 배포하고, 화면의
+   「Deploy HEAD Commit 안 눌림」의 원인도 로그로 확정합니다 (§5)
+2. **§3의 값 3개를 정한다** — 그게 없으면 결제가 안 열립니다
 
 복습 퀴즈는 **라이브 검증까지 통과** (2026-08-05): 테스트 계정 1개로
 발신 판정·스킵 3케이스·실발송·정답/오답 즉답·미학습 차단·DB 쓰기 0을
@@ -136,9 +141,15 @@ ALTER TABLE subscriptions DROP COLUMN total_days_entitled;
 `migrate.mjs` 가 표·열의 존재를 이름으로 다시 세므로, 옮기기가 실패하면
 거기서 멈춥니다. **그래도 흘리기 전에 DB 백업을 받으십시오.**
 
-배포 경로는 두 가지:
+배포 경로는 세 가지 (2026-08-05 부터 자동이 기본):
 
 ```bash
+# (0) 자동 — server/** 가 바뀐 push 를 GitHub Actions 가 관문 19종 통과 후
+#     cPanel UAPI 로 배포합니다 (.github/workflows/deploy-server.yml).
+#     Secrets 3개가 등록돼 있어야 하며, 미설정이면 조용히 건너뜁니다.
+#     ★ 되돌릴 수 없는 migration 을 쓸 때는 push 전에 DB 백업 —
+#       자동화 이후 그것이 유일한 안전선입니다.
+
 # (가) cPanel Git Version Control — 자격정보가 필요 없습니다 (브라우저만)
 #      cPanel 화면 → Git Version Control → "Update from Remote"
 #                                        → "Deploy HEAD Commit"

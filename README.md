@@ -1176,6 +1176,13 @@ bash tools/build-site.sh    # dist/ 를 만들고 링크·canonical·구 호스�
   자체가 드물다. 미루기(다음 아침 재발신)는 추적 코드가 드묾에 비해 무거워서
   버렸다. 퀴즈는 반드시 배열 말미 — quickReply 는 마지막 1통만 열린다.
   ([docs/plan-quiz-checkpoint.md](docs/plan-quiz-checkpoint.md) §4 (가), 2026-08-05)
+- **배신 서버 배포를 손배포에서 자동으로 전환 (2026-08-05, 대표 지시).** 원래는
+  「누른 사람이 결과를 지켜본다」로 의도적 손배포였다([tools/deploy-server.sh](tools/deploy-server.sh)
+  머리말). 이제 `server/**` 가 바뀐 push 는 관문 19종 통과 후
+  [deploy-server.yml](.github/workflows/deploy-server.yml) 이 cPanel UAPI 로 배포한다 —
+  지켜보는 눈의 대체는 Actions 의 실패 표시 + 배포 로그 말미 인양 + `/health` 확인.
+  수동 2경로(cPanel 화면·deploy-server.sh)는 대체 수단으로 남긴다.
+  **되돌릴 수 없는 migration 을 쓸 때는 push 전에 DB 백업** — 이제 그것이 유일한 안전선.
 - **아침 배신의 스킵 조건(3의 배수 · 절목 충돌 · 기한예고일)은 흩어진 채 둔다.**
   검증 스크립트 오탐 2건이 정확히 이 지점에서 났고, 단일 우선순위 어셈블러로의
   정리가 후보로 거론됐다 — 다음 사이클 후보로만 남기고 이번 릴리스에서는 손대지

@@ -1,0 +1,163 @@
+# ===================================================================
+# deploy-server.yml — 배신 서버(server/)를 ChemiCloud 에 자동 배포
+#
+# 대표님 지시(2026-08-05)로 손배포에서 전환 (docs/plan-deploy-auto.md).
+# 이전의 「누른 사람이 결과를 지켜본다」 철학은 README 결정 로그에
+# 갱신 기록이 있다. 수동 경로(cPanel 화면 / tools/deploy-server.sh)는
+# 대체 수단으로 남는다.
+#
+# SSH 는 못 쓴다 — ChemiCloud 가 IP 단위로 막고, Actions 의 IP 는
+# 매번 바뀐다(tools/cpanel.sh 머리말). 대신 cPanel UAPI(HTTPS 2083)로
+# 화면의 Update from Remote → Deploy HEAD Commit 과 같은 API 를 부른다.
+#
+# 판정은 화면이 아니라 API 와 /health — cPanel UI 의 in progress 는
+# 실제와 어긋난 전적이 있다 (STATUS §9.2).
+#
+# 필요한 Secrets (Settings → Secrets and variables → Actions):
+#   CPANEL_HOST   예) sNN.chemicloud.com
+#   CPANEL_USER   cPanel 사용자명
+#   CPANEL_TOKEN  cPanel → Security → Manage API Tokens 에서 발급
+# 미설정이면 배포 단계를 건너뛰고 초록으로 끝난다 — merge 가 안전하도록.
+# ===================================================================
+name: deploy-server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # server/ 본체와, .cpanel.yml 이 server 로 복사하는 운세엔진 3파일.
+      # 문서·사이트만 바뀐 push 에 본번 배신 서버를 재기동하지 않는다.
+      - "server/**"
+      - ".cpanel.yml"
+      - "saju.js"
+      - "fortune.js"
+      - "solar-terms.json"
+      - ".github/workflows/deploy-server.yml"
+  # 수동 버튼. cPanel 화면의 Deploy 버튼 대체품 — 화면이 말을 안 들어도
+  # Actions 탭에서 누르면 같은 일이 된다.
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- 관문 19종. 하나라도 실패하면 배포 없음 ---------------------
+      - name: Verify all gates
+        run: |
+          set -e
+          fail=0
+          for f in saju fortune study name omikuji gilbang amulet birth pages \
+                   server webhook onboarding render push fortune-server evening \
+                   billing quiz kana; do
+            if node tools/verify-$f.mjs >/dev/null 2>&1; then
+              echo "PASS $f"
+            else
+              echo "FAIL $f"; fail=1
+            fi
+          done
+          exit $fail
+
+      # --- 배포 (UAPI) ------------------------------------------------
+      - name: Deploy via cPanel UAPI
+        env:
+          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
+          CPANEL_USER: ${{ secrets.CPANEL_USER }}
+          CPANEL_TOKEN: ${{ secrets.CPANEL_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CPANEL_TOKEN:-}" ] || [ -z "${CPANEL_HOST:-}" ] || [ -z "${CPANEL_USER:-}" ]; then
+            echo "::notice::CPANEL_* Secrets 미설정 — 배포를 건너뜁니다 (수동 경로 유지)"
+            echo "설정 방법: docs/plan-deploy-auto.md §4"
+            exit 0
+          fi
+
+          AUTH="Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}"
+          BASE="https://${CPANEL_HOST}:2083/execute"
+
+          # UAPI 는 실패도 HTTP 200 으로 돌려준다. status 필드가 진실 ──
+          # HTTP 코드만 보면 실패가 「성공했는데 비어 있음」으로 읽힌다
+          # (tools/cpanel.sh 머리말과 같은 함정).
+          call() { # call <설명> <URL>
+            local desc="$1" url="$2" out
+            out=$(curl -sS -H "$AUTH" "$url")
+            if [ "$(echo "$out" | jq -r '.status // 0')" != "1" ]; then
+              echo "✗ ${desc} 실패. cPanel 의 응답:"
+              echo "$out" | jq -r '.errors // .'
+              exit 1
+            fi
+            echo "$out"
+          }
+
+          # 1) 저장소를 이름으로 찾는다. 경로를 결정타로 박아두면
+          #    cPanel 쪽에서 옮긴 날 조용히 남의 저장소를 배포한다.
+          echo "── 저장소를 찾습니다"
+          REPOS=$(call "저장소 목록" "$BASE/VersionControl/retrieve")
+          ROOT=$(echo "$REPOS" | jq -r \
+            '[.data[] | select(.source_repository.url | test("Kstudy101/codespaces-blank"))][0].repository_root // empty')
+          if [ -z "$ROOT" ]; then
+            echo "✗ Kstudy101/codespaces-blank 을 원격으로 둔 저장소가 cPanel 에 없습니다"
+            echo "$REPOS" | jq -r '.data[].source_repository.url'
+            exit 1
+          fi
+          echo "   repository_root = $ROOT"
+
+          # 2) Update from Remote 와 같은 것
+          echo "── 원격에서 가져옵니다 (update)"
+          UPD=$(call "update" "$BASE/VersionControl/update?repository_root=$(printf %s "$ROOT" | jq -sRr @uri)&branch=main")
+          echo "   HEAD = $(echo "$UPD" | jq -r '.data.last_update.identifier // "?"')"
+
+          # 3) Deploy HEAD Commit 과 같은 것
+          echo "── 배포를 만듭니다 (deployment create)"
+          DEP=$(call "deployment create" "$BASE/VersionControlDeployment/create?repository_root=$(printf %s "$ROOT" | jq -sRr @uri)")
+          DEPLOY_ID=$(echo "$DEP" | jq -r '.data.deploy_id')
+          LOG_PATH=$(echo "$DEP" | jq -r '.data.log_path // empty')
+          echo "   deploy_id = $DEPLOY_ID"
+
+          # 4) 끝날 때까지 API 로 폴링. UI 의 in progress 는 믿지 않는다.
+          echo "── 완료를 기다립니다"
+          STATE="running"
+          for i in $(seq 1 60); do
+            sleep 5
+            ALL=$(curl -sS -H "$AUTH" "$BASE/VersionControlDeployment/retrieve")
+            STATE=$(echo "$ALL" | jq -r --argjson id "$DEPLOY_ID" '
+              [.data[] | select(.deploy_id == $id)][0].timestamps //{} |
+              if .succeeded then "succeeded"
+              elif .failed then "failed"
+              elif .canceled then "canceled"
+              else "running" end')
+            [ "$STATE" != "running" ] && break
+          done
+          echo "   결과: $STATE"
+
+          # 5) 실패면 서버의 배포 로그 말미를 여기로 끌어온다 ──
+          #    원인을 보러 다시 cPanel 화면에 들어가지 않아도 되게.
+          if [ "$STATE" != "succeeded" ]; then
+            if [ -n "$LOG_PATH" ]; then
+              echo "── 배포 로그 말미 ($LOG_PATH):"
+              curl -sS -H "$AUTH" \
+                "$BASE/Fileman/get_file_content?dir=$(dirname "$LOG_PATH" | jq -sRr @uri)&file=$(basename "$LOG_PATH" | jq -sRr @uri)" \
+                | jq -r '.data.content // "（로그를 읽지 못함）"' | tail -40
+            fi
+            exit 1
+          fi
+
+      # --- 살아 있는지 ------------------------------------------------
+      - name: Health check
+        env:
+          CPANEL_TOKEN: ${{ secrets.CPANEL_TOKEN }}
+        run: |
+          if [ -z "${CPANEL_TOKEN:-}" ]; then exit 0; fi
+          R=$(curl -sf https://api.kstudy101.jp/health || true)
+          if [ "$R" != "ok" ]; then
+            echo "✗ /health 가 ok 가 아닙니다: '$R'"
+            exit 1
+          fi
+          echo "✓ https://api.kstudy101.jp/health → ok"

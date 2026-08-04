@@ -28,7 +28,14 @@
 --
 -- 今は UNIQUE(user_id) なので 1 人 1 コース。101 日を終えても
 -- 次のコースへ移れない。
-ALTER TABLE learning_progress DROP INDEX uq_progress_user;
+--
+-- ★ 順序が命。user_id には schema.sql の外部キー（fk_progress_user）が
+--   掛かっていて、InnoDB は FK の列を先頭に持つ索引を常に 1 本
+--   要求する。旧索引（uq_progress_user）を先に落とすと、その瞬間に
+--   支えが無くなり 1553 で止まる ── 本番で実際に止まった
+--   （2026-08-05 配備失敗、docs/plan-deploy-auto.md の初回実走）。
+--   だから**代わりの索引を先に作り、旧索引は最後に落とす**。
+--   新索引 (user_id, track) は先頭が user_id なので FK を支えられる。
 
 -- track が鍵の一部になるので NULL を許せない。NULL のまま残っている
 -- のは「まだ選んでいない人」で、その人は 1 日も受け取っていない
@@ -42,7 +49,14 @@ DELETE FROM learning_progress WHERE track IS NULL AND current_day = 0;
 ALTER TABLE learning_progress MODIFY COLUMN track
   ENUM('beginner','intermediate','advanced') NOT NULL;
 
+-- 旧索引がまだ在っても作れる（UNIQUE(user_id) を満たす行は
+-- UNIQUE(user_id, track) も満たす）。再実行では 1061「もう在る」で
+-- 素通りする（migrate.mjs の ALREADY_APPLIED）。
 ALTER TABLE learning_progress ADD UNIQUE KEY uq_progress_user_track (user_id, track);
+
+-- 最後に旧索引を落とす。上の新索引が FK を支えているので通る。
+-- 既に無ければ 1091「無い」で素通り ── 何度流しても同じ所に着く。
+ALTER TABLE learning_progress DROP INDEX uq_progress_user;
 
 
 -- ---- 2. 使った日数 --------------------------------------------------

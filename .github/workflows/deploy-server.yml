@@ -142,9 +142,17 @@ jobs:
           if [ "$STATE" != "succeeded" ]; then
             if [ -n "$LOG_PATH" ]; then
               echo "── 배포 로그 말미 ($LOG_PATH):"
-              curl -sS -H "$AUTH" \
-                "$BASE/Fileman/get_file_content?dir=$(dirname "$LOG_PATH" | jq -sRr @uri)&file=$(basename "$LOG_PATH" | jq -sRr @uri)" \
-                | jq -r '.data.content // "（로그를 읽지 못함）"' | tail -40
+              # dirname/basename 은 개행으로 끝난 채 jq 에 들어간다. 그대로
+              # @uri 에 넣으면 %0A 가 붙은 딴 경로가 되어 로그를 못 읽는다 ──
+              # 1) 이 printf %s 를 쓰는 것과 같은 이유.
+              LOG=$(curl -sS -H "$AUTH" \
+                "$BASE/Fileman/get_file_content?dir=$(printf %s "$(dirname "$LOG_PATH")" | jq -sRr @uri)&file=$(printf %s "$(basename "$LOG_PATH")" | jq -sRr @uri)")
+              if [ "$(echo "$LOG" | jq -r '.status // 0')" = "1" ]; then
+                echo "$LOG" | jq -r '.data.content // "（로그가 비어 있음）"' | tail -40
+              else
+                echo "（로그를 읽지 못함 — cPanel 의 응답:）"
+                echo "$LOG" | jq -r '.errors // .'
+              fi
             fi
             exit 1
           fi

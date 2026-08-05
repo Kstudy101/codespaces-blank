@@ -41,7 +41,7 @@ const SITE_URL = process.env.SITE_URL || "https://www.kstudy101.jp";
 
    段に残したままにすると、まだ何も買っていない人に毎朝
    「コースを選んでください」が飛び、押しても買う所へ行けない。 */
-export const STEPS = Object.freeze(["name", "birth"]);
+export const STEPS = Object.freeze(["name", "reading", "birth"]);
 
 
 /* ---- 次に訊くこと --------------------------------------------------
@@ -60,6 +60,16 @@ const PENDING = Object.freeze({
      LINE の表示名が取れなかった人も同じで、比べる相手が無い。 */
   name:  (u) => !u.name_source && !!u.name_kr && !!u.display_name,
 
+  /* 1.5 読み仮名。「LINEの名前で／べつの名前で」を選んで、ハングル
+     表記がまだ無い人（name_source='line' かつ name_kr が空）。
+     handlers/message.mjs が待ち受けている状態そのもの。
+
+     ここに無かったあいだ、この状態は blockingStep に掛からず、
+     バッチは名前案内（NAME_NOTICE_MAX で 2 回）→ 沈黙で終わっていた ──
+     askReading の返信が落ちた人（replyToken 切れ・LINE 5xx）は、
+     何を訊かれたのかを知る機会が二度と来なかった。 */
+  reading: (u) => u.name_source === "line" && !u.name_kr,
+
   /* 2. 生年月日。四柱がある人にだけ。
      無い人に「合っていますか」と訊いても見せるものが無い。 */
   birth: (u) => !!u.birth_date && !u.birth_confirmed
@@ -76,12 +86,12 @@ export function nextStep(u = {}) {
    バッチが待ってはいけない。
 
    前はコースもこの一覧に居た。今はコースを買うときに選ぶので、
-   止める段は名前だけになっている ── 名前が決まらないと会話文が
-   作れず、その日の中身そのものが無い。
+   止める段は名前の 2 つ（どちらの名前か / その読み方）だけ ──
+   名前が決まらないと会話文が作れず、その日の中身そのものが無い。
 
    一覧が 1 つでも口を分けたままにするのは、判定そのものを PENDING で
    共有しておけば、段が増えても真実が 2 か所にならないため。 */
-export const BLOCKING_STEPS = Object.freeze(["name"]);
+export const BLOCKING_STEPS = Object.freeze(["name", "reading"]);
 
 export function blockingStep(u = {}) {
   return STEPS.find((s) => BLOCKING_STEPS.includes(s) && PENDING[s](u)) || null;
@@ -370,6 +380,11 @@ export function messageForStep(step, u = {}) {
       webNameKr: u.name_kr,
       lineName: u.display_name
     });
+  }
+  /* 読み仮名待ち。選び直し（askName）を出してはいけない ── もう
+     選んだ人なので、答えたはずの質問が戻ってくる形になる。 */
+  if (step === "reading") {
+    return askReading();
   }
   if (step === "birth") {
     return askBirth({ birthDate: String(u.birth_date).slice(0, 10), birthTime: u.birth_time });

@@ -72,7 +72,10 @@ export async function handleMessage(conn, event) {
          「야메타이 で OK?」と返すのは、いちばん悪いタイミングの冗談になる。
          状況系（きょう 等）は素通しにしない ── きょう は実在の名前。 */
       && !hit(text, ASK_STOP)) {
-    const reading = text.trim();
+    /* name_reading は VARCHAR(50)。トークの自由入力に上限は無いので、
+       切らずに入れると errno 1406 で throw し、本人には何も返らない。
+       link.mjs の str(v, 50) と同じ切り方。 */
+    const reading = text.trim().slice(0, 50);
     const kr = kanaNameToHangul(reading);
     const out = kr ? confirmName({ reading, kr }) : readingRetry();
     if (kr) {

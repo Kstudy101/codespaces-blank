@@ -570,6 +570,102 @@ await acheck("返信できなくても、友だち追加は成立する", async 
   return "体験と進捗は用意される";
 });
 
+/* ブロック → 再追加。status を戻す所は creditFromStripe しか無かった
+   ので、再決済しないかぎり配信が再開しなかった ── message.mjs は
+   「もう一度友だち追加すれば続きからお届けします」と案内している。
+   文面と挙動が正面衝突していた所。 */
+await acheck("ブロック → 再追加で、配信対象に戻る", async () => {
+  const UNFOLLOWED = { id: 9, line_user_id: "U_back", status: "unfollowed",
+                       name_kr: "다나카", name_source: "web", active_track: "beginner" };
+  const dup = () => { const e = new Error("dup"); e.errno = 1062; throw e; };
+  /* 行は毎回写しで返す ── handleFollow は引いた行の status を書き換える
+     ので、実物を共有すると 1 つ目の検査が 2 つ目の前提を汚す。 */
+  const comeback = (entRows) => fakeConn({
+    "INSERT INTO users": dup,
+    "FROM users": () => [{ ...UNFOLLOWED }],
+    "FROM saju_profiles": [{ user_id: 9, birth_date: "1995-04-12", birth_confirmed: 1 }],
+    "FROM course_entitlements": entRows
+  });
+  const { handleFollow } = await import("../server/lib/handlers/follow.mjs");
+  const refollow = async (conn) => handleFollow(conn,
+    { source: { userId: "U_back" }, replyToken: "t" },
+    { reply: async () => ({}), profile: async () => ({ displayName: "テスト" }) });
+
+  /* 残りがある人は active へ ── trial に落とすと、101 日ぶん買った人が
+     ブロック 1 回で体験扱いになる。 */
+  const paid = comeback([{ track: "beginner", days_entitled: 30, days_used: 3,
+                           current_day: 3, remaining: 27 }]);
+  await refollow(paid);
+  const up = paid.calls.find((c) => /UPDATE users SET status/i.test(c.sql));
+  assert(up, "status を戻していません（unfollowed のまま配信対象外です）");
+  assert(up.params[0] === "active", `残りがあるのに ${up.params[0]} に戻しました`);
+
+  /* 残りが無い人は trial へ ── active にすると、日数を持たない人が
+     配信対象の顔をして並ぶ。 */
+  const empty = comeback([]);
+  await refollow(empty);
+  const up2 = empty.calls.find((c) => /UPDATE users SET status/i.test(c.sql));
+  assert(up2, "残り無しの人の status を戻していません");
+  assert(up2.params[0] === "trial", `残りが無いのに ${up2.params[0]} に戻しました`);
+
+  /* unfollowed でない人には触らない ── upsertOnFollow の「status を
+     落とさない」約束はそのまま（101 日ぶん買った人が trial に
+     戻らないための線）。 */
+  const active = fakeConn({ "INSERT INTO users": dup, "FROM users": NAMED });
+  await handleFollow(active, { source: { userId: "U_old" }, replyToken: "t" },
+    { reply: async () => ({}), profile: async () => ({ displayName: "テスト" }) });
+  assert(!active.calls.some((c) => /UPDATE users SET status/i.test(c.sql)),
+    "unfollowed でない人の status に触りました");
+  return "残りあり → active / 無し → trial / 他は触らない";
+});
+
+
+/* ================================================================== */
+head("[長さ]  読み仮名は VARCHAR(50)。切らずに入れると 1406 で落ちる");
+
+/* users.name_reading は VARCHAR(50)。LINE の表示名は 100 字まで来るし、
+   トークの自由入力には長さの上限が無い。切らずに UPDATE すると
+   errno 1406 で throw し、handlers の try/catch は返信だけを包んで
+   いるので、本人には**何も返らない** ── link.mjs の str(v,50) と
+   同じ切り方を、LINE 側の 2 つの口にも置く。 */
+await acheck("表示名が 51 字以上でも、切り詰めて進む（postback）", async () => {
+  const long = "ハナコ".repeat(20);   /* 60 字のかな表示名 */
+  const conn = fakeConn({
+    "FROM users": [{ id: 7, line_user_id: "U_test", status: "trial",
+                     display_name: long, name_kr: null, name_source: null }]
+  });
+  const sent = [];
+  await handlePostback(conn, { source: { userId: "U_test" }, replyToken: "t",
+    postback: { data: "action=name&use=line" } },
+    { send: async (_t, m) => { sent.push(m); return {}; } });
+  const up = conn.calls.find((c) => /UPDATE users SET name_kanji/i.test(c.sql));
+  assert(up, "updateName が呼ばれていません");
+  const reading = up.params[1];
+  assert(typeof reading === "string" && reading.length <= 50,
+    `name_reading が ${reading && reading.length} 字のまま（VARCHAR(50) に 1406 で落ちます）`);
+  assert(sent.length, "確認を返していません");
+  return `${long.length} 字 → ${reading.length} 字`;
+});
+
+await acheck("トークの読み仮名が 51 字以上でも、切り詰めて保存する", async () => {
+  const conn = fakeConn({
+    "FROM users": [{ id: 7, line_user_id: "U_test", status: "trial",
+                     name_source: "line", name_kr: null }]
+  });
+  const { handleMessage } = await import("../server/lib/handlers/message.mjs");
+  /* replyToken はダミー（0 並び）にして、実際の LINE には出さない。 */
+  const r = await handleMessage(conn, { source: { userId: "U_test" },
+    replyToken: "0".repeat(32),
+    message: { type: "text", text: "ハ".repeat(60) } });
+  const up = conn.calls.find((c) => /UPDATE users SET name_kanji/i.test(c.sql));
+  assert(up, "updateName が呼ばれていません");
+  const reading = up.params[1];
+  assert(typeof reading === "string" && reading.length <= 50,
+    `name_reading が ${reading && reading.length} 字のまま（1406 で throw → 本人に何も返りません）`);
+  assert(r.replied === true, `応答していません: ${JSON.stringify(r)}`);
+  return `60 字 → ${reading.length} 字`;
+});
+
 
 /* ================================================================== */
 head("[依存]  P1 の約束を崩していない");

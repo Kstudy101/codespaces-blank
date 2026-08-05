@@ -486,6 +486,35 @@ await check("促すのは 3 回まで（ブロックは取り消せない）", a
   return "n=3 → 黙る。進みは止めたまま";
 });
 
+/* 「LINEの名前で／べつの名前で」を選んで、読み仮名を送らないまま
+   止まった人（name_source='line' かつ name_kr が空）。ここが
+   blockingStep に掛からないあいだ、名前案内 2 回 → 沈黙で、
+   誰も二度と訊かなかった ── しかも進みは止まったままなので、
+   本人からは「急に何も来なくなった」としか見えない。 */
+await check("読み仮名を待つ人には、読み方の質問を送り直す", async () => {
+  const conn = fakeConn(READY);
+  let msgs = null;
+  const r = await deliverOne(conn,
+    { ...USER, name_source: "line", name_kr: null, name_reading: null },
+    { send: async (_t, m) => { msgs = m; return {}; } });
+  assert(/reading/.test(r), `${r}（blockingStep が読み仮名待ちを見ていません）`);
+  assert(msgs && /読み方/.test(msgs[0].text),
+    `送った文面が読み方の質問ではありません: ${msgs ? msgs[0].text.split("\n")[0] : "（無し）"}`);
+  /* 選び直しの画面を送ってはいけない ── もう選んだ人なので、
+     もう一度選ばせると答えたはずの質問が戻ってくる。 */
+  assert(!/お名前の確認/.test(msgs[0].text), "選び直し（askName）を送っています");
+  assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)), "日を進めました");
+
+  /* 促す上限は名前案内と同じ口（onboarding の回数）で数える。 */
+  const capped = fakeConn({ ...READY, "SELECT COUNT\\(\\*\\) AS n FROM push_logs": [{ n: 3 }] });
+  let sent = false;
+  const r2 = await deliverOne(capped,
+    { ...USER, name_source: "line", name_kr: null, name_reading: null },
+    { send: async () => { sent = true; return {}; } });
+  assert(!sent && /待ち/.test(r2), `${r2} / 送信=${sent}`);
+  return "askReading を送り直す / 3 回で黙る";
+});
+
 console.log("\n[運勢]  3 通目。付かない日があっても、レッスンは止めない");
 
 /* 生年月日まで確かめ終わっている人。 */

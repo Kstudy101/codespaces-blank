@@ -159,7 +159,10 @@ export async function handlePostback(conn, event, { send = replyMessage } = {}) 
        ことはない（lib/render.mjs）。 */
     if (use === "line") {
       await users.setNameSource(conn, user.id, "line");
-      const disp = String(user.display_name || "").trim();
+      /* name_reading は VARCHAR(50)。表示名は 100 字まで来るので、
+         切らずに入れると errno 1406 で throw し、本人には何も返らない。
+         link.mjs の str(v, 50) と同じ切り方。 */
+      const disp = String(user.display_name || "").trim().slice(0, 50);
       const kr = kanaNameToHangul(disp);
       if (kr) {
         await users.updateName(conn, user.id,

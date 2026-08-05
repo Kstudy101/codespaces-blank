@@ -15,7 +15,7 @@
    「保有日数を削らない」「status を落とさない」といった取り決めが
    repo とここの 2 箇所に散る。
    ================================================================== */
-import { users } from "../repo/index.mjs";
+import { users, entitlements } from "../repo/index.mjs";
 import { getProfile, replyMessage } from "../line.mjs";
 import { serviceGuide, nextStep, messageForStep } from "../onboarding.mjs";
 
@@ -99,13 +99,25 @@ export async function handleFollow(conn, event,
 
      体験はリッチメニューの［受講料］からコースを選んで始める
      （handlers/checkout.mjs）。ここでするのは users に居ることを
-     確かにするところまで。
+     確かにするところまで。 */
 
-     再追加のときの status も、ここでは戻さない。買った人が戻って
-     きたかどうかは、買い直した時点で checkout.mjs が判断する ──
-     ここで一律 'trial' に戻すと、日数を持たない人が配信対象の
-     顔をして listDeliverable に並ぶ（並んでも entitlements の
-     JOIN で外れるが、数えるときに紛れる）。 */
+  /* ---- ブロックから戻ってきた人 -------------------------------------
+     upsertOnFollow は再追加で status に触らない（101 日ぶん買った人が
+     一律 'trial' に落ちないための線）。その約束はそのままにして、
+     unfollowed だけをここで**明示的に**戻す ── 戻す所が
+     creditFromStripe しか無かったので、再決済しないかぎり配信が
+     再開しなかった。message.mjs は「もう一度友だち追加すれば続きから
+     お届けします」と案内しており、文面と挙動が正面衝突していた。
+
+     戻し先は残りで決める。残りがあれば active（続きから届く）、
+     無ければ trial ── active にすると、日数を持たない人が配信対象の
+     顔をして並ぶ。接点で器を置き直す healProgress と同じ考え方。 */
+  if (user.status === "unfollowed") {
+    const back = await entitlements.firstWithRemaining(conn, user.id);
+    const status = back ? "active" : "trial";
+    await users.setStatus(conn, user.id, status);
+    user.status = status;
+  }
 
   /* 何を返すかは、名前があるかで分かれる。
 

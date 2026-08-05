@@ -606,12 +606,26 @@ a.sns-btn{color:var(--text)}   /* リンクにしても見た目はボタンの�
   border:1px solid var(--line); border-radius:9px; cursor:pointer;
 }
 .side-close:hover{opacity:1; border-color:var(--accent); color:var(--accent)}
+/* 見出しは開閉のボタン。閉じてもらうため、中身は hidden ── 隠すだけでは
+   画面に出てこないリンクに Tab で入ってしまう（.side と同じ理由）。 */
 .side-ttl{
-  font-size:.7rem; font-weight:700; letter-spacing:.12em; color:var(--text-dim);
-  margin:20px 0 8px;
+  display:flex; align-items:center; gap:6px; width:100%;
+  margin:14px 0 4px; padding:9px 11px;
+  font-family:inherit; font-size:.7rem; font-weight:700; letter-spacing:.12em;
+  text-align:left; color:var(--text-dim);
+  background:transparent; border:1px solid var(--line); border-radius:9px;
+  cursor:pointer; transition:border-color .15s, color .15s;
 }
-.side-ttl small{font-size:.9em; font-weight:400; letter-spacing:.02em; margin-left:6px}
+.side-ttl:hover{border-color:var(--accent); color:var(--accent)}
+.side-ttl:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
+.side-ttl small{font-size:.9em; font-weight:400; letter-spacing:.02em}
+.side-ttl::after{content:'▾'; margin-left:auto; letter-spacing:0; transition:transform .18s ease}
+.side-ttl[aria-expanded="true"]::after{transform:rotate(180deg)}
 .side-list{display:flex; flex-direction:column; gap:2px}
+/* 自前の display:flex がブラウザ既定の [hidden]{display:none} に勝つ。
+   この 1 行が無いと、hidden を付けても見えたまま ── 付いているのに
+   閉じない、という一番気づきにくい壊れ方をする。 */
+.side-list[hidden]{display:none}
 .side-list a{
   display:block; padding:9px 11px; border-radius:9px; line-height:1.5;
   font-size:.86rem; font-weight:700; color:var(--text); text-decoration:none;
@@ -620,9 +634,8 @@ a.sns-btn{color:var(--text)}   /* リンクにしても見た目はボタンの�
 .side-list a:hover{background:var(--surface-2); color:var(--accent)}
 .side-list a.on{background:var(--accent-soft); color:var(--accent)}
 .side-list a:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
-.side-note{font-size:.72rem; color:var(--text-dim); margin:18px 0 0; line-height:1.7}
 @media (prefers-reduced-motion:reduce){
-  .nav-open,.nav-scrim,.side,.side-list a{transition:none}
+  .nav-open,.nav-scrim,.side,.side-list a,.side-ttl,.side-ttl::after{transition:none}
 }
 @media (min-width:1180px){
   body{padding-left:280px}
@@ -663,6 +676,7 @@ footer{
 .foot-note a{color:var(--accent); text-decoration:underline}
 .foot-note a:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
 footer a{color:var(--accent); text-decoration:none; font-weight:700}
+.foot-meta{margin:10px 0 0; font-size:.78rem}
 .tagline{
   text-align:center; font-size:1.05rem; font-weight:700; color:var(--accent);
   padding:28px 0; letter-spacing:-.01em;
@@ -808,8 +822,20 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     <button class="side-close" id="nav-close" aria-label="メニューを閉じる">✕</button>
   </div>
 
-  <p class="side-ttl">読みもの<small>읽을거리</small></p>
-  <nav class="side-list" id="side-read" aria-label="読みもの">
+  <button class="side-ttl" type="button" id="side-tog-pages"
+          aria-expanded="false" aria-controls="side-pages">コンテンツ<small>콘텐츠</small></button>
+  <nav class="side-list" id="side-pages" aria-label="サイト内リンク" hidden>
+    <a href="#form-card">✍️ 名前から始めるハングル</a>
+    <a href="/omikuji">🎋 おみくじ</a>
+    <a href="/gilbang">🧭 今日の吉方位</a>
+    <a href="/amulet">🪄 お守り</a>
+    <a href="/words">📗 単語帳</a>
+    <a href="/tips">💡 韓国語の豆知識</a>
+  </nav>
+
+  <button class="side-ttl" type="button" id="side-tog-read"
+          aria-expanded="false" aria-controls="side-read">読みもの<small>읽을거리</small></button>
+  <nav class="side-list" id="side-read" aria-label="読みもの" hidden>
     <a href="#about-intro"  data-sec="about-intro">「名前で学ぶ韓国語」とは</a>
     <a href="#about-sample" data-sec="about-sample">例：「田中 愛」さんの場合</a>
     <a href="#about-jamo"   data-sec="about-jamo">ハングルは「組み立て」でできている</a>
@@ -819,20 +845,6 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     <a href="#about-faq"    data-sec="about-faq">よくある質問</a>
     <a href="#about-free"   data-sec="about-free">生年月日なしで見られるページ</a>
   </nav>
-
-  <p class="side-ttl">ページ<small>페이지</small></p>
-  <nav class="side-list" id="side-pages" aria-label="サイト内リンク">
-    <a href="#form-card">✍️ 名前を入れて診断する</a>
-    <a href="/omikuji">🎋 おみくじ</a>
-    <a href="/gilbang">🧭 今日の吉方</a>
-    <a href="/amulet">🪄 부적メーカー</a>
-    <a href="/words">📗 単語帳</a>
-    <a href="/tips">💡 韓国語の豆知識</a>
-    <a href="/privacy">🔒 プライバシーポリシー</a>
-    <a href="/contact">✉️ お問い合わせ</a>
-  </nav>
-
-  <p class="side-note">お名前・生年月日は端末の中だけで扱います。</p>
 </aside>
 
 <div class="wrap">
@@ -1555,6 +1567,8 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     をご確認ください。
   </p>
   <p><b>名前で学ぶ韓国語</b> — powered by <a href="#" id="brand">Kstudy101</a></p>
+  <p class="foot-meta"><a href="/privacy">プライバシーポリシー</a>・<a href="/contact">お問い合わせ</a></p>
+  <p class="foot-meta">お名前・生年月日は端末の中だけで扱います。</p>
 </footer>
 
 </div>
@@ -3466,6 +3480,23 @@ function closeSide(refocus){
 navOpen.addEventListener('click', openSide);
 $('nav-close').addEventListener('click', () => closeSide());
 scrim.addEventListener('click', () => closeSide());
+
+/* 見出しは開閉のボタン。開くのは 1 つだけ ── 2 つ並べて開くと
+   引き出しが縦に伸び、下の項目が画面の外へ出る。 */
+const sideSecs = [
+  { btn: $('side-tog-pages'), list: $('side-pages') },
+  { btn: $('side-tog-read'),  list: $('side-read')  },
+];
+for (const s of sideSecs){
+  s.btn.addEventListener('click', () => {
+    const open = s.btn.getAttribute('aria-expanded') !== 'true';
+    for (const t of sideSecs){
+      const on = (t === s) && open;
+      t.btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+      t.list.hidden = !on;
+    }
+  });
+}
 
 /* 狭い画面で開いたまま窓を広げると、脇柱に変わって閉じるボタンが消える。
    本文を固定したままだと、閉じる手段が無いのにスクロールできない画面が

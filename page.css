@@ -166,6 +166,7 @@ footer{
   border-top:1px solid var(--line); margin-top:48px;
 }
 footer a{color:var(--accent); text-decoration:none; font-weight:700}
+.foot-meta{margin:10px 0 0; font-size:.78rem}
 .foot-note{
   font-size:.75rem; line-height:1.85; text-align:left;
   max-width:600px; margin:0 auto 20px; padding-bottom:18px;

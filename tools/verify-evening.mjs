@@ -271,8 +271,8 @@ await check("買える人には文面 A ── 復習の後ろに 1 通、日数
     assert(qr && qr.data === "action=plan&track=beginner", JSON.stringify(qr));
     assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)),
       "勧誘で日数が動きました ── ボーナスの不変式が崩れています");
-    assert(conn.calls.some((c) => /INSERT INTO push_logs/i.test(c.sql) && c.params.includes("upsell")),
-      "upsell の記録がありません（通算 1 回の判定が壊れます）");
+    assert(conn.calls.some((c) => /INSERT INTO push_logs/i.test(c.sql) && c.params.includes("trial_end")),
+      "trial_end の記録がありません（通算 1 回の判定が壊れます）");
     return "A + 受講料を見る / days_used 不変";
   }));
 
@@ -306,15 +306,31 @@ await check("販売が開いていても、原稿が最小パッケージ未満�
     return "sellablePackages = 0 → B";
   }));
 
-await check("勧誘は通算 1 回だけ（upsell の記録で二度目を止める）", () =>
+await check("勧誘は通算 1 回だけ（trial_end の記録で二度目を止める）", () =>
   withSales("open", async () => {
     const conn = fakeConn(upsellReady({
-      "SELECT COUNT\\(\\*\\) AS n FROM push_logs": [{ n: 1 }] }));
+      "SELECT COUNT\\(\\*\\) AS n FROM push_logs":
+        (_sql, params) => [{ n: params.includes("trial_end") ? 1 : 0 }] }));
     let msgs = null;
     const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
     assert(r === "送信:2日目", r);
     assert(msgs.length === 2, `${msgs.length} 通でした（復習だけのはず）`);
-    return "n=1 → 復習だけ";
+    return "trial_end=1 → 復習だけ";
+  }));
+
+await check("残り 0 の勧誘（upsell）とは数を分ける ── 互いに干渉しない", () =>
+  withSales("open", async () => {
+    /* 承認時の修正 2。同じ種別を共有して day_number で見分ける形だと、
+       片方の入れ方が変わった日にもう片方の「1 回だけ」が黙って壊れる。
+       upsell が何件あっても、trial_end が 0 なら 2 日目の勧誘は出る。 */
+    const conn = fakeConn(upsellReady({
+      "SELECT COUNT\\(\\*\\) AS n FROM push_logs":
+        (_sql, params) => [{ n: params.includes("trial_end") ? 0 : 5 }] }));
+    let msgs = null;
+    const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
+    assert(r === "送信+勧誘:2日目", r);
+    assert(msgs.length === 3, `${msgs.length} 通でした`);
+    return "upsell=5 でも trial_end=0 なら出る";
   }));
 
 await check("体験でない人（購入者）の 2 日目には勧誘しない", () =>

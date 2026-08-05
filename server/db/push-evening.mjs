@@ -105,9 +105,10 @@ export function retryKey(userId, day, type) {
    引き直して確かめる（findDeliverable。全員ぶん取ると、勧誘のために
    夕方の一覧へ列を足し続けることになる）。
 
-   通算 1 回だけ。push_logs の upsell で数える ── 残り 0 の朝の勧誘と
-   同じ種別なので、どちらかが出ていればもう出ない。勧誘は合計で
-   少ないほうへ倒す。
+   通算 1 回だけ。push_logs の trial_end（migrations/004）で数える ──
+   残り 0 の朝の勧誘（upsell）と種別を分けるのは承認時の修正 2。
+   day_number の値で見分ける形だと、入れる値が 2 か所で独立に決まり、
+   片方を直した日にもう片方の「1 回だけ」が黙って壊れる。
 
    文面の分岐（買える/買えない）は trialUpsellNotice に書いてある。
    判定の片側 sellablePackages は価格表（priceList）と同じ関数 ──
@@ -115,7 +116,7 @@ export function retryKey(userId, day, type) {
 async function trialUpsellSection(conn, u) {
   const full = await users.findDeliverable(conn, u.id);
   if (!full || full.status !== "trial" || Number(full.current_day) !== 2) return null;
-  if (await pushlogs.countByType(conn, u.id, "upsell")) return null;
+  if (await pushlogs.countByType(conn, u.id, "trial_end")) return null;
   const availableDays = await learning.countTemplates(conn, full.track);
   const canBuy = salesAllowedFor(full) && sellablePackages(availableDays).length > 0;
   return trialUpsellNotice(full.track, { canBuy });
@@ -164,7 +165,7 @@ export async function deliverOne(conn, u, { send = pushMessage } = {}) {
     await pushlogs.logSent(conn, u.id, { dayNumber: day, pushType: "review" });
     if (upsell) {
       /* 出したことを別に残す ── これが「通算 1 回」の判定そのもの。 */
-      await pushlogs.logSent(conn, u.id, { dayNumber: 2, pushType: "upsell" });
+      await pushlogs.logSent(conn, u.id, { dayNumber: 2, pushType: "trial_end" });
       return `送信+勧誘:${day}日目`;
     }
     return `送信:${day}日目`;

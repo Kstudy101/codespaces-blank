@@ -21,11 +21,12 @@
 
 1. **§1 원고 서버 배치** — 중급·고급 1〜3일 + fortune-lines.json 3파일
    (로컬 검증 통과, File Manager 업로드 → `seed --check` → dry-run 3통은 대표 실기)
-2. **§2 코스 선택 흐름** — [docs/plan-course-onboarding.md](docs/plan-course-onboarding.md)
-   승인 + 문면 3건 확정 (승인 전 구현 금지).
-   **문면 2건(C2 연동 안내·C4 2일차 저녁 유도)은 2026-08-06 지시서로 구현·커밋
-   완료 — 단 push(=배포) 금지, §2 구현과 같은 배포로만 내보낼 것**
-   (C2 의 「코스를 고르면 그 자리에서 1일차」가 §2 없이는 거짓이 되므로)
+2. **§2 코스 선택 흐름 — 구현·배포 완료 (2026-08-06 조건부 승인·수정 3건 반영)**.
+   온보딩 말미에 track 단계 — 코스를 고르면 판매 게이트 밖에서 무료 체험이
+   시작되고 즉시 1일차. 문면 2건(C2 연동 안내·C4 2일차 저녁 유도 A/B,
+   `trial_end` 타입) 포함, migrations/004 적용. **다음: 개정판
+   [docs/live-check-line-onboarding.md](docs/live-check-line-onboarding.md) 로
+   대표 라이브 검증** (SALES_MODE 미설정 그대로)
 3. **Stripe 검증** — 테스트 키·SALES_MODE=test·SALES_TEST_USERS 투입 후
    3케이스 (결제 경로 보강 3건은 2026-08-06 배포 완료 — 아래 이력)
 4. **plan-profile 의 전제 2건** — gender 대운 반영 ①/② + privacy 문안
@@ -280,6 +281,7 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 
 | 커밋 | 내용 |
 |---|---|
+| (§2) | 코스 선택을 온보딩 말미에 — track 단계·trackpick(판매 게이트 밖)·즉시 1일차·체험 중 기한예고 억제·trial_end 신설(004)·askCourse pick 변형. C2 연동 안내 2건(7880092)과 같은 배포 |
 | `db20b17` | 아침 배치 장애 대응(승인 C=A+B) — failed 로 남은 확보 완료일을 advanceDay 없이 재조준(retryKey 동일) + `--not-after` 배송 창 상한. verify-push 48항목 (관문 580) |
 | `e1f3c9f` | 결제 경로 보강 3건 — creditPurchase·startTrial 을 트랜잭션(transact 주입)으로 / 역방향 대조 findMissingEntitlements(검출만, maintain 3.5절) / async_payment_succeeded 수용. verify-billing 56항목 |
 | `14b57f4` | §3 pending_links 청소 크론(maintain.mjs) — 폴리시의 「30분 삭제」를 코드가 지킴. 등록은 .cpanel.yml 이 배치마다 확인. 본번 실측: 만료 24건 검출 |

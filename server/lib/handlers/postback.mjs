@@ -6,6 +6,7 @@
      始める前の確認
        action=name&use=web|line        どちらの名前で呼ぶか
        action=birth&ok=1|0             生年月日が本人のものか
+       action=trackpick&track=…        コースを選ぶ ＝ 体験開始（販売ゲート外）
 
      リッチメニューと受講料（migrations/002）
        action=about                    講座の案内
@@ -38,7 +39,7 @@ import { users, learning, billing, entitlements } from "../repo/index.mjs";
 import { replyMessage, pushMessage } from "../line.mjs";
 import { nextStep, messageForStep, askReading, confirmName, nameFixed,
          onboardingDone, birthRedo, serviceGuide, fixPicker,
-         askBirthCity } from "../onboarding.mjs";
+         askBirthCity, trackStarted } from "../onboarding.mjs";
 import { cities } from "../fortune.mjs";
 import { kanaNameToHangul } from "../kana2hangul.mjs";
 import {
@@ -113,7 +114,10 @@ async function followUp(conn, userId) {
   const st = await stateOf(conn, userId);
   if (!st) return null;
   const step = nextStep(st);
-  return step ? messageForStep(step, st) : onboardingDone(st);
+  /* messageForStep は async（track 段が原稿の保有日数を引くため）。
+     conn を渡さないと track 段が null になり、要約確認に答えた人が
+     無応答で終わる。 */
+  return step ? await messageForStep(step, st, conn) : onboardingDone(st);
 }
 
 /* 返信は失敗しても処理そのものは成立させる。ここで throw すると
@@ -321,7 +325,7 @@ export async function handlePostback(conn, event,
       await users.setNameSource(conn, user.id, "line");
     }
     const st = await stateOf(conn, user.id);
-    const replied = await reply(token, [messageForStep(s, st)], send);
+    const replied = await reply(token, [await messageForStep(s, st, conn)], send);
     return { userId: user.id, action, fix: s, replied };
   }
 
@@ -438,6 +442,54 @@ export async function handlePostback(conn, event,
 
     const replied = await reply(token, [checkoutLink(track, pkg, r.url)], send);
     return { userId: user.id, action, track, pkg, sessionId: r.sessionId, replied };
+  }
+
+  /* ---- オンボーディング：コース選択（plan-course-onboarding §3）------
+     無料の入口なので販売ゲート（salesAllowedFor）を**通さない** ──
+     掛けると、Stripe が閉じているあいだ誰も始められない（この変更の
+     最大の得。verify-onboarding が不在を静的に見張る ── plans/plan/buy は
+     ゲート必須、trackpick はゲート禁止という反対方向の関門）。 */
+  if (action === "trackpick") {
+    const track = params.track;
+    if (!isTrack(track)) return { skipped: `未知の track: ${track}`, userId: user.id };
+
+    /* 原稿が体験日数ぶんも無いコースでは始めない ── 体験（action=trial）と
+       同じ上限・同じ関数。選択肢からは除いてあるが、data は書き換えて
+       戻せるのでここでも止める。 */
+    if (TRIAL_DAYS > await learning.countTemplates(conn, track)) {
+      return { userId: user.id, action, track, blocked: "原稿不足",
+               replied: await reply(token, [coursePreparing(track)], send) };
+    }
+
+    const r = await startTrialFor(conn, user, track, { transact });
+    if (!r.ok) {
+      /* 体験は使い切っている。コースだけ立てて有料の入口を案内 ──
+         active_track が立つので、同じコースに残りがあれば明朝から続き、
+         残り 0 なら既存の再購入案内（upsell）が引き継ぐ。別コースで
+         保有 0 のときは、この案内の [受講料] が唯一の入口。 */
+      await users.setActiveTrack(conn, user.id, track);
+      const replied = await reply(token, [{ type: "text",
+        text: "無料でお試しいただけるのは 1 回までです。\n［受講料］から日数をお選びください。" }], send);
+      return { userId: user.id, action, track, kind: r.kind, replied };
+    }
+
+    /* 開始の案内（문면 §7-가）→ その場で 1 日目。体験（action=trial）と
+       同じ deliver 注入・同じ後始末。 */
+    const replied = await reply(token, [trackStarted(track)], send);
+    let delivered = null;
+    try {
+      delivered = await deliver(conn, user.id);
+    } catch (e) {
+      delivered = `失敗: ${e.message}`;
+      console.error("[trackpick] 1 日目を送れません:", e.message);
+    }
+    if (delivered === "対象外" || delivered === "原稿なし") {
+      try {
+        await push(user.line_user_id, [{ type: "text",
+          text: "1 日目の準備ができしだい、お届けします。" }]);
+      } catch { /* 案内の失敗で体験開始は壊さない */ }
+    }
+    return { userId: user.id, action, track, started: true, delivered, replied };
   }
 
   /* ---- 受講料：④ 体験 ----------------------------------------------

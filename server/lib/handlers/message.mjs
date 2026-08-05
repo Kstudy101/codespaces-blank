@@ -179,7 +179,8 @@ async function pendingStep(conn, user) {
     track: user.active_track || null
   };
   const step = nextStep(state);
-  return step ? messageForStep(step, state) : null;
+  /* messageForStep は async・conn 必須（track 段が原稿の日数を引く）。 */
+  return step ? await messageForStep(step, state, conn) : null;
 }
 
 /* LINE Developers の「検証」ボタンは、返信できないダミーの

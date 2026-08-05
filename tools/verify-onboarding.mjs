@@ -758,25 +758,178 @@ check("部分状態 5 種で、次の質問が正しく導かれる", () => {
   return `${CASES.length} 状態`;
 });
 
-await acheck("最後の答えに締めの 1 通が返る（無応答で終わらない・欠損A）", async () => {
-  /* birth ok=1、他の段は済み → followUp は null ではなく締めを返す */
+await acheck("要約確認の答えに、コース選択が続く（無応答で終わらない・欠損A）", async () => {
+  /* birth ok=1、他の段は済み → followUp は track 段（コース選択）を返す。
+     選択肢は原稿が体験日数ぶんあるコースだけ（§4-나）── beginner だけ
+     원고 50、他は 0 の状況を作る。 */
   const row = [{ id: 7, line_user_id: "U", display_name: "h", name_kanji: null,
     name_reading: "はなこ", name_kr: "하나코", name_source: "web",
     status: "active", active_track: null }];
   const conn = fakeConn({
     "FROM users": row,
     "FROM saju_profiles": [{ user_id: 7, birth_date: "1990-01-01", birth_time: null,
-      birth_confirmed: 1, ohaeng_main: "목" /* サイト経由の判別子 */ }]
+      birth_confirmed: 1, ohaeng_main: "목" /* サイト経由の判別子 */ }],
+    "SELECT COUNT\\(\\*\\) AS n FROM content_templates":
+      (sql, params) => [{ n: params[0] === "beginner" ? 50 : 0 }],
+    "FROM course_entitlements": []
   });
   let sent = null;
   const r = await handlePostback(conn,
     { source: { userId: "U" }, replyToken: "rt", postback: { data: "action=birth&ok=1" } },
     { send: async (_t, m) => { sent = m; return {}; } });
   assert(r.ok === true, JSON.stringify(r));
-  assert(sent && sent.length === 1, "締めの 1 通がありません（最後の答えに無応答）");
-  assert(/準備が整いました/.test(sent[0].text), sent[0].text);
-  assert(/受講料/.test(sent[0].text), "コース未購入者に次の行動を示していません");
-  return "無応答の穴が閉じた";
+  assert(sent && sent.length === 1, "続きの 1 通がありません（最後の答えに無応答）");
+  assert(/どのコースで始めますか/.test(sent[0].text), sent[0].text);
+  assert(/あとから変更できません/.test(sent[0].text),
+    "変更不可の案内が選択画面にありません（선택 후에 말하면 늦다）");
+  const items = sent[0].quickReply?.items || [];
+  assert(items.length === 1 && items[0].action.data === "action=trackpick&track=beginner",
+    `原稿 0 のコースが選択肢に出ています: ${JSON.stringify(items.map((i) => i.action.data))}`);
+  return "要約確認 → コース選択（原稿のあるコースだけ）";
+});
+
+await acheck("コースを選んだあとの答えには、本当の締めが返る", async () => {
+  /* active_track が立っていれば段は残っていない → onboardingDone。 */
+  const row = [{ id: 7, line_user_id: "U", display_name: "h", name_kanji: null,
+    name_reading: "はなこ", name_kr: "하나코", name_source: "web",
+    status: "trial", active_track: "beginner" }];
+  const conn = fakeConn({
+    "FROM users": row,
+    "FROM saju_profiles": [{ user_id: 7, birth_date: "1990-01-01", birth_time: null,
+      birth_confirmed: 1, ohaeng_main: "목" }]
+  });
+  let sent = null;
+  const r = await handlePostback(conn,
+    { source: { userId: "U" }, replyToken: "rt", postback: { data: "action=birth&ok=1" } },
+    { send: async (_t, m) => { sent = m; return {}; } });
+  assert(r.ok === true, JSON.stringify(r));
+  assert(sent && /準備が整いました/.test(sent[0].text), sent && sent[0].text);
+  assert(/明日の朝/.test(sent[0].text), "コース選択済みの人に予告がありません");
+  return "track あり → 明日の朝の予告";
+});
+
+await acheck("選べるコースが 0 なら準備中の一言 ── 段は pending のまま", async () => {
+  /* 원고가 전 코스 3일 미만（승인 수정 3 상황）。無限の待機画面は
+     作らず、事実だけ伝える。状態は書き換えない ── 원고가 들어오면
+     다음 접점에서 자연히 다시 묻는다. */
+  const row = [{ id: 7, line_user_id: "U", display_name: "h", name_kanji: null,
+    name_reading: "はなこ", name_kr: "하나코", name_source: "web",
+    status: "active", active_track: null }];
+  const conn = fakeConn({
+    "FROM users": row,
+    "FROM saju_profiles": [{ user_id: 7, birth_date: "1990-01-01", birth_time: null,
+      birth_confirmed: 1, ohaeng_main: "목" }],
+    "SELECT COUNT\\(\\*\\) AS n FROM content_templates": [{ n: 0 }],
+    "FROM course_entitlements": []
+  });
+  let sent = null;
+  await handlePostback(conn,
+    { source: { userId: "U" }, replyToken: "rt", postback: { data: "action=birth&ok=1" } },
+    { send: async (_t, m) => { sent = m; return {}; } });
+  assert(sent && /準備中/.test(sent[0].text), sent && sent[0].text);
+  assert(!/お知らせ/.test(sent[0].text), "能動通知を約束しています");
+  assert(!conn.calls.some((c) => /UPDATE users/i.test(c.sql)),
+    "案内のために状態を書き換えています");
+  return "準備中の一言だけ・約束なし";
+});
+
+/* ---- コース選択（action=trackpick、plan-course-onboarding §3〜§4）---- */
+
+const PICK_ROW = [{ id: 7, line_user_id: "U", display_name: "h", name_kanji: null,
+  name_reading: "はなこ", name_kr: "하나코", name_source: "web",
+  status: "active", active_track: null }];
+const pickConn = (over = {}) => fakeConn({
+  "FROM users": PICK_ROW,
+  "FROM saju_profiles": [{ user_id: 7, birth_date: "1990-01-01", birth_time: null,
+    birth_confirmed: 1, ohaeng_main: "목" }],
+  "SELECT COUNT\\(\\*\\) AS n FROM content_templates": [{ n: 50 }],
+  ...over
+});
+const dupSubs = () => {
+  throw Object.assign(new Error("Duplicate entry"), { errno: 1062, code: "ER_DUP_ENTRY" });
+};
+
+await acheck("コースを選ぶと体験が始まり、その場で 1 日目が動く ── 販売が閉じていても", async () => {
+  /* この検査は SALES_MODE も法定表示 env も入れずに回る（＝closed）。
+     それでも通ること自体が「販売ゲートの外」の実測（§4-가）。 */
+  const conn = pickConn();
+  let sent = null, deliveredTo = null;
+  const r = await handlePostback(conn,
+    { source: { userId: "U" }, replyToken: "rt", postback: { data: "action=trackpick&track=beginner" } },
+    { send: async (_t, m) => { sent = m; return {}; },
+      deliver: async (_c, id) => { deliveredTo = id; return "送信:1日目"; } });
+  assert(r.started === true, JSON.stringify(r));
+  assert(sent && /で始めます！/.test(sent[0].text), sent && sent[0].text);
+  assert(/このあとすぐ「1 日目」/.test(sent[0].text), "開始案内の文面が違います");
+  assert(deliveredTo === 7, `deliverNow が呼ばれていません: ${deliveredTo}`);
+  assert(conn.calls.some((c) => /UPDATE users SET active_track/i.test(c.sql)),
+    "active_track が立っていません");
+  return "closed のまま 개시 안내 + 즉시 1일차";
+});
+
+await acheck("体験を使い切った人がコースを選ぶと、コースだけ立てて有料の入口を案内", async () => {
+  const conn = pickConn({ "INSERT INTO subscriptions": dupSubs });
+  let sent = null, delivered = false;
+  const r = await handlePostback(conn,
+    { source: { userId: "U" }, replyToken: "rt", postback: { data: "action=trackpick&track=beginner" } },
+    { send: async (_t, m) => { sent = m; return {}; },
+      deliver: async () => { delivered = true; return "送信:1日目"; } });
+  assert(r.kind === "used", JSON.stringify(r));
+  assert(!delivered, "体験を二度あげています");
+  assert(sent && /1 回まで/.test(sent[0].text), sent && sent[0].text);
+  assert(conn.calls.some((c) => /UPDATE users SET active_track/i.test(c.sql)),
+    "active_track が立っていません（明朝の合流先が無い）");
+  return "setActiveTrack + [受講料] 案内";
+});
+
+await acheck("原稿が体験日数ぶんも無いコースは、data を書き換えて名乗っても始めない", async () => {
+  const conn = pickConn({ "SELECT COUNT\\(\\*\\) AS n FROM content_templates": [{ n: 2 }] });
+  let sent = null;
+  const r = await handlePostback(conn,
+    { source: { userId: "U" }, replyToken: "rt", postback: { data: "action=trackpick&track=advanced" } },
+    { send: async (_t, m) => { sent = m; return {}; },
+      deliver: async () => "送信:1日目" });
+  assert(r.blocked === "原稿不足", JSON.stringify(r));
+  assert(sent && /準備中/.test(sent[0].text), sent && sent[0].text);
+  assert(!conn.calls.some((c) => /INSERT INTO subscriptions/i.test(c.sql)),
+    "原稿が無いのに体験を開始しました");
+  return "選択肢の外からも止める";
+});
+
+check("反対方向の関門 ── trackpick に salesAllowedFor が**無い**こと", () => {
+  /* plans/plan/buy はゲート必須、trackpick はゲート禁止。「ある」を
+     確かめる関門だけだと、無料の入口に誰かがゲートを足した日に
+     「Stripe が閉じている限り誰も始められない」へ静かに戻る。 */
+  const src = stripComments(read("server/lib/handlers/postback.mjs"));
+  const pick = src.match(/if \(action === "trackpick"\)[\s\S]*?(?=if \(action === "trial"\))/);
+  assert(pick, "trackpick の分岐が見つかりません");
+  assert(!/salesAllowedFor/.test(pick[0]),
+    "trackpick が販売ゲートを通っています ── 無料の入口が Stripe に縛られます");
+  for (const a of ["plans", "plan", "buy"]) {
+    const block = src.match(new RegExp(`if \\(action === "${a}"\\)[\\s\\S]{0,700}`))[0];
+    assert(/salesAllowedFor/.test(block), `${a} からゲートが消えています`);
+  }
+  return "trackpick 禁止 / plans・plan・buy 必須";
+});
+
+check("messageForStep の呼び出しは全部 await + conn（Promise を LINE へ流さない）", () => {
+  /* async 化したので、await を欠くと Promise オブジェクトがそのまま
+     メッセージ配列に入る ── filter(Boolean) は Promise を通す。 */
+  const FILES = ["server/lib/handlers/postback.mjs", "server/lib/handlers/message.mjs",
+                 "server/lib/handlers/follow.mjs", "server/lib/handlers/link.mjs",
+                 "server/db/push-daily.mjs"];
+  let calls = 0;
+  for (const f of FILES) {
+    for (const line of stripComments(read(f)).split("\n")) {
+      if (!line.includes("messageForStep(")) continue;
+      if (/^\s*import|from "/.test(line)) continue;
+      calls++;
+      assert(/await messageForStep\(/.test(line), `${f}: await がありません: ${line.trim()}`);
+      assert(/,\s*conn\s*\)/.test(line), `${f}: conn を渡していません: ${line.trim()}`);
+    }
+  }
+  assert(calls >= 5, `呼び出しが ${calls} 箇所しか見つかりません`);
+  return `${calls} 箇所とも await + conn`;
 });
 
 check("締めの 1 通はコースの有無で分かれる", () => {
@@ -824,8 +977,10 @@ await acheck("ONBOARD_COLUMNS を全経路が運ぶ ── 欠けは undefined �
   const { ONBOARD_COLUMNS } = await import("../server/lib/onboarding.mjs");
   assert(ONBOARD_COLUMNS.length >= 9, `一覧が短すぎます: ${ONBOARD_COLUMNS.length}`);
 
-  /* users 由来の列と saju 由来の列を分けて見る。 */
-  const USER_COLS = ["name_kr", "name_source", "display_name"];
+  /* users 由来の列と saju 由来の列を分けて見る。track は users 側
+     （active_track の別名）なので getSajuProfile には無い ── 経路ごとの
+     運搬はこの下で別に見る。 */
+  const USER_COLS = ["name_kr", "name_source", "display_name", "track"];
   const SAJU_COLS = ONBOARD_COLUMNS.filter((c) => !USER_COLS.includes(c));
 
   /* ① 配信経路（DELIVERABLE_SQL）── バッチの askOnboarding が使う。 */
@@ -876,6 +1031,9 @@ await acheck("ONBOARD_COLUMNS を全経路が運ぶ ── 欠けは undefined �
     for (const c of SAJU_COLS) {
       assert(fn.includes(c), `${file} の ${fnName} が ${c} を運んでいません`);
     }
+    /* track（users 側の別名）も全経路が明示的に置く ── PENDING.track が
+       読むので、欠けると要約確認の済んだ人にコースを二度と訊かない。 */
+    assert(fn.includes("track"), `${file} の ${fnName} が track を運んでいません`);
   }
   return `${ONBOARD_COLUMNS.length} 列 × ${discovered.length} 経路（自動探索）`;
 });

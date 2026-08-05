@@ -754,17 +754,16 @@ await acheck("夕方の対象は「今朝の学習配信が届いた人」だけ
   return "learning / sent / trial・active";
 });
 
-await acheck("push_type は 8 種。ENUM に無い値を DB へ通さない", async () => {
-  assert(pushlogs.PUSH_TYPES.length === 8, pushlogs.PUSH_TYPES.join(", "));
+await acheck("push_type は 9 種。ENUM に無い値を DB へ通さない", async () => {
+  assert(pushlogs.PUSH_TYPES.length === 9, pushlogs.PUSH_TYPES.join(", "));
 
-  /* ENUM は 3 か所にある。schema.sql が作るときの形、001 が
-     onboarding を足した形、002 が expiring / resume を足した形。
-     いちばん新しい方と突き合わせる ── 古い方だけ見ていると、
-     足した種別が「コードにはあるが DB に無い」まま通る。 */
-  const M002 = read("server/db/migrations/002-per-course-billing.sql");
-  const inSchema = M002.match(/push_type[\s\S]*?ENUM\(([^)]*)\)/)[1];
+  /* ENUM は migrations に積み重なる（001 onboarding / 002 expiring・resume /
+     004 trial_end）。いちばん新しい 004 と突き合わせる ── 古い方だけ
+     見ていると、足した種別が「コードにはあるが DB に無い」まま通る。 */
+  const M004 = read("server/db/migrations/004-trial-end-pushtype.sql");
+  const inSchema = M004.match(/push_type[\s\S]*?ENUM\(([^)]*)\)/)[1];
   for (const t of pushlogs.PUSH_TYPES) {
-    assert(inSchema.includes(`'${t}'`), `${t} が migrations/001 の ENUM にありません`);
+    assert(inSchema.includes(`'${t}'`), `${t} が migrations/004 の ENUM にありません`);
   }
   /* schema.sql 側は作った直後の 5 種のまま。migrations が
      流れていないと 6 種目が入らないので、そこも見ておく。 */

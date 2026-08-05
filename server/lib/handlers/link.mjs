@@ -163,7 +163,9 @@ async function greet(conn, user, { send = pushMessage } = {}) {
   const step = nextStep(state);
   const messages = [
     serviceGuide({ nameJa: user.name_reading || user.name_kanji }),
-    messageForStep(step, state)
+    /* async・conn 必須（track 段）。await を欠くと Promise がそのまま
+       LINE へ行く ── filter(Boolean) は Promise を通す。 */
+    await messageForStep(step, state, conn)
   ].filter(Boolean);
 
   try {

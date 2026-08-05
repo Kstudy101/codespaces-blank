@@ -22,11 +22,15 @@ import { jstDate, jstDateTime, jstDayRange } from "../jst.mjs";
    onboarding は名前・生年月日・コースの確認。数えるために種別を
    分けている ── 答えない人に毎朝送り続けるとブロックされ、
    ブロックは取り消せない。 */
-/* expiring … 残り 2 日の予告（migrations/002）
-   resume   … 買い直したときの「続きから / 最初から」の確認 */
+/* expiring  … 残り 2 日の予告（migrations/002）
+   resume    … 買い直したときの「続きから / 最初から」の確認
+   trial_end … 体験 2 日目の夕方の勧誘（migrations/004）。upsell と
+               分けるのは「通算 1 回」の判定を種別の存在で行うため ──
+               day_number の値で見分ける形は、入れる値が 2 か所で
+               独立に決まって片方だけ直した日に壊れる */
 export const PUSH_TYPES = Object.freeze(
   ["learning", "review", "quiz", "upsell", "completion", "onboarding",
-   "expiring", "resume"]);
+   "expiring", "resume", "trial_end"]);
 
 function assertType(t) {
   if (!PUSH_TYPES.includes(t)) {

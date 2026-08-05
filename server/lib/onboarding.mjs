@@ -9,9 +9,13 @@
 
      1  名前     ウェブで入れた名前で呼ぶか、別の名前にするか
      2  生年月日 ウェブに入れたものが本人のものか
+     3  コース   どの講座で始めるか（選ぶとその場で体験 3 日が始まる）
 
-   コースは 3 つ目の段だったが、買うときに選ぶようになったので
-   ここから外した（migrations/002 / lib/handlers/checkout.mjs）。
+   コースは一度ここから外れて［受講料］の中にあった（migrations/002）。
+   その形だと、販売が閉じているあいだ無料の体験すら始められない ──
+   オンボーディングを完走しても何も来ない袋小路になっていたので、
+   段として戻した（plan-course-onboarding.md）。無料の入口なので
+   販売ゲート（salesAllowedFor）は通らない。
 
    【状態の列を作らなかった理由】
    「今どの段まで進んだか」を列で持つと、実際の中身（name_source が
@@ -28,9 +32,6 @@
    ログインを要らなくしてある。その値のまま LINE へ引き継ぐと、
    毎朝 101 回、別人の運勢が届く。
    ================================================================== */
-/* コースの一覧はもう要らない（買うときに選ぶ。lib/handlers/checkout.mjs）。
-   使わない import を残すと、この段でまだコースを扱っているように読める。 */
-
 /* 診断ページ。名前を入れ直す道はここしか無い（下の注記を参照）。 */
 const SITE_URL = process.env.SITE_URL || "https://www.kstudy101.jp";
 
@@ -38,20 +39,25 @@ const SITE_URL = process.env.SITE_URL || "https://www.kstudy101.jp";
    （2026-08-05 리뷰 수정 1）。読み込みは要約確認を組む時だけ。 */
 import { cities } from "./fortune.mjs";
 
-/* ---- コースはここに無い（migrations/002 以降）------------------------
-   前は 3 段目が「コース選択」だった。今はコースを**買うときに**選ぶ
-   （リッチメニュー → 受講料 → コース → 価格表 → 決済）ので、
-   始める前に訊くことではなくなった。
+/* コース段の部品。文面（askCourse）は checkout のものをそのまま使う ──
+   写しを持つと、コースの説明を直した日に選択画面だけ古くなる。
+   notReady は「選べるコースが 0」のときの案内（能動通知は約束しない）。 */
+import { askCourse, notReady } from "./handlers/checkout.mjs";
+import { TRACKS, TRACK_LABELS, countTemplates } from "./repo/learning.mjs";
+import { TRIAL_DAYS } from "./repo/billing.mjs";
+import { listByUser } from "./repo/entitlements.mjs";
 
-   段に残したままにすると、まだ何も買っていない人に毎朝
-   「コースを選んでください」が飛び、押しても買う所へ行けない。 */
 /* LINE 直接流入の 4 段（bdate〜bgender）を挟む（plan-line-onboarding.md）。
    サイト経由の人は値が既にあるので自然に飛ぶ ── 分岐コードは無い。
    新 4 段は ohaeng_main が空の人（＝サイト診断を通っていない人）だけ。
    [리뷰 수정 2] BLOCKING は name/reading のまま ── 売るのは講座で、
-   運勢は付加物。生年月日が無くても払った人のレッスンは止めない。 */
+   運勢は付加物。生年月日が無くても払った人のレッスンは止めない。
+
+   track は最後（plan-course-onboarding §2）。要約確認（birth_confirmed）が
+   済んだ人が「始める準備のできた人」で、その前に挟むと確認と順序が
+   混ざる。 */
 export const STEPS = Object.freeze(
-  ["name", "reading", "bdate", "btime", "bplace", "bgender", "birth"]);
+  ["name", "reading", "bdate", "btime", "bplace", "bgender", "birth", "track"]);
 
 /* 出生地。fortune.mjs が読む唯一の場所（raw_result_json.city）。 */
 export function cityOf(u) {
@@ -70,7 +76,10 @@ export function cityOf(u) {
 export const ONBOARD_COLUMNS = Object.freeze([
   "name_kr", "name_source", "display_name",
   "birth_date", "birth_time", "birth_confirmed",
-  "gender", "ohaeng_main", "raw_result_json"
+  "gender", "ohaeng_main", "raw_result_json",
+  /* track 段（PENDING.track）が読む。行の別名は track（active_track の
+     alias ── listDeliverable と同じ形）。 */
+  "track"
 ]);
 
 
@@ -120,7 +129,13 @@ const PENDING = Object.freeze({
      直接流入は要約確認（全項目を 1 画面 ── 決定 2-2）。
      どちらも birth_confirmed が立って終わる ── 意味は同じ
      「生年月日情報が確定した」。 */
-  birth: (u) => !!u.birth_date && !u.birth_confirmed
+  birth: (u) => !!u.birth_date && !u.birth_confirmed,
+
+  /* 3. コース。確認の済んだ人（birth_confirmed）だけ。値（track ＝
+     active_track の別名）から導出 ── 列追加 0 の原則のまま。
+     BLOCKING には入れない ── 未選択者はそもそも配信名簿の外
+     （listDeliverable が active_track で JOIN）で、止める相手が居ない。 */
+  track: (u) => !!u.birth_date && !!u.birth_confirmed && !u.track
 });
 
 export function nextStep(u = {}) {
@@ -328,7 +343,12 @@ export function confirmName({ reading, kr }) {
 
    コースが決まっていない人（買う前）には次の行動を 1 つだけ示す。
    決まっている人には明日の朝を予告する ── どちらも「これで終わり
-   ではない」ことが伝わればよく、長くしない。 */
+   ではない」ことが伝わればよく、長くしない。
+
+   track 段が入ってからは、ふつうの流れでは track が nextStep に
+   なるのでここまで来ない。track 無しでここへ来るのは変則の行
+   （birth_date が無いサイト経由など）だけ ── その保険として
+   [受講料] への案内を残す。 */
 export function onboardingDone({ track = null } = {}) {
   return {
     type: "text",
@@ -407,15 +427,46 @@ export function birthRedo() {
 }
 
 
-/* ---- 4. コースは、ここでは選ばない ----------------------------------
-   前はここに askTrack / trackChosen / trackAlready があった。
-   コースは買うときに選ぶようになった（リッチメニュー → 受講料 →
-   コース → 価格表 → 決済）ので、文面ごと lib/handlers/checkout.mjs へ
-   移した。
+/* ---- 4. コース選択（plan-course-onboarding §2〜§4）------------------
+   要約確認が済んだ人に、無料の入口として訊く。文面は checkout の
+   askCourse をそのまま使い、ボタンの行き先だけ trackpick に替える
+   （写しを持たない）。選択肢は原稿が体験日数ぶんあるコースだけ ──
+   3 日未満のコースを出すと、選んだ直後に「原稿なし」で止まる。
 
-   残しておくと、まだ何も買っていない人に「初級 / 中級 / 上級」だけ
-   届き、押しても進む先が無い ── 選んだつもりで何も始まらない、
-   という一番説明しにくい状態になる。 */
+   選べるコースが 0 なら notReady()（準備中の一言）を返して、段は
+   pending のまま ── 原稿が入れば次の接点で自然にまた訊く。能動の
+   発信は askOnboarding（push-daily）の ONBOARD_NOTICE_MAX が段に
+   関係なく先に数えるので、無限には繰り返さない（승인 수정 3）。 */
+async function askTrackStep(conn, u) {
+  const owned = (await listByUser(conn, u.id)).map((e) => e.track);
+  const selectable = [];
+  for (const t of TRACKS) {
+    if (TRIAL_DAYS <= await countTemplates(conn, t)) selectable.push(t);
+  }
+  if (!selectable.length) return notReady();
+  return askCourse({ owned, pick: { tracks: selectable } });
+}
+
+/* 開始の案内（문면 §7-가・2026-08-06 확정）。押した直後の 1 通で、
+   このすぐ後ろに deliverNow の 1 日目が続く（handlers/postback.mjs）。 */
+export function trackStarted(track) {
+  const l = TRACK_LABELS[track];
+  return {
+    type: "text",
+    text: [
+      `${l.ja}（${l.kr}）で始めます！`,
+      "",
+      "このあとすぐ「1 日目」をお届けします。",
+      "明日からは、毎日この時間にお届けします。",
+      "　朝 7 時　文法 ＋ 会話 ＋ 単語 3 語（＋ 今日の運勢）",
+      "　夕 6 時　その日の文法をもう一度（復習）",
+      "",
+      `まずは ${TRIAL_DAYS} 日間、無料でお試しいただけます。`,
+      "",
+      "お名前から始まる韓国語、どうぞ楽しんでいってください！"
+    ].join("\n")
+  };
+}
 
 
 /* ---- 次の 1 通を作る ------------------------------------------------
@@ -552,7 +603,14 @@ export function fixPicker() {
   };
 }
 
-export function messageForStep(step, u = {}) {
+/* track 段だけ DB が要る（原稿の保有日数で選択肢を絞る）ので、
+   全体を async にして conn を受ける。呼ぶ側は**必ず await して conn を
+   渡す** ── 渡さないと track 段が null になり、要約確認に答えた人が
+   無応答で終わる（verify-onboarding が呼び出し形を静的に見張る）。 */
+export async function messageForStep(step, u = {}, conn = null) {
+  if (step === "track") {
+    return conn ? askTrackStep(conn, u) : null;
+  }
   if (step === "name") {
     return askName({
       webName: u.name_kanji || u.name_kr,

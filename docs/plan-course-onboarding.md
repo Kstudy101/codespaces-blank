@@ -2,7 +2,11 @@
 
 작성: 2026-08-06 / 지시: 착수 대기 4건 §2 / 기준 커밋: `cc17aaa` 이후
 
-> **상태: 승인 대기. 승인 전 구현 금지.** 문면 3건(§7)은 대표 확정 대상.
+> **상태: 조건부 승인 (2026-08-06 지시서) — 수정 3건 반영 완료, 구현 착수.**
+> 수정 1: §6 판매 불가 시 「보류」→ **발송(문면 라·quickReply 없음)**.
+> 수정 2: `upsell` 타입 공유 폐기 → **`trial_end` 신설**(migrations/004).
+> 수정 3: 재고 0 안내의 발송 상한 명시(§4-나).
+> 문면 4건(§7)은 같은 지시서로 확정.
 > 대표 결정 재확인(§2-1): **「체험 신청 즉시 1일차 발송」 유지** — 이전 지시의
 > deliverNow 제거는 취소, postback 체험 분기는 현행 배포분 그대로.
 
@@ -68,8 +72,15 @@
   plans/plan/buy 는 게이트 필수, trackpick 은 게이트 금지)
 - **(나) 원고 보유일수 가드** — 체험 가드와 **같은 함수**(`TRIAL_DAYS >
   countTemplates(track)`) 사용. 원고 3일 미만 코스는 askCourse 선택지에서 제외.
-  **고를 코스가 0개면 그 사실을 안내**하고 단계는 pending 인 채 유지(무한 대기
-  화면 금지 — 원고가 들어오면 다음 접점에서 자연히 다시 물음)
+  **고를 코스가 0개면 그 사실을 안내**(`notReady()` 재사용 — 「準備中·잠시
+  기다려달라」, 능동 통지 약속 없음)하고 단계는 pending 인 채 유지(무한 대기
+  화면 금지 — 원고가 들어오면 다음 접점에서 자연히 다시 물음).
+  **발송 상한 (승인 수정 3)**: 이 안내의 능동 발신 경로는 아침 배치의
+  `askOnboarding` 공용 경로뿐이고, 거기에는 기존 `ONBOARD_NOTICE_MAX`(3회)
+  상한이 단계 무관하게 걸려 있다(발신 전에 `countByType(onboarding)` 선판정).
+  단, track 은 BLOCKING 이 아니고 미선택자는 배신 명단(JOIN) 밖이므로,
+  실제 반복 접점은 반응형(요약 확인 직후·이용자가 말 걸었을 때)뿐 —
+  이용자 주도라 스팸이 아니다. 관문은 「상한 판정이 문면 조립보다 앞」을 검사
 
 ## 5. 기한 예고 억제 (지시 2-5 — 필수)
 
@@ -84,22 +95,27 @@
 
 ## 6. 2일차 저녁 결제 유도 (지시 2-6 — 신규)
 
-- **저녁 배치**(push-evening)에서 그날 복습을 **보낸 뒤** 1통 추가
-- 조건: 체험 중 && `current_day === 2`
-- **통산 1회만** — `push_logs` 의 `upsell` 타입으로 기록해 재발송 차단
-  (§3의 잔여 0 안내와 같은 타입이지만 `day_number=2` 로 구별 가능)
+- **저녁 배치**(push-evening)에서 그날 복습 뒤에 동봉 1통(통지 1회)
+- 조건: 체험 중(`status='trial'`) && `current_day === 2`
+- **통산 1회만 (승인 수정 2)** — **`trial_end` 타입 신설**(migrations/004 로
+  ENUM 확장)로 기록해 재발송 차단. ~~`upsell` 공유 + `day_number=2` 구별~~ 은
+  기각 — 구별을 값의 연산에 맡기면 `day_number` 에 무엇을 넣는지가 두 곳에서
+  독립적으로 정해지고, 한쪽이 바뀌면 다른 쪽의 「1회만」이 조용히 깨진다.
+  기존 `upsell` 은 잔여 0 안내 전용으로 남김
 - **일수 불소비** — 저녁 배치의 불변식(`advanceDay` 미호출)을 깨지 않는다.
   관문이 감시 (verify-evening 확장)
-- **판매 불가 상태 분기** — 유도의 quickReply 가 「準備中」으로 이어지면
-  헛걸음. `salesAllowedFor(user)` 를 **발송 전에** 보고:
-  - 판매 가능 → §7-다 문면 + [受講料] quickReply
-  - 판매 불가 → **발송 보류** (그날 저녁엔 안 보냄. 판매가 열린 뒤의 접점은
-    잔여 0 재구매 안내가 담당) — 문면을 바꿔 보내는 안보다 단순하고, 살 수
-    없는 사람에게 결제 이야기를 꺼내지 않음. **대표 확정 대상** (§7)
+- **판매 불가 상태 분기 (승인 수정 1 — 보류안 기각, 발송으로)** —
+  「살 수 있다 = `salesAllowedFor(user)` AND 노출 가능 패키지 ≥ 1」
+  (후자는 가격표와 같은 `sellablePackages`):
+  - 살 수 있음 → §7-다 문면 + [受講料を見る] quickReply
+  - 살 수 없음 → **§7-라 문면으로 발송, quickReply 없음** — 보류하면 체험이
+    조용히 끝난다(예고 없는 침묵의 재발). 「끝이 다가온다」와 「어디를 보면
+    되는지」만 전하고, 능동 통지(「お知らせします」)는 약속하지 않는다 —
+    알릴 기능이 코드에 없다
 
-## 7. 문면 3건 (대표 확정 대상 — 초안)
+## 7. 문면 4건 (2026-08-06 지시서로 확정)
 
-**(가) 개시 안내** (즉시 발송 반영판, 지시 초안 그대로):
+**(가) 개시 안내** — **확정, 초안 그대로**:
 
 ```
 初級（초급）で始めます！
@@ -114,11 +130,11 @@
 お名前から始まる韓国語、どうぞ楽しんでいってください！
 ```
 
-**(나) 코스 변경 불가 안내** — 「선택 화면에」(고른 뒤 말하면 늦다):
+**(나) 코스 변경 불가 안내** — **확정**. 「선택 화면에」(고른 뒤 말하면 늦다):
 askCourse 문면에 1행 추가·유지: 「あとから変更できませんので、じっくりお選びください。」
 (체험 1회 제한과 정합 — 코스를 바꾸는 유일한 길은 추가 구매)
 
-**(다) 2일차 저녁 결제 유도** — 판매 가능할 때만:
+**(다) 2일차 저녁 결제 유도 — 살 수 있을 때** — **확정**:
 
 ```
 無料でお試しいただける 3 日分のうち、明日が最後の 1 日です。
@@ -129,29 +145,63 @@ askCourse 문면에 1행 추가·유지: 「あとから変更できませんの
 追加された日数は、いまの続きに足されます。
 ```
 
-- 판매 불가 시: **발송 보류** (§6) — 이 선택 자체도 확정 부탁
+quickReply: `受講料を見る` → `action=plan&track=<현재 코스>`
+
+**(라) 2일차 저녁 결제 유도 — 살 수 없을 때** — **신규 확정 (승인 수정 1)**:
+
+```
+無料でお試しいただける 3 日分のうち、明日が最後の 1 日です。
+
+初級（초급）は 2 日目まで進みました。
+
+続きの受講料のご案内は、ただいま準備中です。
+準備が整いましたら、下のメニューの［受講料］からご確認いただけます。
+```
+
+quickReply 없음. ★「お知らせします」류의 능동 통지 약속 금지 —
+판매가 열린 날 대기자에게 알리는 기능이 코드에 없다 (관문이 문구를 감시).
+판매 개시 시 대기자 통지는 별건 후보로만 기록 (이번 범위 밖).
 
 ## 8. 검증 계획 (지시 2-8)
 
-- 「체험 즉시 발송」 기존 관문 4건(verify-billing)을 **새 사입(trackpick →
-  즉시 발송)도 검사**하도록 확장 — 기존 trial 분기 검사와 병렬
+- 「체험 즉시 발송」의 새 사입(trackpick → 즉시 발송) 검사는
+  **verify-onboarding 에 배치** (handlePostback 픽스처가 거기 있음):
+  성공 시 개시 안내(가)+deliver 호출 / used → setActiveTrack+유료 안내·
+  deliver 불호출 / 원고 부족 → 미개시. startTrialFor 자체의 트랜잭션
+  검사는 기존 verify-billing 이 그대로 커버(같은 함수 재사용)
 - 부분 상태 × 단계 도출 전수에 `track` 포함 (verify-onboarding 확장):
   birth_confirmed 전엔 track 안 물음 / active_track 있으면 종결(締め) /
   체험 사용자·미사용자 분기 / 원고 0 코스 제외
-- 저녁 유도: 1회만·일수 불소비·판매 불가 시 보류 (verify-evening 확장)
+- 저녁 유도 (지시서 §4 추가분 포함): **판매 불가 시 (라)가 발송되는지**(보류가
+  아닌)·quickReply 부재·「お知らせ」 문구 부재 / **`trial_end` 1회 보장** —
+  잔여 0 안내(`upsell`)와 서로 간섭하지 않는지(타입별 계수) / 일수 불소비 /
+  분기 3종: ①판매 가능+패키지 있음 → (다) ②`SALES_MODE=closed` → (라)
+  ③판매 가능하지만 원고 3일치 코스 → (라) (verify-evening 확장)
 - 기한 예고 억제: 체험 중 억제·유료자 유지 (verify-push 확장)
+- **`SALES_MODE=closed`에서 코스 선택 동작** — 관문(trackpick 에
+  salesAllowedFor 부재 정적 검사)과 라이브(개정판 live-check §3-★) 양쪽
+- 재고 0 안내: 상한 판정(`countByType`)이 문면 조립보다 앞 (verify-push 기존
+  「促すのは 3 回まで」가 단계 무관으로 커버 — §4-나)
 - 기존 19종 회귀
 
 ## 9. 수정 파일 (예상)
 
 | 경로 | 변경 |
 |---|---|
-| `server/lib/onboarding.mjs` | STEPS+track·PENDING·messageForStep / onboardingDone 의 미구매 문면은 track 단계로 대체되므로 정리 |
-| `server/lib/handlers/checkout.mjs` | askCourse 에 data 변형 opts + 원고 0 코스 제외 |
-| `server/lib/handlers/postback.mjs` | `action=trackpick` 신설 (startTrialFor·deliverNow 재사용) |
-| `server/db/push-daily.mjs` | 체험 중 expiringNotice 억제 |
-| `server/db/push-evening.mjs` | 2일차 저녁 유도 (조건·1회·보류 분기) |
-| `tools/verify-billing·onboarding·evening·push` | §8 |
+| `server/lib/onboarding.mjs` | STEPS+track·PENDING·messageForStep(track 은 conn 필요 → async 화) / 개시 안내 trackStarted |
+| `server/lib/handlers/checkout.mjs` | askCourse 에 pick(data 변형) opts + 변경 불가 1행 / (다)(라)는 trialUpsellNotice (문면 2건 커밋에서 선반영) |
+| `server/lib/handlers/postback.mjs` | `action=trackpick` 신설 (startTrialFor·deliverNow 재사용, salesAllowedFor 불호출) |
+| `server/lib/pages.mjs` | C2 연동 안내 2건 (별도 지시서 — 같은 배포, 커밋 7880092 선반영) |
+| `server/db/push-daily.mjs` | 체험 중(구매 0) expiringNotice 억제 |
+| `server/db/push-evening.mjs` | 2일차 저녁 유도 — trial_end 1회·A/B 분기·불소비 |
+| `server/db/migrations/004-trial-end-pushtype.sql` | push_type ENUM 에 trial_end 추가 (승인 수정 2) |
+| `server/lib/repo/pushlogs.mjs` | PUSH_TYPES 에 trial_end |
+| `tools/verify-billing·onboarding·evening·push·server` | §8 + ENUM 대조 갱신 |
+
+구현 메모: PENDING.track 은 정규화된 상태행(`track` 별칭)을 읽으므로
+`!u.track` (계획 스니펫의 `active_track` 은 alias 반영으로 정정).
+배포 단위: **이 계획 + C2 문면 2건 + 라이브 지시서 개정판을 한 push 로** —
+§3(결제 보강 e1f3c9f)·§4(배치 장애 db20b17)와는 분리(이미 각각 배포됨).
 
 ## 10. 제외 (scope 밖)
 

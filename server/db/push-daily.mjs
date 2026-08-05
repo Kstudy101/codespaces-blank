@@ -38,7 +38,7 @@
    ================================================================== */
 import { createHash } from "node:crypto";
 import { getPool, closePool } from "../lib/db.mjs";
-import { users, learning, pushlogs, entitlements, lapses } from "../lib/repo/index.mjs";
+import { users, learning, pushlogs, entitlements, lapses, billing } from "../lib/repo/index.mjs";
 import { pushMessage, isUnreachable } from "../lib/line.mjs";
 import { jstDate, jstDateTime } from "../lib/jst.mjs";
 import { renderDay, renderReviewQuiz, renderCheckpointQuiz, nameMissingNotice } from "../lib/render.mjs";
@@ -253,7 +253,7 @@ async function askOnboarding(conn, u, step, { send = pushMessage } = {}) {
   if (asked >= ONBOARD_NOTICE_MAX) return `${step} 待ち`;
   if (DRY || DISABLED) return `${DRY ? "予定" : "停止中"}:${step} の確認`;
 
-  const message = messageForStep(step, u);
+  const message = await messageForStep(step, u, conn);
   if (!message) return `${step} 待ち`;
 
   try {
@@ -488,7 +488,12 @@ export async function deliverOne(conn, u, { send = pushMessage, load = loadLines
   const willRemain = remaining - 1;
   const entitledNow = Number(u.days_entitled ?? 0);
   let warned = false;
+  /* 体験中（購入 0）には予告を付けない（plan-course-onboarding §5）──
+     体験 3 日は remaining 3→2 が初日に来るので、始めた直後の 1 通に
+     「あと 2 日」が付いてしまう。体験の締めは 2 日目の夕方の勧誘
+     （trial_end、push-evening）が担い、購入者の予告は現行のまま。 */
   if (willRemain === EXPIRING_AT
+      && (await billing.hasPurchases(conn, u.id))
       && !(await pushlogs.countForDay(conn, u.id, entitledNow, "expiring"))) {
     messages = [...messages,
       expiringNotice(u.track, { remaining: EXPIRING_AT, currentDay: next })];

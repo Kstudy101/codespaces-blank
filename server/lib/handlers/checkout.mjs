@@ -176,32 +176,45 @@ export function upsellNotice(track, { lastDay = 0 } = {}) {
 
 /* ---- ① コースを選ぶ ------------------------------------------------- */
 
-export function askCourse({ owned = [] } = {}) {
+/* pick を渡すとオンボーディングのコース選択になる（plan-course-onboarding
+   §2）── 文面（コースの説明）は共有し、**ボタンの data だけ**を
+   trackpick に替える。写しを持つと、説明を直した日に選択画面だけ
+   古くなる。pick.tracks は原稿が体験日数ぶんあるコースだけ（§4-나）。
+
+   「あとから変更できません」の 1 行は両方に出す（문면 §7-나 확정）──
+   買うときも選ぶときも、コースを替える唯一の道は追加購入で同じ。 */
+export function askCourse({ owned = [], pick = null } = {}) {
   /* 既に持っているコースには印を付ける。付けないと、買ったことを
      忘れて同じコースをもう一度買う ── 返金の手間になる。 */
   const mark = (t) => (owned.includes(t) ? "（受講中）" : "");
+  const DESC = {
+    beginner:     "　ハングルの読み書きから。韓国語がはじめての方",
+    intermediate: "　文と文をつなぐ・敬語。あいさつができる方",
+    advanced:     "　書き言葉・ニュースの韓国語。日常会話に困らない方"
+  };
+  const list = pick ? pick.tracks : TRACKS;
   return {
     type: "text",
     text: [
-      "どのコースの受講料をご覧になりますか？",
+      pick ? "どのコースで始めますか？" : "どのコースの受講料をご覧になりますか？",
       "",
-      `初級（초급）${mark("beginner")}`,
-      "　ハングルの読み書きから。韓国語がはじめての方",
-      `中級（중급）${mark("intermediate")}`,
-      "　文と文をつなぐ・敬語。あいさつができる方",
-      `上級（고급）${mark("advanced")}`,
-      "　書き言葉・ニュースの韓国語。日常会話に困らない方",
+      ...list.flatMap((t) => [
+        `${TRACK_LABELS[t].ja}（${TRACK_LABELS[t].kr}）${mark(t)}`, DESC[t]
+      ]),
       "",
-      "コースはそれぞれ 101 日ぶんの別の講座です。"
+      "コースはそれぞれ 101 日ぶんの別の講座です。",
+      "あとから変更できませんので、じっくりお選びください。"
     ].join("\n"),
     quickReply: {
-      items: TRACKS.map((t) => ({
+      items: list.map((t) => ({
         type: "action",
         action: {
           type: "postback",
           label: `${TRACK_LABELS[t].ja}（${TRACK_LABELS[t].kr}）`.slice(0, 20),
-          data: `action=plan&track=${t}`,
-          displayText: `${TRACK_LABELS[t].ja} の受講料を見ます`
+          data: pick ? `action=trackpick&track=${t}` : `action=plan&track=${t}`,
+          displayText: pick
+            ? `${TRACK_LABELS[t].ja} で始めます`
+            : `${TRACK_LABELS[t].ja} の受講料を見ます`
         }
       }))
     }

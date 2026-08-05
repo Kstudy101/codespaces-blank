@@ -435,6 +435,37 @@ await check("ふつうの障害では、対象から外さない", async () => {
   return "500 → 残す";
 });
 
+console.log("\n[期限の予告]  体験中には出さない（plan-course-onboarding §5）");
+
+await check("体験中（購入 0）の朝に「あと 2 日」を付けない", async () => {
+  /* 体験 3 日は remaining 3→2 が初日に来る ── 抑制しないと、始めた
+     直後の 1 通に期限の予告が付く。体験の締めは 2 日目の夕方の勧誘
+     （trial_end、push-evening）が担う。 */
+  const { EXPIRING_AT } = await import("../server/lib/handlers/checkout.mjs");
+  const u = { ...USER, days_entitled: USER.days_used + EXPIRING_AT + 1 };
+  const conn = fakeConn(READY);              /* purchases は空 ＝ 体験中 */
+  let msgs = null;
+  await deliverOne(conn, u, { send: async (_t, m) => { msgs = m; return {}; } });
+  assert(msgs, "送信が呼ばれていません");
+  assert(!msgs.some((m) => /お預かりしている日数/.test(m.text)),
+    "体験中なのに期限の予告が付いています");
+  assert(!conn.calls.some((c) => /INSERT INTO push_logs/i.test(c.sql) && c.params.includes("expiring")),
+    "出していない予告を記録しています");
+  return "購入 0 → 予告なし";
+});
+
+await check("購入者の予告は現行のまま出る（抑制しすぎない）", async () => {
+  const { EXPIRING_AT } = await import("../server/lib/handlers/checkout.mjs");
+  const u = { ...USER, days_entitled: USER.days_used + EXPIRING_AT + 1 };
+  const conn = fakeConn({ ...READY, "FROM purchases": [{ id: 1 }] });
+  let msgs = null;
+  await deliverOne(conn, u, { send: async (_t, m) => { msgs = m; return {}; } });
+  assert(msgs, "送信が呼ばれていません");
+  assert(msgs.some((m) => /お預かりしている日数/.test(m.text)),
+    "購入者への予告まで消えています");
+  return "購入あり → 予告あり";
+});
+
 console.log("\n[配る時刻]  cron ではなく、こちらで日本時間を見る");
 
 await check("日本の指定時刻より前なら、何もしない", () => {

@@ -169,10 +169,7 @@ export async function handleFollow(conn, event,
 
 /* 講座の案内 ＋ 次に訊くこと 1 つ。訊くことが無ければ案内だけ。
    段は lib/onboarding.mjs が中身から導く（列で持たない）。
-
-   コースはここで訊かない ── 買うときに選ぶので、まだ何も持って
-   いない人に「初級 / 中級 / 上級」だけ出しても進む先が無い。
-   代わりにリッチメニューが常に画面下に出ている。 */
+   コースも段の一つ（track ── 選ぶとその場で体験が始まる）。 */
 async function onboardingMessages(conn, user) {
   const saju = await users.getSajuProfile(conn, user.id);
   /* ONBOARD_COLUMNS（lib/onboarding.mjs）を全部運ぶ ── ohaeng_main を
@@ -190,7 +187,9 @@ async function onboardingMessages(conn, user) {
   };
   return [
     serviceGuide({ nameJa: user.name_reading || user.name_kanji }),
-    messageForStep(nextStep(state), state)
+    /* async・conn 必須（track 段）。await を欠くと Promise がそのまま
+       LINE へ行く ── filter(Boolean) は Promise を通す。 */
+    await messageForStep(nextStep(state), state, conn)
   ].filter(Boolean);
 }
 

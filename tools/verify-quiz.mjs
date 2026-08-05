@@ -202,7 +202,9 @@ await check("節目と期限予告が重なる朝は、そのまま送る（決�
   const conn = fakeConn({
     ...READY(30, QUIZ_ROW),
     "FROM content_templates": [{ ...TPL(30)[0], quiz: JSON.stringify(QUIZ) }],
-    "FROM quiz_checkpoints": [{ day_number: 30 }]
+    "FROM quiz_checkpoints": [{ day_number: 30 }],
+    /* 予告は購入者だけ（体験中は抑制 ── plan-course-onboarding §5）。 */
+    "FROM purchases": [{ id: 1 }]
   });
   let msgs = null;
   await deliverOne(conn, u,
@@ -219,9 +221,10 @@ await check("節目と期限予告が重なる朝は、そのまま送る（決�
 });
 
 await check("期限予告の朝は休む（常に 4 通以下・決定④）", async () => {
-  /* 今日を送ると残りが EXPIRING_AT になる人。6 日目 = 3 の倍数。 */
+  /* 今日を送ると残りが EXPIRING_AT になる人。6 日目 = 3 の倍数。
+     予告は購入者だけなので、purchases の行を置く（§5 の抑制）。 */
   const u = { ...USER, days_entitled: USER.days_used + EXPIRING_AT + 1 };
-  const conn = fakeConn(READY(6, QUIZ_ROW));
+  const conn = fakeConn({ ...READY(6, QUIZ_ROW), "FROM purchases": [{ id: 1 }] });
   let msgs = null;
   await deliverOne(conn, u,
     { send: async (_to, m) => { msgs = m; return {}; }, ...noFortune });

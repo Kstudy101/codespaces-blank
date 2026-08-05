@@ -156,6 +156,16 @@ export async function listPurchases(conn, userId) {
        FROM purchases WHERE user_id = ? ORDER BY purchased_at, id`, [userId]);
 }
 
+/* 1 度でも買ったことがあるか。「体験中（購入 0）」の判別に使う ──
+   体験中の朝の便に期限の予告を付けない（plan-course-onboarding §5。
+   始めた直後の 1 通に「あと 2 日」が付くのを止める）。
+   listPurchases で数えないのは、判別に全行は要らないため。 */
+export async function hasPurchases(conn, userId) {
+  const row = await one(conn,
+    `SELECT id FROM purchases WHERE user_id = ? LIMIT 1`, [userId]);
+  return row !== null;
+}
+
 export async function findByPaymentRef(conn, paymentRef) {
   return one(conn,
     `SELECT id, user_id, track, package_type, days_granted, price_paid, purchased_at

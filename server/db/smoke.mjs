@@ -200,6 +200,11 @@ try {
   head("[進み]  二重起動しても同じ日を二度送らない");
 
   await learning.ensureProgress(pool, uid, T);
+  /* 実物の体験開始（handlers/checkout.mjs applyTrial）は ensureProgress の
+     直後に active_track を入れる。ここが抜けていると、あとの
+     listReviewTargets（active_track で JOIN）に**誰も入らない** ──
+     この 1 行が無かったあいだ、夕方の検査は通りようが無かった。 */
+  await users.setActiveTrack(pool, uid, T);
   const a1 = await learning.advanceDay(pool, uid, T, 0);
   check("0 → 1 日目を取れる", () => {
     assert(a1.claimed === true && a1.day === 1, JSON.stringify(a1));

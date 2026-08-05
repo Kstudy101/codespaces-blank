@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-05 (점검 후속 4건 §1〜§3 배포 후) / 기준 커밋: `14b57f4`
+최종 갱신: 2026-08-06 (착수 대기 4건 §3·§4 배포 후) / 기준 커밋: `db20b17`
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -17,16 +17,22 @@
 - 결제(선불 횟수권)는 **코드 완성, 의도적으로 잠겨 있음** — §3
 - 관문(자동 검증) **19종 전부 통과** + smoke 29항목 (migrate 2회 연속 검사 포함)
 
-**다음에 할 일 세 가지.**
+**다음에 할 일 (대표 대기).**
 
-1. **점검 후속 §4 의 판단** — LINE 장애 시 일수 소각 / 결제 실패 무권리의
-   설계 2건 ([docs/plan-outage-billing.md](docs/plan-outage-billing.md)).
-   **대표님 지시(2026-08-05)로 현시점 보류** — 코드 무변경으로 현상 유지.
-   maintain 이 첫 실측에서 台帳 드리프트 1건(#3 beginner 3/0)을 잡았습니다
-   — 라이브 검증 때 손으로 넣은 3일일 가능성이 높지만 확인 요망
-2. **plan-profile 의 전제 2건** — §4 답(gender 대운 반영 ①/②)과 privacy 문안 확정
+1. **§1 원고 서버 배치** — 중급·고급 1〜3일 + fortune-lines.json 3파일
+   (로컬 검증 통과, File Manager 업로드 → `seed --check` → dry-run 3통은 대표 실기)
+2. **§2 코스 선택 흐름** — [docs/plan-course-onboarding.md](docs/plan-course-onboarding.md)
+   승인 + 문면 3건 확정 (승인 전 구현 금지)
+3. **Stripe 검증** — 테스트 키·SALES_MODE=test·SALES_TEST_USERS 투입 후
+   3케이스 (결제 경로 보강 3건은 2026-08-06 배포 완료 — 아래 이력)
+4. **plan-profile 의 전제 2건** — gender 대운 반영 ①/② + privacy 문안
    ([docs/plan-profile.md](docs/plan-profile.md) 승인 대기)
-3. **§3의 값 3개를 정한다** — 그게 없으면 결제가 안 열립니다
+5. **§3의 값 3개** (TOKUSHOHO_URL 등) — 그게 없으면 결제가 안 열립니다
+
+> 참고: 2026-08-05 보류였던 plan-outage-billing 의 설계 2건은 **2026-08-06
+> 지시서로 승인·구현 완료** — 결제 트랜잭션·역방향 대조·재조준(아래 이력).
+> maintain 의 드리프트 1건(#3 beginner 3/0)은 라이브 검증 수동 투입분일
+> 가능성이 높지만 확인 요망.
 
 > **해소됨 (2026-08-05, `52ac6cc`)**: 본번 crontab 에 morning/evening 이
 > 없던 문제 — 배포가 cron 3행(morning·evening 매시 / maintain 04:00 JST)을
@@ -271,6 +277,8 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 
 | 커밋 | 내용 |
 |---|---|
+| `db20b17` | 아침 배치 장애 대응(승인 C=A+B) — failed 로 남은 확보 완료일을 advanceDay 없이 재조준(retryKey 동일) + `--not-after` 배송 창 상한. verify-push 48항목 (관문 580) |
+| `e1f3c9f` | 결제 경로 보강 3건 — creditPurchase·startTrial 을 트랜잭션(transact 주입)으로 / 역방향 대조 findMissingEntitlements(검출만, maintain 3.5절) / async_payment_succeeded 수용. verify-billing 56항목 |
 | `14b57f4` | §3 pending_links 청소 크론(maintain.mjs) — 폴리시의 「30분 삭제」를 코드가 지킴. 등록은 .cpanel.yml 이 배치마다 확인. 본번 실측: 만료 24건 검출 |
 | `906b6ac` | §2 조용히 사라지는 길 2개 — 재추가 복귀(잔여 유→active/무→trial) + 읽기 대기를 blockingStep 에 편입 + 읽기 50자 절단. 재현 관문 3종 선행 |
 | `8b12063` | §1 마이그레이션 적용 이력(schema_migrations) — 배포마다 001부터 재실행되던 것 종식. 본번 부트스트랩 표침 3개 적중 실증. smoke 에 migrate 2회 연속 검사 |

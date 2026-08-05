@@ -22,7 +22,10 @@
 1. **§1 원고 서버 배치** — 중급·고급 1〜3일 + fortune-lines.json 3파일
    (로컬 검증 통과, File Manager 업로드 → `seed --check` → dry-run 3통은 대표 실기)
 2. **§2 코스 선택 흐름** — [docs/plan-course-onboarding.md](docs/plan-course-onboarding.md)
-   승인 + 문면 3건 확정 (승인 전 구현 금지)
+   승인 + 문면 3건 확정 (승인 전 구현 금지).
+   **문면 2건(C2 연동 안내·C4 2일차 저녁 유도)은 2026-08-06 지시서로 구현·커밋
+   완료 — 단 push(=배포) 금지, §2 구현과 같은 배포로만 내보낼 것**
+   (C2 의 「코스를 고르면 그 자리에서 1일차」가 §2 없이는 거짓이 되므로)
 3. **Stripe 검증** — 테스트 키·SALES_MODE=test·SALES_TEST_USERS 투입 후
    3케이스 (결제 경로 보강 3건은 2026-08-06 배포 완료 — 아래 이력)
 4. **plan-profile 의 전제 2건** — gender 대운 반영 ①/② + privacy 문안

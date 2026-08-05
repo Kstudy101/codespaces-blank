@@ -97,6 +97,58 @@ export const coursePreparing = (track) => ({
   text: `${TRACK_LABELS[track].ja}（${TRACK_LABELS[track].kr}）は、ただいま準備中です。\nもうしばらくお待ちください。`
 });
 
+/* 露出できるパッケージ（原稿の保有日数が上限）。priceList と
+   体験 2 日目の夕方の勧誘（db/push-evening.mjs）が**同じ判定**を見る ──
+   別々に書くと、片方だけ直した日に「買えないのに『追加できます』」が
+   出る（押した先は coursePreparing）。 */
+export const sellablePackages = (availableDays) =>
+  Object.entries(PACKAGES).filter(([, p]) => p.days <= availableDays);
+
+/* ---- 体験 2 日目の夕方の勧誘（2026-08-06 指示書 C4）------------------
+   体験中・current_day = 2 の人へ、復習の後ろに 1 通。
+   販売が閉じていても送る ── ただし文面を分ける。「買える」は
+
+     salesAllowedFor(user) かつ sellablePackages ≥ 1
+
+   の**両方**。後者を落とすと、販売が開いていても原稿 3 日ぶんの
+   コースで「下から追加できます」が出て、押した先で「準備中」になる。
+
+   買えない側の文面は「どこを見ればよいか」だけを言い、
+   「整いましたらお知らせします」とは**書かない** ── 販売が開いた日に
+   待っている人へ知らせる機能はコードに無い。約束した瞬間、文書が
+   コードより先へ出る（この置き場が 4 回踏んだ形）。 */
+export function trialUpsellNotice(track, { canBuy = false } = {}) {
+  const l = TRACK_LABELS[track];
+  const head = [
+    `無料でお試しいただける ${TRIAL_DAYS} 日分のうち、明日が最後の 1 日です。`,
+    "",
+    `${l.ja}（${l.kr}）は 2 日目まで進みました。`,
+    ""
+  ];
+  if (!canBuy) {
+    /* quickReply は付けない。押す所が無ければ空振りも無い。 */
+    return {
+      type: "text",
+      text: [...head,
+        "続きの受講料のご案内は、ただいま準備中です。",
+        "準備が整いましたら、下のメニューの［受講料］からご確認いただけます。"
+      ].join("\n")
+    };
+  }
+  return {
+    type: "text",
+    text: [...head,
+      "続けてお受け取りになる場合は、下から日数を追加できます。",
+      "追加された日数は、いまの続きに足されます。"
+    ].join("\n"),
+    quickReply: { items: [{
+      type: "action",
+      action: { type: "postback", label: "受講料を見る",
+                data: `action=plan&track=${track}`, displayText: "受講料を見る" }
+    }] }
+  };
+}
+
 /* ---- 残り 0 になった朝の、再購入のご案内（指示書 §3）----------------
    離脱のエピソードにつき 1 回だけ ── 毎朝の判定で残り 0 には毎日
    出会うので、条件なしに送ると毎日スパムになる。1 回だけの判定は
@@ -175,7 +227,7 @@ export function priceList(track, { trialAvailable = false, availableDays = TOTAL
      中級 30 日ぶんの原稿で 101 日を売ると、31 日目から「原稿なし」で
      **黙って**止まる ── 売った側は気づかず、買った側だけが知る。
      原稿を増やせば、この絞り込みが自動で上のパッケージを開く。 */
-  const sellable = Object.entries(PACKAGES).filter(([, p]) => p.days <= availableDays);
+  const sellable = sellablePackages(availableDays);
   if (!sellable.length) return null;   /* 呼ぶ側が「準備中」を出す */
 
   const rows = sellable

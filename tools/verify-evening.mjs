@@ -221,6 +221,122 @@ await check("名前は夕方も差し込まれる（받침 の規則ごと）", 
 });
 
 
+console.log("\n[体験 2 日目の勧誘]  閉じていても送る ── ただし嘘は送らない");
+
+/* findDeliverable が返す形（DELIVERABLE_SQL + shape）。体験中・2 日目。 */
+const TRIAL_ROW = {
+  id: 7, line_user_id: "U_test", display_name: "田中",
+  name_kanji: "田中", name_reading: "たなか", name_kr: "다나카", name_source: "web",
+  status: "trial", track: "beginner",
+  current_day: 2, days_used: 2, current_semester: 1,
+  days_entitled: 3, remaining: 1,
+  ohaeng_main: "목", raw_result_json: null, birth_confirmed: 0
+};
+const DAY2 = { ...TARGET, day_number: 2 };
+
+/* 勧誘の分岐まで届く既定の偽 DB。COUNT 系は形の違いで先に取る
+   （並び順が先勝ち）。 */
+const upsellReady = (over = {}) => ({
+  "SELECT COUNT\\(\\*\\) AS n FROM push_logs": [{ n: 0 }],
+  "FROM push_logs": [],
+  "SELECT COUNT\\(\\*\\) AS n FROM content_templates": [{ n: 50 }],
+  "FROM content_templates": TPL,
+  "FROM users": [TRIAL_ROW],
+  ...over
+});
+
+/* salesAllowedFor は env を読む。検査ごとに開閉して、終わったら消す。 */
+const SALES_ENV = ["TOKUSHOHO_URL", "REFUND_POLICY",
+                   "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "SALES_MODE"];
+function withSales(mode, fn) {
+  process.env.TOKUSHOHO_URL = "https://x.test/tokushoho";
+  process.env.REFUND_POLICY = "テスト";
+  process.env.STRIPE_SECRET_KEY = "sk_test_x";
+  process.env.STRIPE_WEBHOOK_SECRET = "whsec_x";
+  process.env.SALES_MODE = mode;
+  return Promise.resolve(fn()).finally(() => SALES_ENV.forEach((k) => delete process.env[k]));
+}
+
+await check("買える人には文面 A ── 復習の後ろに 1 通、日数は消費しない", () =>
+  withSales("open", async () => {
+    const conn = fakeConn(upsellReady());
+    let msgs = null;
+    const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
+    assert(r === "送信+勧誘:2日目", r);
+    assert(msgs.length === 3, `${msgs.length} 通でした（復習 2 + 勧誘 1 のはず）`);
+    const t = msgs[2].text;
+    assert(/明日が最後の 1 日/.test(t), t);
+    assert(/日数を追加できます/.test(t), t);
+    const qr = msgs[2].quickReply?.items?.[0]?.action;
+    assert(qr && qr.data === "action=plan&track=beginner", JSON.stringify(qr));
+    assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)),
+      "勧誘で日数が動きました ── ボーナスの不変式が崩れています");
+    assert(conn.calls.some((c) => /INSERT INTO push_logs/i.test(c.sql) && c.params.includes("upsell")),
+      "upsell の記録がありません（通算 1 回の判定が壊れます）");
+    return "A + 受講料を見る / days_used 不変";
+  }));
+
+await check("販売が閉じていれば文面 B ── quickReply 無し・約束もしない", () =>
+  withSales("closed", async () => {
+    const conn = fakeConn(upsellReady());
+    let msgs = null;
+    const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
+    assert(r === "送信+勧誘:2日目", r);
+    const t = msgs[2].text;
+    assert(/ただいま準備中です/.test(t), t);
+    assert(/［受講料］/.test(t), "どこを見ればよいかが無い");
+    assert(!msgs[2].quickReply, "押しても準備中の quickReply が付いています");
+    /* 「整いましたらお知らせします」は書かない ── 知らせる機能が
+       コードに無い。文書がコードより先に出るのを関門で止める。 */
+    assert(!/お知らせ/.test(t), `能動通知を約束しています: ${t}`);
+    return "B / 通知の約束なし";
+  }));
+
+await check("販売が開いていても、原稿が最小パッケージ未満なら文面 B", () =>
+  withSales("open", async () => {
+    /* 原稿 3 日ぶん ← 最小 7 日が売れない。A を送ると、押した先で
+       「準備中」が出る ── 価格表と同じ sellablePackages で判定する。 */
+    const conn = fakeConn(upsellReady({
+      "SELECT COUNT\\(\\*\\) AS n FROM content_templates": [{ n: 3 }] }));
+    let msgs = null;
+    const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
+    assert(r === "送信+勧誘:2日目", r);
+    assert(/ただいま準備中です/.test(msgs[2].text), msgs[2].text);
+    assert(!msgs[2].quickReply, "買えないのに quickReply が付いています");
+    return "sellablePackages = 0 → B";
+  }));
+
+await check("勧誘は通算 1 回だけ（upsell の記録で二度目を止める）", () =>
+  withSales("open", async () => {
+    const conn = fakeConn(upsellReady({
+      "SELECT COUNT\\(\\*\\) AS n FROM push_logs": [{ n: 1 }] }));
+    let msgs = null;
+    const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
+    assert(r === "送信:2日目", r);
+    assert(msgs.length === 2, `${msgs.length} 通でした（復習だけのはず）`);
+    return "n=1 → 復習だけ";
+  }));
+
+await check("体験でない人（購入者）の 2 日目には勧誘しない", () =>
+  withSales("open", async () => {
+    const conn = fakeConn(upsellReady({
+      "FROM users": [{ ...TRIAL_ROW, status: "active", days_entitled: 101, remaining: 99 }] }));
+    let msgs = null;
+    const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
+    assert(r === "送信:2日目", r);
+    assert(msgs.length === 2, `${msgs.length} 通でした`);
+    return "trial 以外 → 復習だけ";
+  }));
+
+await check("2 日目以外の夕方は、勧誘の判定にすら入らない", async () => {
+  const conn = fakeConn(READY);
+  const r = await deliverOne(conn, TARGET, { send: async () => ({}) });   /* day 4 */
+  assert(/送信:4日目/.test(r), r);
+  assert(!conn.sql().some((s) => /FROM users/i.test(s)),
+    "4 日目なのに 1 人ぶん引き直しています");
+  return "day ≠ 2 → 引き直しなし";
+});
+
 console.log("\n[配る時刻]  cron ではなく、こちらで日本時間を見る");
 
 await check("日本の 18 時より前なら、何もしない", () => {

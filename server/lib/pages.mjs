@@ -17,6 +17,8 @@
    必要が出るほど長く出す画面ではない（数秒で LINE へ戻る）。
    ================================================================== */
 
+import { TRIAL_DAYS } from "./repo/billing.mjs";
+
 const ADD_FRIEND_URL = () =>
   process.env.LINE_ADD_FRIEND_URL || "https://line.me/R/ti/p/@kstudy101";
 
@@ -68,10 +70,20 @@ export function resultPage(r) {
       ? `<p>韓国語でのお名前は <span class="name">${escapeHtml(r.nameKr)}</span> です。</p>`
       : "";
 
-    /* 「翌朝から体験が始まります」とは言わない ── 体験はコースを
-       選んで初めて始まり、いまは販売も closed。売り状態と無関係に
-       真である文だけを置く（指示書 §1-A②③。誘導文句は §7 の
-       待機画面とセットで入れる ── 1-B 保留）。 */
+    /* 文面は 2026-08-06 指示書 C2。売り状態と無関係に真である文だけを
+       置く ── コース選択は販売ゲートの外（§2）なので、SALES_MODE=closed
+       でも「コースをお選びいただけます」は事実。
+
+       「はじめての方は」の条件句は削らない。この画面は再連携でも
+       出るので、条件なしに「無料でお試し」と書くと、体験を使い
+       終えた人への嘘になる。
+
+       名前・生年月日の確認質問には触れない ── 訊くことが無い人にも
+       出る画面なので、書けば 7-6 の嘘の警告を作り直すことになる。 */
+    const promise = `
+          <p>お選びいただくと、その場で 1 日目がとどきます。</p>
+          <p>はじめての方は ${TRIAL_DAYS} 日間、無料でお試しいただけます。</p>`;
+
     if (r.friend === false) {
       /* 引き継ぎは終わっているが、まだ友だちではない。
          もう一歩あることを隠さない ── 「完了しました」とだけ出して
@@ -82,18 +94,18 @@ export function resultPage(r) {
           <h1>診断結果を引き継ぎました</h1>
           ${nameLine}
           <hr>
-          <p><strong>あと一歩です。</strong>下のボタンから友だち追加すると、
-             LINE のトークで続きをご案内します。</p>
+          <p>下のボタンからお友だち追加いただくと、LINE のトークで
+             コースをお選びいただけます。</p>${promise}
           <a class="btn" href="${escapeHtml(ADD_FRIEND_URL())}">LINE で友だち追加する</a>
         </div>`);
     }
 
-    return SHELL("連携が完了しました", `
+    return SHELL("連携できました", `
       <div class="card ok">
         <div class="mark">◎</div>
-        <h1>連携が完了しました</h1>
+        <h1>連携できました</h1>
         ${nameLine}
-        <p>このあとの流れは、LINE のトークでご案内します。</p>
+        <p>このあと LINE のトークで、コースをお選びいただけます。</p>${promise}
         <a class="btn" href="${escapeHtml(ADD_FRIEND_URL())}">LINE を開く</a>
       </div>`);
   }

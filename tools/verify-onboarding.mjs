@@ -53,6 +53,7 @@ const { newState, hashState, looksLikeState } = await import("../server/lib/toke
 const { normalizeProfile, startLink, completeLink } =
   await import("../server/lib/handlers/link.mjs");
 const { resultPage, escapeHtml } = await import("../server/lib/pages.mjs");
+const { TRIAL_DAYS } = await import("../server/lib/repo/billing.mjs");
 const links = await import("../server/lib/repo/links.mjs");
 
 const SCHEMA = read("server/db/schema.sql");
@@ -332,6 +333,41 @@ check("まだ友だちでない人には、その一歩を伝える", () => {
   assert(/友だち追加/.test(html), "追加を促していません");
   assert(/あと一歩/.test(html), "完了したかのように見えます");
   return "追加ボタンを出す";
+});
+
+check("連携画面はコース選択を案内する（2026-08-06 指示書 C2）", () => {
+  /* 「コースを選ぶとその場で 1 日目」は §2（コース選択の再設計）が
+     入って初めて真になる ── この文面と §2 は同じ配備で出すこと。 */
+  for (const friend of [true, false]) {
+    const html = resultPage({ ok: true, nameKr: "다나카", friend });
+    assert(/コースをお選びいただけます/.test(html), `friend=${friend}: コース選択の案内が無い`);
+    assert(/その場で 1 日目/.test(html), `friend=${friend}: 1 日目の約束が無い`);
+  }
+  return "友だち前後どちらも同じ約束";
+});
+
+check("体験の一文は「はじめての方は」の条件つき（再連携で嘘にしない）", () => {
+  /* この画面は再連携でも出る。条件句なしの「無料でお試し」は、
+     体験を使い終えた人への嘘になる。日数は TRIAL_DAYS と揃える。 */
+  for (const friend of [true, false]) {
+    const html = resultPage({ ok: true, nameKr: "다나카", friend });
+    const m = html.match(/はじめての方は[^<]*/);
+    assert(m, `friend=${friend}: 条件句がありません`);
+    assert(m[0].includes(`${TRIAL_DAYS} 日間`), `friend=${friend}: 日数が TRIAL_DAYS とずれています: ${m[0]}`);
+    assert(/無料でお試しいただけます/.test(m[0]), m[0]);
+  }
+  return `はじめての方は ${TRIAL_DAYS} 日間`;
+});
+
+check("名前が未確定なら、名前の行ごと出さない（「null」「あなた」を出さない）", () => {
+  for (const friend of [true, false]) {
+    for (const nameKr of [null, undefined, ""]) {
+      const html = resultPage({ ok: true, nameKr, friend });
+      assert(!/null|undefined|あなた/.test(html), `friend=${friend}: 埋め草が出ました`);
+      assert(!/お名前は/.test(html), `friend=${friend}: 空の名前行が出ています`);
+    }
+  }
+  return "行ごと消える";
 });
 
 check("失敗の画面で、どこで弾かれたかを言わない", () => {

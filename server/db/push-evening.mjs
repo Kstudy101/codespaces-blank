@@ -34,6 +34,7 @@ import { users, learning, pushlogs } from "../lib/repo/index.mjs";
 import { pushMessage, isUnreachable } from "../lib/line.mjs";
 import { jstDate, jstDateTime } from "../lib/jst.mjs";
 import { renderReview } from "../lib/render.mjs";
+import { salesAllowedFor, sellablePackages, trialUpsellNotice } from "../lib/handlers/checkout.mjs";
 
 /* ---- 引数 --------------------------------------------------------- */
 const argv = process.argv.slice(2);
@@ -94,6 +95,32 @@ export function retryKey(userId, day, type) {
 }
 
 
+/* ---- 体験 2 日目の勧誘（2026-08-06 指示書 C4）----------------------
+   復習の**後ろに同封**する。別便にしないのは朝の期限予告と同じ理由 ──
+   通知を二度鳴らさない。quickReply が開くのは最後の 1 通だけなので、
+   末尾に置くことが条件でもある。
+
+   対象は「今朝 2 日目が届いた体験中の人」。listReviewTargets の行には
+   status も current_day も無いので、day_number = 2 のときだけ 1 人ぶん
+   引き直して確かめる（findDeliverable。全員ぶん取ると、勧誘のために
+   夕方の一覧へ列を足し続けることになる）。
+
+   通算 1 回だけ。push_logs の upsell で数える ── 残り 0 の朝の勧誘と
+   同じ種別なので、どちらかが出ていればもう出ない。勧誘は合計で
+   少ないほうへ倒す。
+
+   文面の分岐（買える/買えない）は trialUpsellNotice に書いてある。
+   判定の片側 sellablePackages は価格表（priceList）と同じ関数 ──
+   原稿の保有日数が売れる上限、を二か所に書かない。 */
+async function trialUpsellSection(conn, u) {
+  const full = await users.findDeliverable(conn, u.id);
+  if (!full || full.status !== "trial" || Number(full.current_day) !== 2) return null;
+  if (await pushlogs.countByType(conn, u.id, "upsell")) return null;
+  const availableDays = await learning.countTemplates(conn, full.track);
+  const canBuy = salesAllowedFor(full) && sellablePackages(availableDays).length > 0;
+  return trialUpsellNotice(full.track, { canBuy });
+}
+
 /* ---- 1 人ぶん ------------------------------------------------------
    朝と同じく、返すのは何をしたかの一語。
 
@@ -123,11 +150,23 @@ export async function deliverOne(conn, u, { send = pushMessage } = {}) {
      復習で登録を促すと朝夕 2 回お願いすることになるので、黙る。 */
   if (messages === null) return "名前なし";
 
-  if (DRY || DISABLED) return `${DRY ? "予定" : "停止中"}:${day}日目`;
+  /* 日数は消費しない ── この便が advanceDay を呼ばない不変式は
+     勧誘を足しても変わらない（verify-evening がソースごと見張る）。 */
+  const upsell = day === 2 ? await trialUpsellSection(conn, u) : null;
+  const bundle = upsell ? [...messages, upsell] : messages;
+
+  if (DRY || DISABLED) {
+    return `${DRY ? "予定" : "停止中"}${upsell ? "（勧誘つき）" : ""}:${day}日目`;
+  }
 
   try {
-    await send(u.line_user_id, messages, { retryKey: retryKey(u.id, day, "review") });
+    await send(u.line_user_id, bundle, { retryKey: retryKey(u.id, day, "review") });
     await pushlogs.logSent(conn, u.id, { dayNumber: day, pushType: "review" });
+    if (upsell) {
+      /* 出したことを別に残す ── これが「通算 1 回」の判定そのもの。 */
+      await pushlogs.logSent(conn, u.id, { dayNumber: 2, pushType: "upsell" });
+      return `送信+勧誘:${day}日目`;
+    }
     return `送信:${day}日目`;
   } catch (e) {
     const gone = isUnreachable(e);

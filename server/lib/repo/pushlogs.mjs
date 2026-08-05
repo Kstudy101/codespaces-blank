@@ -65,6 +65,29 @@ export async function logFailed(conn, userId, { dayNumber = null, pushType = "le
 
    status = 'sent' で絞るのは、失敗した日は「送った」に数えない
    ため。数えると、その人だけ翌日まで何も届かない。 */
+/* ---- その日番号を、いつかの朝に送れた／落ちたことがあるか ----------
+   LINE 障害の再照準（plan-outage-billing §1-2 A）が使う。
+   sentToday が「今日の暦日」で数えるのに対し、こちらは**日番号**で
+   数える ── 確保（＝消費）済みの N 日目が届いたかどうかは、
+   何日の朝だったかに依らない。 */
+export async function everSent(conn, userId, pushType, dayNumber) {
+  assertType(pushType);
+  const row = await one(conn,
+    `SELECT id FROM push_logs
+      WHERE user_id = ? AND push_type = ? AND day_number = ? AND status = 'sent'
+      LIMIT 1`, [userId, pushType, Number(dayNumber)]);
+  return row !== null;
+}
+
+export async function everFailed(conn, userId, pushType, dayNumber) {
+  assertType(pushType);
+  const row = await one(conn,
+    `SELECT id FROM push_logs
+      WHERE user_id = ? AND push_type = ? AND day_number = ? AND status = 'failed'
+      LIMIT 1`, [userId, pushType, Number(dayNumber)]);
+  return row !== null;
+}
+
 export async function sentToday(conn, userId, pushType, date = null) {
   assertType(pushType);
   const [from, to] = jstDayRange(date || jstDate());

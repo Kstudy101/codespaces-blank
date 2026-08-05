@@ -6,6 +6,7 @@
      node db/push-daily.mjs --date=2026-08-04   その日として動かす
      node db/push-daily.mjs --limit=10     先頭 10 人だけ
      node db/push-daily.mjs --not-before=7 日本の 7 時より前なら何もしない
+     node db/push-daily.mjs --not-after=9  日本の 9 時を過ぎたら何もしない
 
    cron が呼ぶ。app.mjs の経路にはしない ── HTTP に出すと外から
    配信を起こせてしまい、そのための認証をもう一つ作ることになる。
@@ -57,6 +58,7 @@ const value = (name, fallback = null) => {
 
 const DRY   = flag("dry-run");
 const NOT_BEFORE = value("not-before", null);
+const NOT_AFTER  = value("not-after", null);
 const DATE  = value("date", jstDate());
 const LIMIT = Number(value("limit", 0)) || 0;
 const PAGE  = 200;
@@ -121,6 +123,19 @@ export function tooEarly(jstHour, notBefore) {
   return Number(jstHour) < want;
 }
 
+/* 「その日の配達は何時までか」を商品として明文化する（承認 C の B）。
+   再照準(A)で焼却は 0 になったが、15 時に LINE が復旧すれば 15 時に
+   「朝の講座」が届く ── それを許すかは商品の性格の問題で、
+   ここが上限を切る。境界は含む（--not-after=9 は 9 時台まで送る）。 */
+export function tooLate(jstHour, notAfter) {
+  if (notAfter === null || notAfter === undefined || notAfter === "") return false;
+  const want = Number(notAfter);
+  if (!Number.isInteger(want) || want < 0 || want > 23) {
+    throw new Error(`--not-after は 0〜23 で渡してください: ${notAfter}`);
+  }
+  return Number(jstHour) > want;
+}
+
 if (NOT_BEFORE !== null) {
   const hour = Number(jstDateTime().slice(11, 13));
   let early;
@@ -129,6 +144,18 @@ if (NOT_BEFORE !== null) {
   } catch (e) { console.error(`✗ ${e.message}`); process.exit(1); }
   if (early) {
     console.log(`日本時間 ${String(hour).padStart(2, "0")} 時。${NOT_BEFORE} 時前なので何もしません。`);
+    process.exit(0);
+  }
+}
+
+if (NOT_AFTER !== null) {
+  const hour = Number(jstDateTime().slice(11, 13));
+  let late;
+  try {
+    late = tooLate(hour, NOT_AFTER);
+  } catch (e) { console.error(`✗ ${e.message}`); process.exit(1); }
+  if (late) {
+    console.log(`日本時間 ${String(hour).padStart(2, "0")} 時。${NOT_AFTER} 時を過ぎたので何もしません。`);
     process.exit(0);
   }
 }
@@ -268,6 +295,53 @@ export async function deliverOne(conn, u, { send = pushMessage, load = loadLines
      advanceDay だけでも防げるが、そこまで行くと送信の直前まで
      進んでしまう ── 先に分かるものは先に見る。 */
   if (await pushlogs.sentToday(conn, u.id, "learning", DATE)) return "既送";
+
+  /* ---- 落ちた日の再照準（plan-outage-billing §1-2 A・承認 C）--------
+     LINE 障害の朝はこうなっていた:
+       07:00 day N 確保（＝消費）→ 500 → failed   ← N 日目が焼却
+       08:00 sentToday=false → day N+1 確保 → 失敗 ← 毎時 1 日ずつ
+     確保（消費）済みの current_day = N がまだ届いていなければ、
+     **新しく確保せず** N 日目を組み直して送る。
+
+     「送信の前に日を確保する」の前提は崩さない ── ここが扱うのは
+     既に確保が済んだ日で、確保なしの送信ではなく送信なしの確保の
+     回収。advanceDay は呼ばない（関門が見張る）。
+
+     同じ暦日内の再送は retryKey が失敗時と同一なので、「実際は
+     届いたのに logSent 前に死んだ」場合も LINE 側の重複排除が防ぐ。
+     ※ LINE の X-Line-Retry-Key の保存期間は公式に明記が無い ──
+     日を跨いだ再送だけキーが変わるが、その窓は従来の設計にも
+     同じ形で在ったもの。
+
+     原稿なしの failed とは混ざらない ── あちらは dayNumber = next
+     （確保**前**の日付）で残り、こちらの条件は current_day（確保済み）。 */
+  if (today >= 1
+      && !(await pushlogs.everSent(conn, u.id, "learning", today))
+      &&  (await pushlogs.everFailed(conn, u.id, "learning", today))) {
+    const tpl = await learning.getTemplate(conn, u.track, today);
+    if (tpl) {
+      let messages = renderDay(tpl, u);
+      if (messages !== null) {
+        const fortune = fortuneSection(u, tpl, { load });
+        if (fortune) messages = [...messages, fortune];
+        if (DRY || DISABLED) return `${DRY ? "予定" : "停止中"}:再送信${today}日目`;
+        try {
+          await send(u.line_user_id, messages,
+            { retryKey: retryKey(u.id, today, "learning") });
+          await pushlogs.logSent(conn, u.id, { dayNumber: today, pushType: "learning" });
+          return `再送信:${today}日目`;
+        } catch (e) {
+          if (isUnreachable(e)) await users.markUnfollowed(conn, u.line_user_id);
+          await pushlogs.logFailed(conn, u.id,
+            { dayNumber: today, pushType: "learning", error: String(e.message || e).slice(0, 500) });
+          return "送信失敗";
+        }
+      }
+    }
+    /* 原稿が引けない・名前が無い ── 再照準はできないが、通常経路に
+       落とすと次の日を確保してしまう。ここで降りて次の便を待つ。 */
+    return `再送信待ち:${today}日目`;
+  }
 
   /* ---- 修了 --------------------------------------------------------
      101 日を超えて進めない。ここが最後の接点で、次のコースを

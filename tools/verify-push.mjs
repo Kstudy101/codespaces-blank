@@ -16,7 +16,7 @@
    約束なので、偽物を渡して SQL を読む。LINE も偽物を渡し、
    呼ばれた瞬間に DB が何をされていたかを覗く。
    ================================================================== */
-import { deliverOne, retryKey, tooEarly, fortuneSection } from "../server/db/push-daily.mjs";
+import { deliverOne, retryKey, tooEarly, tooLate, fortuneSection } from "../server/db/push-daily.mjs";
 import { LineApiError } from "../server/lib/line.mjs";
 
 let pass = 0;
@@ -153,6 +153,73 @@ await check("保有日数を超えたら本編は送らない。再購入の案�
   assert(conn.calls.some((c) => /INSERT INTO push_logs/i.test(c.sql) && c.params.includes("upsell")),
     "upsell の記録がありません");
   return "本編 0 / 案内 1・日数は減らない";
+});
+
+/* everSent / everFailed だけに当てる形。sentToday も
+   status = 'sent' を含むので、隣接する day_number で見分ける
+   （everSent の並びは day_number = ? AND status = 'sent'、
+   countForDay は間に push_type が挟まるので当たらない）。 */
+const EVER_SENT   = "day_number = \\? AND status = 'sent'";
+const EVER_FAILED = "day_number = \\? AND status = 'failed'";
+
+await check("落ちた日を再照準する ── 新しく確保せず、同じ日をもう一度", async () => {
+  /* LINE 障害の朝: day 3 を確保（消費）→ 500 → failed。次の便は
+     day 4 を確保するのではなく、day 3 を組み直して送る。 */
+  const conn = fakeConn({
+    "SELECT COUNT\\(\\*\\) AS n FROM push_logs": [{ n: 0 }],
+    [EVER_SENT]:   [],                    /* day 3 は届いていない */
+    [EVER_FAILED]: [{ id: 9 }],           /* 落ちた記録がある */
+    "FROM push_logs": [],
+    "FROM content_templates": [{ ...TPL[0], day_number: 3 }],
+    "UPDATE learning_progress": { affectedRows: 1 }
+  });
+  let sentOpts = null;
+  const r = await deliverOne(conn, USER,   /* current_day = 3 */
+    { send: async (_to, _m, opts) => { sentOpts = opts; return {}; } });
+  assert(r === "再送信:3日目", r);
+  assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)),
+    "再照準で日を確保しています ── 毎時 1 日の焼却が戻ってくる");
+  assert(conn.calls.some((c) => /INSERT INTO push_logs/i.test(c.sql) && c.params.includes(3)),
+    "day 3 の sent 記録がありません");
+  /* 失敗時と同じキー ── 「届いたのに記録前に死んだ」を LINE 側が弾く。 */
+  assert(sentOpts && sentOpts.retryKey === retryKey(USER.id, 3, "learning"),
+    "retryKey が失敗時と別物です");
+  return "確保なし・消費なし・day 3 を同じキーで再送";
+});
+
+await check("届いた日は再照準しない（sent があれば通常の朝）", async () => {
+  const conn = fakeConn({ [EVER_SENT]: [{ id: 5 }], ...READY });
+  const r = await deliverOne(conn, USER, { send: sendOK() });
+  assert(/送信:4日目/.test(r), r);
+  assert(conn.sql().some((s) => /UPDATE learning_progress/i.test(s)),
+    "通常の朝なのに日を確保していません");
+  return "sent あり → 通常どおり 4 日目を確保して送る";
+});
+
+await check("原稿なしの failed では再照準しない（dayNumber が別物）", async () => {
+  /* 原稿なし failed は dayNumber = next（確保**前**）で残る。
+     再照準の条件は current_day（確保済み）なので当たらない。 */
+  const conn = fakeConn({ [EVER_SENT]: [], [EVER_FAILED]: [], ...READY });
+  const r = await deliverOne(conn, USER, { send: sendOK() });
+  assert(/送信:4日目/.test(r), r);
+  return "混ざらない ── 通常経路へ";
+});
+
+await check("再照準したくても原稿が引けなければ、降りる（次の日を確保しない）", async () => {
+  const conn = fakeConn({
+    "SELECT COUNT\\(\\*\\) AS n FROM push_logs": [{ n: 0 }],
+    [EVER_SENT]:   [],
+    [EVER_FAILED]: [{ id: 9 }],
+    "FROM push_logs": [],
+    "FROM content_templates": []          /* day 3 の原稿が消えている */
+  });
+  let sent = false;
+  const r = await deliverOne(conn, USER, { send: async () => { sent = true; return {}; } });
+  assert(!sent, "原稿が無いのに送りました");
+  assert(r === "再送信待ち:3日目", r);
+  assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)),
+    "通常経路へ落ちて次の日を確保しています ── 届かない日が積み増される");
+  return "送らない・確保しない・次の便を待つ";
 });
 
 await check("台帳が既に開いていれば、案内は二度と出ない（毎日スパム防止）", async () => {
@@ -398,6 +465,26 @@ await check("0〜23 でない指定は、黙って通さない", () => {
     assert(threw, `${bad} を受け取ってしまいました`);
   }
   return "4 通り";
+});
+
+await check("日本の指定時刻を過ぎたら、何もしない（--not-after）", () => {
+  /* 15 時に LINE が復旧して 15 時に「朝の講座」が届く、を商品として
+     許さないための上限。境界は含む ── 9 時台までは送る。 */
+  assert(tooLate(10, 9) === true,  "10 時に走ってしまいます");
+  assert(tooLate(23, 9) === true,  "23 時に走ってしまいます");
+  assert(tooLate(9, 9)  === false, "9 時ちょうどが送れません");
+  assert(tooLate(7, 9)  === false, "7 時が送れません");
+  return "10時/23時 → 止まる、9時/7時 → 走る";
+});
+
+await check("--not-after も、指定なし・不正値の扱いは --not-before と同じ", () => {
+  assert(tooLate(15, null) === false && tooLate(15, undefined) === false, "指定なしで止まりました");
+  for (const bad of [24, -1, "夕方", 9.5]) {
+    let threw = false;
+    try { tooLate(10, bad); } catch { threw = true; }
+    assert(threw, `${bad} を受け取ってしまいました`);
+  }
+  return "なし → いつでも走る / 不正 4 通り → 通さない";
 });
 
 console.log("\n[重複防止キー]");

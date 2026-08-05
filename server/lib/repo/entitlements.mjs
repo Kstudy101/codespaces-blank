@@ -29,7 +29,7 @@ import { TRACKS, isTrack } from "./learning.mjs";
    人のために LEFT JOIN にする。INNER にすると、買った直後の人が
    「残り 0」に見えて 1 日目が届かない。 */
 const REMAINING_SQL = `
-  SELECT e.track,
+  SELECT e.user_id, e.track,
          e.days_entitled,
          COALESCE(p.days_used, 0)   AS days_used,
          COALESCE(p.current_day, 0) AS current_day,
@@ -99,10 +99,15 @@ export async function firstWithRemaining(conn, userId) {
 }
 
 /* 監視用。買ったのに 1 日も受け取っていない人が居ないか。
-   居るなら、配信が始まらない理由がどこかにある。 */
+   居るなら、配信が始まらない理由がどこかにある。
+
+   user_id と shape() を通した形で返す。生の行のまま返していたので、
+   読む側（db/who.mjs）は常に「#?  beginner  bought=undefined」──
+   誰のことかも何日ぶんかも読めない監視になっていた。 */
 export async function listUnstarted(conn) {
-  return all(conn,
+  const rows = await all(conn,
     `${REMAINING_SQL}
       WHERE e.days_entitled > 0 AND COALESCE(p.days_used, 0) = 0
       ORDER BY e.user_id`);
+  return rows.map((r) => ({ user_id: Number(r.user_id), ...shape(r) }));
 }

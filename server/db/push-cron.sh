@@ -15,6 +15,14 @@
 #   cron:
 #     0 * * * * /bin/bash ~/kstudy101-line/db/push-cron.sh morning >> ~/logs/push.log 2>&1
 #     0 * * * * /bin/bash ~/kstudy101-line/db/push-cron.sh evening >> ~/logs/push.log 2>&1
+#     0 19 * * * /bin/bash ~/kstudy101-line/db/push-cron.sh maintain >> ~/logs/push.log 2>&1
+#
+# maintain（日次の掃除と見張り。db/maintain.mjs）だけ時刻指定なのは、
+# 朝夕のような「何時に届くか」の約束が無く、JST の判定が要らないため。
+# 19:00 UTC = 04:00 JST ── 配信（朝 7 時・夕 18 時 JST）と重ならない
+# 未明帯。サーバーの地方時が UTC からずれた日は時間帯もずれるが、
+# 消すのは期限切れと 400 日前のログだけなので、配信と重なっても
+# 表を取り合わない。
 #
 # 1 本のスクリプトに寄せているのは、nodevenv を探す手順（下）を
 # 2 か所に置きたくないため。実際そこが CloudLinux の activate で
@@ -26,15 +34,15 @@
 # ===================================================================
 set -uo pipefail
 
-# どちらの便か。引数が無ければ朝（上の注記のとおり）。
+# どの便か。引数が無ければ朝（上の注記のとおり）。
 WHICH="morning"
 if [ $# -gt 0 ]; then
   case "$1" in
-    morning|evening) WHICH="$1"; shift ;;
+    morning|evening|maintain) WHICH="$1"; shift ;;
     # 綴り違いを黙って朝として走らせない。夕方のつもりで
     # 書いた行が毎時朝の便を叩く、が起きる。
     -*) : ;;
-    *) echo "使い方: push-cron.sh [morning|evening] [追加の引数…]" >&2; exit 1 ;;
+    *) echo "使い方: push-cron.sh [morning|evening|maintain] [追加の引数…]" >&2; exit 1 ;;
   esac
 fi
 
@@ -72,10 +80,12 @@ cd "$APP" || exit 1
 
 echo "───── $(date -u '+%F %T')Z (UTC) ${WHICH} ─────"
 # 追加の引数はそのまま渡す。--dry-run を付けて呼べば、cron が
-# 実際に通る道（activate を探す・パスを組む）を、誰にも送らずに
-# 確かめられる。cron の行を直接叩いて試すと本当に送ってしまう。
+# 実際に通る道（activate を探す・パスを組む）を、誰にも送らず
+# 何も消さずに確かめられる。cron の行を直接叩いて試すと本当に走る。
 if [ "$WHICH" = "evening" ]; then
   node db/with-env.mjs db/push-evening.mjs --not-before=18 "$@"
+elif [ "$WHICH" = "maintain" ]; then
+  node db/with-env.mjs db/maintain.mjs "$@"
 else
   node db/with-env.mjs db/push-daily.mjs --not-before=7 "$@"
 fi

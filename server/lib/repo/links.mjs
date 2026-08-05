@@ -63,10 +63,18 @@ export async function consume(conn, stateHash, { now }) {
 }
 
 /* 使われなかったぶんを落とす。生年月日が入っているので、
-   期限切れを持ち続ける理由が無い。cron から日次で呼ぶ想定。 */
+   期限切れを持ち続ける理由が無い。db/maintain.mjs が日次で呼ぶ。 */
 export async function purgeExpired(conn, { now }) {
   const r = await run(conn, `DELETE FROM pending_links WHERE expires_at <= ?`, [now]);
   return r.affectedRows;
+}
+
+/* 消さずに数えるだけ（maintain --dry-run 用）。cron が実際に通る道を
+   誰の行も消さずに確かめるための口で、purgeExpired と同じ WHERE を使う。 */
+export async function countExpired(conn, { now }) {
+  const row = await one(conn,
+    `SELECT COUNT(*) AS n FROM pending_links WHERE expires_at <= ?`, [now]);
+  return row ? Number(row.n) : 0;
 }
 
 /* 監視用。溜まりはじめたら、認証まで進めていない人が多いということ。 */

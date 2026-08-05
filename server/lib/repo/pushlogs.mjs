@@ -202,7 +202,7 @@ export async function listFailures(conn, date = null) {
 }
 
 /* 古いログを落とす。溜め続ける理由が無い表なので、
-   運用に入ったら cron から月 1 で呼ぶ想定。
+   db/maintain.mjs が日次で呼ぶ（削れるのは 400 日より前だけ）。
    既定を 400 日にしてあるのは、101 日を最後まで走った人の
    全期間が 1 年ぶんの中に収まるようにするため。 */
 export async function purgeOlderThan(conn, days = 400) {
@@ -211,4 +211,15 @@ export async function purgeOlderThan(conn, days = 400) {
   const r = await run(conn,
     `DELETE FROM push_logs WHERE sent_at < DATE_SUB(NOW(), INTERVAL ? DAY)`, [n]);
   return r.affectedRows;
+}
+
+/* 消さずに数えるだけ（maintain --dry-run 用）。purgeOlderThan と
+   同じ WHERE を使う ── 別々に書くと、片方だけ直した日に
+   「数えた件数と消えた件数が違う」が起きる。 */
+export async function countOlderThan(conn, days = 400) {
+  const n = Number(days);
+  if (!Number.isInteger(n) || n < 1) throw new Error(`days が不正: ${days}`);
+  const row = await one(conn,
+    `SELECT COUNT(*) AS n FROM push_logs WHERE sent_at < DATE_SUB(NOW(), INTERVAL ? DAY)`, [n]);
+  return row ? Number(row.n) : 0;
 }

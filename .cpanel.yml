@@ -116,6 +116,30 @@ deployment:
     # 呼ぶと、cron の道（activate を探すところ）だけが試されない。
     - if [ -f "$HOME/.run-push-dry" ]; then /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; bash db/push-cron.sh --dry-run' && /bin/rm -f "$HOME/.run-push-dry"; else echo "配信の下見はしません（~/.run-push-dry がありません）"; fi
 
+    # --- 保守の cron を確かめる ---------------------------------
+    # maintain（db/maintain.mjs ── pending_links の期限切れ削除・古い
+    # 配信ログの掃除・台帳の見張り）は、cron の行が無いと永久に
+    # 走らない。privacy.html の「30 分後に自動的に削除」はこの行が
+    # 守るので、登録を人の記憶に置かない ── 配置のたびに有無を見て、
+    # 無ければ足す。既存の行には触らない（morning / evening は
+    # cPanel の画面から入れたもの。消すのも直すのもここではしない）。
+    #
+    # 19:00 UTC = 04:00 JST。配信（朝 7 時・夕 18 時 JST）と重ならない
+    # 未明帯（db/push-cron.sh の頭書き）。
+    # 行の形は cPanel の画面から入れた morning / evening と同じ（~ 表記）。
+    - export MAINTAIN_LINE='0 19 * * * /bin/bash ~/kstudy101-line/db/push-cron.sh maintain >> ~/logs/push.log 2>&1'
+    - if crontab -l 2>/dev/null | /bin/grep -qF "push-cron.sh maintain"; then echo "OK - maintain の cron は登録済み"; else ( crontab -l 2>/dev/null; echo "$MAINTAIN_LINE" ) | crontab - && echo "OK - maintain の cron を登録しました" || echo "NG - crontab に登録できません。cPanel の Cron Jobs で手で追加してください → $MAINTAIN_LINE"; fi
+    # いま cron に何が居るかを配置ログへ（登録の成否を後から読めるように）。
+    - crontab -l 2>/dev/null | /bin/grep -F "push-cron.sh" || echo "（push-cron の行が 1 本もありません）"
+
+    # --- 保守の道を下見する（読むだけ）---------------------------
+    # cron が通るのと同じ道（push-cron.sh maintain）を --dry-run で
+    # 1 度通す。1 行も消さない ── 期限切れが何件たまっているか・
+    # 台帳のずれが配置ログに残り、cron の行が初めて動く前に
+    # 道の破れに気づける。配信の下見（.run-push-dry）と同じ考え方
+    # だが、こちらは読むだけなので毎回でよい。
+    - /bin/bash "$APP/db/push-cron.sh" maintain --dry-run
+
     # --- 入れ替える ---------------------------------------------
     # Passenger は動いているプロセスを抱えたままなので、置いただけでは
     # 古いコードが応え続ける。restart.txt に触れて初めて入れ替わる。

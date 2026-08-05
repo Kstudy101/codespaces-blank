@@ -12,13 +12,29 @@
 
    【migrations/ の流し方】
    schema.sql のあとに、db/migrations/*.sql を名前順で流す。
-   ALTER TABLE には IF NOT EXISTS が無い（MariaDB にはあるが MySQL に
-   は無いので、どちらでも動く書き方にはできない）。なので「もう当たって
-   いる」ことを表すエラーだけを飲み込む ── 飲み込む番号を決め打ちに
-   するのは、それ以外の失敗を見逃さないため。全部飲み込むと、
-   綴りを間違えた ALTER が「適用済み」として静かに素通りする。
+   ただし**流すのは 1 度だけ**。何を流したかは schema_migrations に
+   残し、記録のあるファイルは丸ごと飛ばす。
 
-   最後に、在るはずの 9 つが本当に在るかを数える。CREATE が
+   ここが無かったあいだ、配置のたびに 001・002・003 が頭から流れて
+   いた。ALTER には IF NOT EXISTS が無い（MariaDB にはあるが MySQL に
+   は無いので、どちらでも動く書き方にはできない）ので「もう当たって
+   いる」ことを表すエラーだけを飲み込んでいたが、それで足りるのは
+   ALTER だけ。002 の INSERT ... SELECT は同じ 002 が落とす列を読むため、
+   2 周目は errno 1054（Unknown column）で throw → exit(1) →
+   .cpanel.yml の set -e で配置ごと止まる。
+
+   飲み込む番号を増やす方向では直さない。増やすほど、綴りを間違えた
+   ALTER が「適用済み」として静かに素通りする方へ寄る。
+
+   【既に本番へ当たっている 3 本をどう数えるか（bootstrap）】
+   この仕組みを入れた時点の本番は、001・002・003 が**適用済みなのに
+   履歴が空**。履歴だけを見て流すと、いま直そうとしている事故を
+   その場で起こす。なので 001〜003 には「当たっていれば必ず在るもの」
+   （PROBES）を持たせ、それが在れば**流さずに履歴だけ書く**。
+   まっさらな DB では探針が全部外れるので、ふつうに順番どおり流れる。
+   004 以降に探針は要らない ── 履歴が空＝まだ流していない、で正しい。
+
+   最後に、在るはずの表と列が本当に在るかを数える。CREATE が
    1 つ失敗しても後続は流れるので、「エラーは出なかった」だけでは
    足りない。列も同じで、migrations が流れたかどうかは
    information_schema を見て確かめる。
@@ -37,7 +53,9 @@ const EXPECTED = [
   /* P3 で足した。ウェブの占い結果を、LINE 認証から戻るまで預かる表。 */
   "pending_links",
   /* 002 で足した。前払いの回数券をコース別に持つ。 */
-  "course_entitlements", "lapse_log"
+  "course_entitlements", "lapse_log",
+  /* 何を流したか。無いと migrations が毎回頭から流れ直す。 */
+  "schema_migrations"
 ];
 
 /* migrations が入れる列。流れたかどうかを名前で確かめる。
@@ -62,10 +80,65 @@ const EXPECTED_COLUMNS = [
 
 /* 「もう当たっている」を表すものだけ。
      1060 列が既にある      1061 索引が既にある
-     1068 主キーが既にある  1091 消そうとしたものが無い  */
+     1068 主キーが既にある  1091 消そうとしたものが無い
+
+   ★ 1054（Unknown column）をここに足してはいけない。足すと、
+   列名を綴り間違えた SQL が「適用済み」として静かに素通りする。
+   2 周目の 1054 は履歴（schema_migrations）が止めるので、
+   飲み込む必要そのものが無い。 */
 const ALREADY_APPLIED = new Set([1060, 1061, 1068, 1091]);
 
+/* ---- 既に当たっているかを見る目印（bootstrap 用）--------------------
+   この仕組みを入れる前から本番に当たっている 3 本ぶん。
+   「当たっていれば必ず在るもの」を 1 つずつ選ぶ ── どれも、その
+   ファイルの中でしか作られない。
+
+   まっさらな DB では全部外れるので、ふつうに順番どおり流れる。
+   004 以降には要らない（履歴が空＝まだ流していない、で正しい）。 */
+const PROBES = Object.freeze({
+  "001-tracks-and-onboarding.sql": { column: ["users", "name_source"] },
+  "002-per-course-billing.sql":    { table:  "course_entitlements" },
+  "003-review-quiz.sql":           { column: ["content_templates", "quiz"] }
+});
+
+const probeLabel = (p) =>
+  p.table ? `${p.table} テーブル` : `${p.column[0]}.${p.column[1]} 列`;
+
 const checkOnly = process.argv.includes("--check");
+
+async function hasTable(pool, name) {
+  const [[r]] = await pool.query(
+    `SELECT COUNT(*) AS n FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`, [name]);
+  return Number(r.n) > 0;
+}
+
+async function hasColumn(pool, table, column) {
+  const [[r]] = await pool.query(
+    `SELECT COUNT(*) AS n FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+    [table, column]);
+  return Number(r.n) > 0;
+}
+
+const probePassed = (pool, p) =>
+  p.table ? hasTable(pool, p.table) : hasColumn(pool, p.column[0], p.column[1]);
+
+/* 履歴。表がまだ無ければ null ── 「1 件も流していない」（空配列）と
+   区別する。--check はまっさらな DB に対しても走るので、
+   そこで例外にすると何も見られなくなる。 */
+async function appliedMigrations(pool) {
+  if (!(await hasTable(pool, "schema_migrations"))) return null;
+  const [rows] = await pool.query(
+    `SELECT filename, applied_at FROM schema_migrations ORDER BY filename`);
+  return rows;
+}
+
+async function markApplied(pool, file) {
+  /* INSERT IGNORE。二重起動でどちらも同じファイルを流し終えたとき、
+     負けた側がここで落ちる理由が無い。 */
+  await pool.query(`INSERT IGNORE INTO schema_migrations (filename) VALUES (?)`, [file]);
+}
 
 async function runMigrations(pool) {
   const dir = path.join(HERE, "migrations");
@@ -74,8 +147,32 @@ async function runMigrations(pool) {
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
   if (!files.length) return;
 
-  console.log(`\nmigrations/: ${files.length} ファイル`);
+  const history = await appliedMigrations(pool);
+  if (history === null) {
+    /* schema.sql がこの表を作る。無いということは schema.sql が
+       流れていない ── そのまま migrations を流すと、記録の残らない
+       適用ができてしまう。 */
+    throw new Error(
+      "schema_migrations がありません（schema.sql が流れていません）");
+  }
+  const done = new Set(history.map((r) => r.filename));
+
+  console.log(`\nmigrations/: ${files.length} ファイル（適用済み ${done.size}）`);
   for (const file of files) {
+    if (done.has(file)) {
+      console.log(`  · ${file}  （適用済み。流しません）`);
+      continue;
+    }
+
+    /* 履歴は空だが、中身はもう当たっている ── この仕組みを入れる前から
+       動いている DB。流すと 2 周目と同じ事故になるので、記録だけ残す。 */
+    const probe = PROBES[file];
+    if (probe && await probePassed(pool, probe)) {
+      await markApplied(pool, file);
+      console.log(`  ✓ ${file}  （${probeLabel(probe)} が既にあります。流さずに履歴だけ記録）`);
+      continue;
+    }
+
     const statements = splitStatements(fs.readFileSync(path.join(dir, file), "utf8"));
     let applied = 0, skipped = 0;
     for (const stmt of statements) {
@@ -88,6 +185,9 @@ async function runMigrations(pool) {
         throw e;
       }
     }
+    /* 記録は最後に。途中で落ちたファイルを「適用済み」にすると、
+       次の配置がその残りを二度と流さない。 */
+    await markApplied(pool, file);
     console.log(`  ✓ ${file}  （${applied} 文を適用 / ${skipped} 文は適用済み）`);
   }
 }
@@ -168,6 +268,19 @@ async function main() {
     if (haveCol.has(`${t}.${c}`)) { console.log(`  ✓ ${t}.${c}`); continue; }
     console.log(`  ✗ ${t}.${c} … ありません（db/migrations/ が流れていません）`);
     missingCols++;
+  }
+
+  /* 何を流したか。--check でも出す ── 「列が無い」を見たときに
+     次に見たいのがここで、読めないと「流れていない」のか
+     「流したのに当たっていない」のかを切り分けられない。 */
+  const history = await appliedMigrations(pool);
+  console.log("\n適用済みの migration:");
+  if (history === null) {
+    console.log("  ✗ schema_migrations がありません（migrate を 1 度流してください）");
+  } else if (!history.length) {
+    console.log("  （記録はまだ 1 件もありません）");
+  } else {
+    for (const r of history) console.log(`  · ${r.filename}  ${r.applied_at}`);
   }
 
   const [cps] = await pool.query(`SELECT day_number FROM quiz_checkpoints ORDER BY day_number`);

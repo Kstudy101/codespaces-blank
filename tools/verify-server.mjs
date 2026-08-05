@@ -224,14 +224,18 @@ check("9 つの表が全部ある", () => {
   return `${want.length} 表`;
 });
 
+/* 土台の 9 表 + 流した migration の記録（schema_migrations）。
+   あちらは利用者のデータを持たないが、同じ DB に置く以上
+   照合順序は揃える ── 揃っていない表が 1 つあると、そこを起点に
+   JOIN したときだけ照合順序の衝突で落ちる。 */
 check("全部 utf8mb4 ── 既定の latin1 では日本語も韓国語も入らない", () => {
   const creates = SCHEMA.match(/CREATE TABLE IF NOT EXISTS \w+[\s\S]*?ENGINE=\w+[^;]*/g) || [];
-  assert(creates.length === 9, `CREATE が ${creates.length} 件しか読めません`);
+  assert(creates.length === 10, `CREATE が ${creates.length} 件しか読めません`);
   for (const c of creates) {
     const name = c.match(/CREATE TABLE IF NOT EXISTS (\w+)/)[1];
     assert(/CHARSET=utf8mb4/.test(c), `${name} が utf8mb4 ではありません`);
   }
-  return "9 表とも";
+  return "10 表とも";
 });
 
 check("users.status に 'completed' がある（計画書 5-5 が使う）", () => {
@@ -280,10 +284,10 @@ check("節目は 30 / 50 / 75。101 は入れない（修了メッセージな�
 /* ================================================================== */
 head("[.sql の分割]  ENUM('7days',...) の途中で切らない");
 
-check("schema.sql が 10 文に割れる（表 9 + 初期値 1）", () => {
+check("schema.sql が 11 文に割れる（表 10 + 初期値 1）", () => {
   const st = splitStatements(SCHEMA);
-  assert(st.length === 10, `${st.length} 文になりました:\n      ${st.map((s) => s.slice(0, 50)).join("\n      ")}`);
-  return "10 文";
+  assert(st.length === 11, `${st.length} 文になりました:\n      ${st.map((s) => s.slice(0, 50)).join("\n      ")}`);
+  return "11 文";
 });
 
 check("どの文も注釈だけで終わっていない", () => {
@@ -313,6 +317,91 @@ check("エスケープされた引用符で文字列が終わらない", () => {
 check("末尾にセミコロンが無くても最後の 1 文を落とさない", () => {
   assert(splitStatements("SELECT 1;\nSELECT 2").length === 2, "最後が消えました");
   return "2 文";
+});
+
+
+/* ================================================================== */
+head("[migration の履歴]  配置のたびに 001 から流し直さない");
+
+/* 履歴が無かったあいだ、配置のたびに migrations/ が頭から流れていた。
+   ALTER は「もう当たっている」errno を飲み込んで素通りするが、
+   002 の INSERT ... SELECT は同じ 002 が落とす列を読むので、
+   2 周目に errno 1054 で throw → exit(1) → .cpanel.yml の set -e で
+   配置ごと停止する。実際に流すところは DB が要るので db/smoke.mjs が
+   見る。ここでは「そういう作りになっているか」だけを見る。 */
+const MIGRATE = stripComments(read("server/db/migrate.mjs"));
+const MIGRATION_FILES =
+  fs.readdirSync("server/db/migrations").filter((f) => f.endsWith(".sql")).sort();
+
+check("schema.sql が履歴の表を持っている（filename が主キー）", () => {
+  assert(/CREATE TABLE IF NOT EXISTS schema_migrations/.test(SCHEMA),
+    "schema_migrations がありません");
+  const c = SCHEMA.match(/CREATE TABLE IF NOT EXISTS schema_migrations[\s\S]*?ENGINE=\w+[^;]*/)[0];
+  assert(/filename\s+VARCHAR\(255\)\s+PRIMARY KEY/.test(c),
+    "filename が主キーではありません。番号で採ると、同じ 004 が 2 本できたとき片方が永久に流れません");
+  assert(/applied_at\s+DATETIME/.test(c), "いつ流したかが残りません");
+  return "filename VARCHAR(255) PRIMARY KEY";
+});
+
+check("migrate.mjs は履歴に在るファイルを流さない", () => {
+  assert(/schema_migrations/.test(MIGRATE), "履歴の表を見ていません");
+  const fn = MIGRATE.match(/async function runMigrations[\s\S]*?\n}/)[0];
+  assert(/done\.has\(file\)/.test(fn),
+    "ファイル名で「もう流したか」を見ていません。配置のたびに頭から流れます");
+  assert(/markApplied\(pool, file\)/.test(fn), "流したことを記録していません");
+  /* 記録は実行のあと。先に書くと、途中で落ちたファイルの残りが
+     二度と流れない。 */
+  const runAt  = fn.indexOf("splitStatements");
+  const markAt = fn.lastIndexOf("markApplied");
+  assert(runAt > 0 && markAt > runAt,
+    "実行より先に記録しています。途中で落ちた残りが二度と流れません");
+  return "履歴で飛ばす / 実行 → 記録";
+});
+
+check("1054 を飲み込む番号に足していない", () => {
+  const m = MIGRATE.match(/ALREADY_APPLIED\s*=\s*new Set\(\[([^\]]*)\]\)/);
+  assert(m, "ALREADY_APPLIED が読めません");
+  const nums = m[1].split(",").map((s) => Number(s.trim()));
+  assert(!nums.includes(1054),
+    "1054（Unknown column）を飲み込んでいます。列名を綴り間違えた SQL が「適用済み」として静かに素通りします");
+  assert(nums.length === 4, `飲み込む番号が ${nums.length} 個あります: ${nums.join(", ")}`);
+  return nums.join(" / ");
+});
+
+/* 履歴を入れた時点で本番に当たっていた 3 本。履歴だけを見て流すと、
+   いま直そうとしている事故をその場で起こす ── 「当たっていれば
+   必ず在るもの」で見分けて、流さずに記録だけする。 */
+check("001〜003 には、当たっているかを見る目印がある（bootstrap）", () => {
+  const m = MIGRATE.match(/const PROBES\s*=\s*Object\.freeze\(\{([\s\S]*?)\}\);/);
+  assert(m, "PROBES がありません。本番の 001〜003 が流し直されます");
+  for (const f of ["001-tracks-and-onboarding.sql", "002-per-course-billing.sql",
+                   "003-review-quiz.sql"]) {
+    assert(MIGRATION_FILES.includes(f), `migrations/ に ${f} がありません`);
+    assert(m[1].includes(`"${f}"`), `${f} の目印がありません`);
+  }
+  /* 目印はそのファイルでしか作られないものであること。
+     001 の users.name_source / 002 の course_entitlements /
+     003 の content_templates.quiz を、それぞれの .sql が作っている。 */
+  for (const [file, needle] of [
+    ["001-tracks-and-onboarding.sql", "name_source"],
+    ["002-per-course-billing.sql",    "course_entitlements"],
+    ["003-review-quiz.sql",           "quiz"]
+  ]) {
+    assert(read(`server/db/migrations/${file}`).includes(needle),
+      `${file} が ${needle} を作っていません（目印が別のファイルのものです）`);
+  }
+  return "001 name_source / 002 course_entitlements / 003 quiz";
+});
+
+check("smoke.mjs が migrate を 2 回続けて流す", () => {
+  /* この欠陥は DB が無いと再現しない。静的な検査で捕まえられないので、
+     「実物で 2 周する検査が置いてあること」までをここで見張る。 */
+  const src = stripComments(read("server/db/smoke.mjs"));
+  const runs = (src.match(/runMigrate\(\)/g) || []).length;
+  assert(runs >= 3, `runMigrate の呼び出しが ${runs} か所です（定義 1 + 実行 2 が要ります）`);
+  assert(/2 回目も exit 0/.test(read("server/db/smoke.mjs")),
+    "2 回目の終了コードを見ていません");
+  return "1 回目 + 2 回目";
 });
 
 

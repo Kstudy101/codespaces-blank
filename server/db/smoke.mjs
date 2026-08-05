@@ -20,9 +20,14 @@
    本番の DB に対して流しても安全。触るのは専用の試験アカウント
    1 件だけで、始めと終わりに消す。
    ================================================================== */
+import { spawn } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { getPool, closePool } from "../lib/db.mjs";
 import { users, billing, learning, pushlogs, entitlements } from "../lib/repo/index.mjs";
 import { jstDate } from "../lib/jst.mjs";
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const TEST_LINE_ID = "U_smoke_test_kstudy101";
 
@@ -55,6 +60,24 @@ const check = (label, fn) => {
 const assert = (c, m) => { if (!c) throw new Error(m); };
 const head = (s) => console.log(`\n${s}`);
 
+/* migrate.mjs を別プロセスで 1 回流し、終了コードと出力を返す。
+   関数として読み込まないのは、あちらが process.exit で終わるため ──
+   import すると smoke ごと落ちる。環境変数はそのまま引き継ぐので、
+   db/with-env.mjs 経由で走らせたときは子も同じ設定で繋ぐ。 */
+function runMigrate() {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [path.join(HERE, "migrate.mjs")],
+      { stdio: ["ignore", "pipe", "pipe"], env: process.env });
+    let out = "";
+    child.stdout.on("data", (d) => { out += d; });
+    child.stderr.on("data", (d) => { out += d; });
+    child.on("error", (e) => resolve({ code: -1, out: `${out}\n${e.message}` }));
+    child.on("close", (code) => resolve({ code, out }));
+  });
+}
+
+const tail = (s, n = 12) => s.trimEnd().split("\n").slice(-n).map((l) => `      ${l}`).join("\n");
+
 const pool = await getPool();
 
 /* 原稿を触ってよいかは、最初の cleanup より**前**に決める。
@@ -78,6 +101,45 @@ async function cleanup() {
 await cleanup();
 
 try {
+  /* ---- migrate の再実行 ---------------------------------------------
+     配置は毎回 migrate を流す。だから「2 回目が通るか」は、
+     この仕組みで一番よく踏まれる道そのものになる。
+
+     一度そこで止まった: 002 の INSERT ... SELECT が、同じ 002 の
+     最後で落とされる列を読むため、2 周目に errno 1054 で throw →
+     exit(1) → .cpanel.yml の set -e で配置ごと停止。以降の
+     migration は永久に流れない。
+
+     この欠陥は DB が要る ── 偽の接続では「どんな SQL を投げるか」
+     までしか分からず、その SQL が 2 周目に通るかは分からない。
+     だから静的な関門 19 種では捕まえられず、ここに置く。
+
+     本番でも安全。流すのは配置と同じ migrate で、履歴が在れば
+     1 文も実行しない。 */
+  head("[migrate]  2 回続けて流しても止まらない ← 配置が止まっていた所");
+
+  const m1 = await runMigrate();
+  const m2 = await runMigrate();
+
+  check("1 回目が exit 0", () => {
+    assert(m1.code === 0, `exit ${m1.code}\n${tail(m1.out)}`);
+    return "0";
+  });
+  check("2 回目も exit 0（履歴があるので流し直さない）", () => {
+    assert(m2.code === 0,
+      `exit ${m2.code}。配置はここで止まります\n${tail(m2.out)}`);
+    return "0";
+  });
+  check("2 回目は migrations を 1 文も流さない", () => {
+    /* 「通った」だけでは足りない。飲み込む errno を増やして通した
+       場合も 0 で終わるので、流していないこと自体を見る。 */
+    assert(/適用済み。流しません/.test(m2.out),
+      `履歴で飛ばしていません\n${tail(m2.out)}`);
+    assert(!/文を適用/.test(m2.out.split("migrations/:")[1] || ""),
+      `2 周目に SQL を流しています\n${tail(m2.out)}`);
+    return "全ファイルを履歴で飛ばす";
+  });
+
   /* ---- 友だち追加 -------------------------------------------------- */
   head("[友だち追加]");
 

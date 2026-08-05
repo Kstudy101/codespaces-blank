@@ -265,3 +265,33 @@ CREATE TABLE IF NOT EXISTS pending_links (
   consumed_at     DATETIME     NULL,
   KEY ix_pending_expires (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ---- 流した migration の記録 ----------------------------------------
+--
+-- 「どの .sql をもう流したか」だけを持つ表。利用者のデータではない
+-- ので外部キーも索引も要らない。
+--
+-- 【なぜ要るのか ── 無かったあいだ何が起きていたか】
+-- ここが無いあいだ、migrate.mjs は配置のたびに migrations/ を
+-- 頭から流し直していた。ALTER は「もう当たっている」を表す errno
+-- だけを飲み込む作りなので 1 周目は素通りするが、2 周目に別の
+-- 番号で落ちるものがある:
+--
+--   002 の INSERT ... SELECT s.total_days_entitled は、同じ 002 の
+--   最後で DROP される列を読む。だから 2 周目は errno 1054
+--   （Unknown column）── 飲み込む番号（1060/1061/1068/1091）に
+--   入っていないので throw → exit(1) → .cpanel.yml の set -e で
+--   配置そのものが止まる。以降の migration も永久に流れない。
+--
+-- 飲み込む番号を増やす方向では直さない。増やすほど「綴りを
+-- 間違えた ALTER が適用済みとして静かに素通りする」に近づく。
+-- 流した事実を残して、二度流さないようにする。
+--
+-- 主キーを番号ではなくファイル名にするのは、採番がぶつかったとき
+-- （同じ 004 を別々に足した）に、片方が「適用済み」に見えたまま
+-- 永久に流れない状態を作らないため。
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  filename   VARCHAR(255) PRIMARY KEY,
+  applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

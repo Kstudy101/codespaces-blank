@@ -144,11 +144,17 @@ export async function startLink(conn, input) {
 async function greet(conn, user, { send = pushMessage } = {}) {
   const saju = await users.getSajuProfile(conn, user.id);
 
+  /* ONBOARD_COLUMNS（lib/onboarding.mjs）を全部運ぶ ── ohaeng_main を
+     落とすと、連携したての本人に「直接流入の 4 段」が出る。
+     この関数は状態を組む 6 番目の経路で、自動探索の関門が見張る。 */
   const state = {
     ...user,
     birth_date: saju ? saju.birth_date : null,
     birth_time: saju ? saju.birth_time : null,
     birth_confirmed: saju ? saju.birth_confirmed : false,
+    gender: saju ? saju.gender : "U",
+    ohaeng_main: saju ? saju.ohaeng_main : null,
+    raw_result_json: saju ? saju.raw_result_json : null,
     /* 進みはコース別になったので（migrations/002）、いま受けている
        コースは users.active_track が持つ。買う前は NULL。 */
     track: user.active_track || null

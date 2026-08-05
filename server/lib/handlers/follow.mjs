@@ -55,15 +55,19 @@ function welcomeForNameless() {
       "それぞれ101日ぶんの別の講座です。",
       "",
       "──────────",
-      "▼ はじめに、こちらでお名前を入れてください（1分ほど）",
-      SITE_URL,
+      /* サイトへは戻さない ── 名前も生年月日も、このトークの中で
+         そのまま登録できる（plan-line-onboarding.md）。サイトの診断は
+         案内の末尾に「もっと詳しく」として残すだけ。
+         このあと handlers/follow.mjs が最初の質問（読み仮名）を
+         続けて送る ── 次の行動が必ず見える（7-3 の解消）。 */
+      "このまま LINE の中で、お名前から順にご登録いただけます。",
+      "",
       /* ボタンの文字列はサイトの実物（index.html #line-go）と同一に
          保つ ── 違う名前で案内すると、その名前のボタンを探して
          見つからない（指示書 §1-A④）。 */
-      "診断のあと「LINE で続きを受け取る」を押すと、ここに繋がります。",
-      "",
-      "お名前が登録できたら、下のメニューの［受講料］から",
-      "コースをお選びください。無料でお試しいただけます。"
+      `くわしい名前診断はサイトでもできます（診断のあと`,
+      `「LINE で続きを受け取る」を押すと、ここに繋がります）：`,
+      SITE_URL
     ].join("\n")
   };
 }
@@ -138,9 +142,13 @@ export async function handleFollow(conn, event,
      同じ人の追加処理が何度も走る。 */
   let welcomed = false;
   if (event?.replyToken) {
+    /* 名前の無い人にも、案内のすぐ後に**最初の質問**（読み仮名）を
+       続ける ── 案内だけで終わると次の行動が見えない（7-3）。
+       質問そのものは nextStep が導く（PENDING.reading が
+       「サイト名の選択肢が無い人」を拾う。lib/onboarding.mjs）。 */
     const messages = user.name_kr
       ? await onboardingMessages(conn, user)
-      : [welcomeForNameless()];
+      : [welcomeForNameless(), ...(await onboardingMessages(conn, user))];
     if (messages.length) {
       try {
         await reply(event.replyToken, messages);
@@ -167,11 +175,17 @@ export async function handleFollow(conn, event,
    代わりにリッチメニューが常に画面下に出ている。 */
 async function onboardingMessages(conn, user) {
   const saju = await users.getSajuProfile(conn, user.id);
+  /* ONBOARD_COLUMNS（lib/onboarding.mjs）を全部運ぶ ── ohaeng_main を
+     落とすと、サイト経由の人が「直接流入」と読まれて新 4 段の質問を
+     受ける（実際この経路だけ落ちていて関門が捕まえた）。 */
   const state = {
     ...user,
     birth_date: saju ? saju.birth_date : null,
     birth_time: saju ? saju.birth_time : null,
     birth_confirmed: saju ? saju.birth_confirmed : false,
+    gender: saju ? saju.gender : "U",
+    ohaeng_main: saju ? saju.ohaeng_main : null,
+    raw_result_json: saju ? saju.raw_result_json : null,
     track: user.active_track || null
   };
   return [

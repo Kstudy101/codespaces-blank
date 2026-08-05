@@ -26,8 +26,16 @@ import { fileURLToPath } from "node:url";
 process.chdir(path.join(path.dirname(fileURLToPath(import.meta.url)), ".."));
 
 let failed = 0, passed = 0;
+/* 同期 check に async の検査を渡すと、失敗しても緑になる ── 実際に
+   verify-onboarding で 1 件起きた（2026-08-06 指示書 §1）。Promise が
+   返ってきた時点で検査そのものを失敗させる。async は acheck へ。 */
+const guardSync = (d, label) => {
+  if (d && typeof d.then === "function") {
+    throw new Error("async の検査を同期 check に渡しています（acheck を使うこと）");
+  }
+};
 const check = (label, fn) => {
-  try { const d = fn(); passed++; console.log(`  ✓ ${label}${d ? "  " + d : ""}`); }
+  try { const d = fn(); guardSync(d, label); passed++; console.log(`  ✓ ${label}${d ? "  " + d : ""}`); }
   catch (e) { failed++; console.log(`  ✗ ${label}\n      ${e.message}`); }
 };
 const acheck = async (label, fn) => {
@@ -668,18 +676,42 @@ const { healProgress } = await import("../server/lib/repo/learning.mjs");
 const { handlePostback } = await import("../server/lib/handlers/postback.mjs");
 
 check("部分状態 5 種で、次の質問が正しく導かれる", () => {
+  /* サイト経由の状態には ohaeng_main を必ず載せる ── 実物は連携時に
+     入る判別子で、これが無い状態は「直接流入」と読まれて新 4 段へ
+     入る（plan-line-onboarding §2-4 安A。それ自体が仕様）。 */
   const CASES = [
     /* [状態, 期待 nextStep] */
     [{ name_source: null, name_kr: "하나코", display_name: "h", birth_date: "1990-01-01",
-       birth_confirmed: false, track: null }, "name",  "新規（連携直後）"],
+       birth_confirmed: false, ohaeng_main: "목", track: null }, "name",  "新規（連携直後）"],
     [{ name_source: "web", name_kr: "하나코", display_name: "h", birth_date: "1990-01-01",
-       birth_confirmed: false, track: null }, "birth", "①だけ済み"],
+       birth_confirmed: false, ohaeng_main: "목", track: null }, "birth", "①だけ済み"],
     [{ name_source: "web", name_kr: "하나코", display_name: "h", birth_date: "1990-01-01",
-       birth_confirmed: true, track: "beginner" }, null, "全部済み（再連携の代表口座）"],
+       birth_confirmed: true, ohaeng_main: "목", track: "beginner" }, null, "全部済み（再連携の代表口座）"],
+    /* saju 行ごと消えた人 ── 以前は袋小路（null）だったが、いまは
+       トークの中で生年月日から入れ直せる。部分削除の自己回復が
+       状態機械そのものに備わった形。 */
     [{ name_source: "web", name_kr: "하나코", display_name: "h", birth_date: null,
-       birth_confirmed: false, track: "beginner" }, null, "saju 行が無い（部分削除）"],
-    [{ name_source: null, name_kr: null, display_name: "h", birth_date: null,
-       birth_confirmed: false, track: null }, null, "友だち追加だけ（訊く材料が無い）"]
+       birth_confirmed: false, ohaeng_main: null, track: "beginner" }, "bdate", "saju 行が無い（部分削除 → 訊き直せる）"],
+    /* 友だち追加だけ ── 以前は訊く材料が無く沈黙だったが、いまは
+       読み仮名から始められる（7-3 の解消）。 */
+    [{ name_source: null, name_kr: null, name_kanji: null, display_name: "h", birth_date: null,
+       birth_confirmed: false, ohaeng_main: null, track: null }, "reading", "友だち追加だけ → 読みから始まる"],
+    /* 直接流入の途中経過も 1 つずつ。 */
+    [{ name_source: "line", name_kr: "타로", name_kanji: null, display_name: "h",
+       birth_date: null, birth_confirmed: false, ohaeng_main: null, track: null },
+      "bdate", "直接流入：名前だけ済み"],
+    [{ name_source: "line", name_kr: "타로", name_kanji: null, display_name: "h",
+       birth_date: "1990-01-01", birth_time: null, birth_confirmed: false,
+       ohaeng_main: null, raw_result_json: null, track: null },
+      "btime", "直接流入：日付まで（時刻は未質問）"],
+    [{ name_source: "line", name_kr: "타로", name_kanji: null, display_name: "h",
+       birth_date: "1990-01-01", birth_time: null, birth_confirmed: false,
+       ohaeng_main: null, raw_result_json: { city: "tokyo" }, gender: "U", track: null },
+      "bgender", "直接流入：時刻わからない＋出生地まで（NULL は再質問しない）"],
+    [{ name_source: "line", name_kr: "타로", name_kanji: null, display_name: "h",
+       birth_date: "1990-01-01", birth_time: "09:00:00", birth_confirmed: false,
+       ohaeng_main: null, raw_result_json: { city: "seoul" }, gender: "F", track: null },
+      "birth", "直接流入：全部答えた → 要約確認へ"]
   ];
   for (const [st, want, label] of CASES) {
     const got = nextStep(st);
@@ -698,7 +730,7 @@ await acheck("最後の答えに締めの 1 通が返る（無応答で終わら
   const conn = fakeConn({
     "FROM users": row,
     "FROM saju_profiles": [{ user_id: 7, birth_date: "1990-01-01", birth_time: null,
-      birth_confirmed: 1 }]
+      birth_confirmed: 1, ohaeng_main: "목" /* サイト経由の判別子 */ }]
   });
   let sent = null;
   const r = await handlePostback(conn,
@@ -773,19 +805,114 @@ await acheck("ONBOARD_COLUMNS を全経路が運ぶ ── 欠けは undefined �
     assert(gsp.includes(c), `getSajuProfile が ${c} を引いていません`);
   }
 
-  /* ③ stateOf（postback）と pendingStep（message）── saju 由来の列を
-        state に写しているか。users 由来は ...user が運ぶ。 */
-  for (const [file, fnName] of [
-    ["server/lib/handlers/postback.mjs", "stateOf"],
-    ["server/lib/handlers/message.mjs", "pendingStep"]
-  ]) {
+  /* ③ 状態を組む経路は**手の一覧で持たない**（2026-08-06 追加指示 1）。
+     follow が 5 番目、link.greet が 6 番目として立て続けに漏れた ──
+     7 番目も同じ道をたどる。なので「saju を引き、かつ段の判定に
+     触れるファイル」を全数探索し、検査済み一覧に無ければ**その場で
+     失敗**させる。新しい経路を書いた人は、この一覧に載せて列の
+     運搬を検査に通すまで先へ進めない。 */
+  const CHECKED = {
+    "server/lib/handlers/postback.mjs": "stateOf",
+    "server/lib/handlers/message.mjs": "pendingStep",
+    "server/lib/handlers/follow.mjs": "onboardingMessages",
+    "server/lib/handlers/link.mjs": "greet"
+  };
+  const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walk(path.join(dir, e.name))
+      : e.name.endsWith(".mjs") ? [path.join(dir, e.name)] : []);
+  const discovered = walk("server").filter((f) => {
+    const s = stripComments(read(f)).replaceAll("\\", "/");
+    return /getSajuProfile\(/.test(s)
+      && /nextStep|blockingStep|messageForStep/.test(s)
+      && !f.replaceAll("\\", "/").includes("repo/users.mjs");
+  }).map((f) => f.replaceAll("\\", "/"));
+
+  for (const f of discovered) {
+    assert(CHECKED[f],
+      `${f} が新しい状態組み立て経路です ── CHECKED に載せ、`
+      + `ONBOARD_COLUMNS の運搬をこの検査に通してください`);
+  }
+  for (const [file, fnName] of Object.entries(CHECKED)) {
+    assert(discovered.includes(file),
+      `${file} が探索に掛かりません（関数名や import が変わった可能性 ── 検査の方を直すこと）`);
     const src = stripComments(read(file));
     const fn = src.match(new RegExp(`function ${fnName}[\\s\\S]*?\\n}`))[0];
     for (const c of SAJU_COLS) {
       assert(fn.includes(c), `${file} の ${fnName} が ${c} を運んでいません`);
     }
   }
-  return `${ONBOARD_COLUMNS.length} 列 × 4 経路`;
+  return `${ONBOARD_COLUMNS.length} 列 × ${discovered.length} 経路（自動探索）`;
+});
+
+/* ================================================================== */
+head("[直接流入の 4 段]  判別子を守る・data を信じない（리뷰 수정 5）");
+
+check("チェーンの途中で ohaeng_main を書く経路が無い（不変式）", () => {
+  /* ohaeng_main の空白が「サイト診断を通っていない」の判別子。
+     bdate〜bgender のどこかで埋めると、判別が黙って崩れて
+     残りの段が止まる ── 注釈ではなく関門が守る。 */
+  const src = stripComments(read("server/lib/handlers/postback.mjs"));
+  const save = src.match(/const saveSaju[\s\S]*?\n  };/)[0];
+  assert(!/ohaengMain/.test(save), "saveSaju が ohaengMain を渡しています");
+  for (const a of ["bdate", "btime", "bplace", "bcity", "bgender"]) {
+    const fn = src.match(new RegExp(`if \\(action === "${a}"\\)[\\s\\S]*?\\n  }`))[0];
+    assert(!/ohaengMain|ohaeng_main/.test(fn), `${a} が ohaeng_main に触れています`);
+  }
+  return "saveSaju + 5 ハンドラとも不在";
+});
+
+await acheck("bcity は一覧で引き当てる ── 知らない id を黙って tokyo にしない", async () => {
+  const { handlePostback } = await import("../server/lib/handlers/postback.mjs");
+  const U_ROW = [{ id: 7, line_user_id: "U_d", display_name: "d", name_kanji: null,
+    name_reading: "たろう", name_kr: "타로", name_source: "line",
+    status: "active", active_track: null }];
+  const conn = fakeConn({ "FROM users": U_ROW });
+  const r = await handlePostback(conn,
+    { source: { userId: "U_d" }, replyToken: "rt",
+      postback: { data: "action=bcity&id=atlantis" } },
+    { send: async () => ({}) });
+  assert(r.skipped, `弾いていません: ${JSON.stringify(r)}`);
+  assert(!conn.calls.some((c) => /INSERT INTO saju_profiles|UPDATE saju_profiles/i.test(c.sql)),
+    "知らない都市を保存しています（fortune が黙って tokyo に落ちる）");
+  return "atlantis → 保存なし";
+});
+
+await acheck("datetimepicker の答えは範囲を見てから保存する", async () => {
+  const { handlePostback } = await import("../server/lib/handlers/postback.mjs");
+  const U_ROW = [{ id: 7, line_user_id: "U_d", display_name: "d", name_kanji: null,
+    name_reading: "たろう", name_kr: "타로", name_source: "line",
+    status: "active", active_track: null }];
+  /* 範囲外の年（picker の min/max は端末側の飾りで、postback は作れる） */
+  const bad = fakeConn({ "FROM users": U_ROW });
+  const r1 = await handlePostback(bad,
+    { source: { userId: "U_d" }, replyToken: "rt",
+      postback: { data: "action=bdate", params: { date: "1900-01-01" } } },
+    { send: async () => ({}) });
+  assert(r1.skipped, `範囲外が通りました: ${JSON.stringify(r1)}`);
+
+  /* 正常値 → 保存して、次の質問（時刻）が返る。
+     偽の接続は書き込みを覚えないので、INSERT を見たら以後の
+     SELECT に反映する ── 反映しないと followUp が古い状態を読み、
+     この検査自身が「保存後の次の段」を見られない。 */
+  let saved = null;
+  const ok = fakeConn({
+    "FROM users": U_ROW,
+    "INSERT INTO saju_profiles": (sql, params) => {
+      saved = { user_id: 7, birth_date: params[1], birth_time: params[2],
+                birth_confirmed: 0, gender: "U", ohaeng_main: null, raw_result_json: null };
+      return { affectedRows: 1, insertId: 1 };
+    },
+    "FROM saju_profiles": () => saved ? [saved] : []
+  });
+  let sent = null;
+  const r2 = await handlePostback(ok,
+    { source: { userId: "U_d" }, replyToken: "rt",
+      postback: { data: "action=bdate", params: { date: "1990-05-05" } } },
+    { send: async (_t, m) => { sent = m; return {}; } });
+  assert(r2.date === "1990-05-05", JSON.stringify(r2));
+  assert(saved && saved.birth_date === "1990-05-05", "保存していません");
+  assert(sent && /時刻/.test(sent[0].text), `次の質問が時刻ではありません: ${sent?.[0]?.text?.slice(0, 20)}`);
+  return "1900 拒否 / 1990 保存 → 時刻へ";
 });
 
 console.log(`\n${failed ? "✗" : "✓"} ${passed + failed} 項目中 ${passed} 件成功`

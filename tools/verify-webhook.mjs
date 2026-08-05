@@ -29,8 +29,16 @@ import { fileURLToPath } from "node:url";
 process.chdir(path.join(path.dirname(fileURLToPath(import.meta.url)), ".."));
 
 let failed = 0, passed = 0;
+/* 同期 check に async の検査を渡すと、失敗しても緑になる ── 実際に
+   verify-onboarding で 1 件起きた（2026-08-06 指示書 §1）。Promise が
+   返ってきた時点で検査そのものを失敗させる。async は acheck へ。 */
+const guardSync = (d, label) => {
+  if (d && typeof d.then === "function") {
+    throw new Error("async の検査を同期 check に渡しています（acheck を使うこと）");
+  }
+};
 const check = (label, fn) => {
-  try { const d = fn(); passed++; console.log(`  ✓ ${label}${d ? "  " + d : ""}`); }
+  try { const d = fn(); guardSync(d, label); passed++; console.log(`  ✓ ${label}${d ? "  " + d : ""}`); }
   catch (e) { failed++; console.log(`  ✗ ${label}\n      ${e.message}`); }
 };
 const acheck = async (label, fn) => {
@@ -393,7 +401,8 @@ await acheck("答えた段は、もう訊かない（次の段が返る）", asy
     user: { id: 7, line_user_id: "U_test", display_name: "たなか",
             name_kanji: "田中", name_reading: "たなか", name_kr: "다나카",
             name_source: null, status: "active" },
-    saju: { user_id: 7, birth_date: "1995-04-12", birth_time: "09:00:00", birth_confirmed: 0 },
+    saju: { user_id: 7, birth_date: "1995-04-12", birth_time: "09:00:00", birth_confirmed: 0,
+            ohaeng_main: "목" /* サイト経由の判別子 ── 無いと直接流入の 4 段へ入る */ },
     progress: { user_id: 7, track: null, current_day: 0 }
   };
   const conn = {
@@ -527,12 +536,13 @@ await acheck("名前がある人には、講座の案内と次に訊くことを
      いるので、案内の中で名指ししておく。 */
   assert(/受講料/.test(guide), "コースをどこで選ぶのかが書かれていません");
 
-  /* 2 通目は「次に訊くこと」。コースはもう段に無い（買うときに選ぶ）
-     ので、出るとすれば名前か生年月日の確認だけ。 */
+  /* 2 通目は「次に訊くこと」。コースはもう段に無い（買うときに選ぶ）。
+     saju の無い人にはトークで生年月日から訊き直せるようになった
+     （plan-line-onboarding ── この NAMED は saju 行が無いのでそちら）。 */
   if (sent.length === 2) {
     const ask = sent[1];
-    assert(/お名前の確認|生年月日の確認/.test(ask.text),
-      `2 通目が確認ではありません: ${ask.text.slice(0, 40)}`);
+    assert(/お名前の確認|生年月日の確認|生年月日を教えてください/.test(ask.text),
+      `2 通目が確認・質問ではありません: ${ask.text.slice(0, 40)}`);
     assert(!/action=track&pick=/.test(JSON.stringify(ask)),
       "コース選択のボタンが残っています（買う所へ行けません）");
   }
@@ -545,7 +555,8 @@ await acheck("コースが決まっている人には、もう訊かない", asy
     /* コースは users.active_track が持つ（migrations/002）。 */
     "FROM users": [{ ...NAMED[0], active_track: "beginner",
                      name_source: "web" }],
-    "FROM saju_profiles": [{ user_id: 8, birth_date: "1995-04-12", birth_confirmed: 1 }]
+    "FROM saju_profiles": [{ user_id: 8, birth_date: "1995-04-12", birth_confirmed: 1,
+                             ohaeng_main: "목" /* サイト経由の判別子 */ }]
   });
   const { handleFollow } = await import("../server/lib/handlers/follow.mjs");
   let sent = null;

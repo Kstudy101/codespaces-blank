@@ -34,6 +34,10 @@
 /* 診断ページ。名前を入れ直す道はここしか無い（下の注記を参照）。 */
 const SITE_URL = process.env.SITE_URL || "https://www.kstudy101.jp";
 
+/* 都市一覧。vm ロード（Saju.CITIES）から遅延で ── 写しは持たない
+   （2026-08-05 리뷰 수정 1）。読み込みは要約確認を組む時だけ。 */
+import { cities } from "./fortune.mjs";
+
 /* ---- コースはここに無い（migrations/002 以降）------------------------
    前は 3 段目が「コース選択」だった。今はコースを**買うときに**選ぶ
    （リッチメニュー → 受講料 → コース → 価格表 → 決済）ので、
@@ -41,7 +45,19 @@ const SITE_URL = process.env.SITE_URL || "https://www.kstudy101.jp";
 
    段に残したままにすると、まだ何も買っていない人に毎朝
    「コースを選んでください」が飛び、押しても買う所へ行けない。 */
-export const STEPS = Object.freeze(["name", "reading", "birth"]);
+/* LINE 直接流入の 4 段（bdate〜bgender）を挟む（plan-line-onboarding.md）。
+   サイト経由の人は値が既にあるので自然に飛ぶ ── 分岐コードは無い。
+   新 4 段は ohaeng_main が空の人（＝サイト診断を通っていない人）だけ。
+   [리뷰 수정 2] BLOCKING は name/reading のまま ── 売るのは講座で、
+   運勢は付加物。生年月日が無くても払った人のレッスンは止めない。 */
+export const STEPS = Object.freeze(
+  ["name", "reading", "bdate", "btime", "bplace", "bgender", "birth"]);
+
+/* 出生地。fortune.mjs が読む唯一の場所（raw_result_json.city）。 */
+export function cityOf(u) {
+  const raw = u?.raw_result_json;
+  return raw && typeof raw === "object" && raw.city ? String(raw.city) : null;
+}
 
 /* ---- PENDING が読む列（2026-08-05 リビュー修正 4）--------------------
    ここが唯一の出どころ。状態を組み立てるどの経路（配信の
@@ -82,10 +98,28 @@ const PENDING = Object.freeze({
      バッチは名前案内（NAME_NOTICE_MAX で 2 回）→ 沈黙で終わっていた ──
      askReading の返信が落ちた人（replyToken 切れ・LINE 5xx）は、
      何を訊かれたのかを知る機会が二度と来なかった。 */
-  reading: (u) => u.name_source === "line" && !u.name_kr,
+  reading: (u) => (u.name_source === "line"
+    /* サイト名の選択肢がそもそも無い人（友だち追加だけの直接流入）も
+       ここへ ── 7-3 の解消。読みを 1 行もらえば名前が作れる。 */
+    || (!u.name_source && !u.name_kanji)) && !u.name_kr,
 
-  /* 2. 生年月日。四柱がある人にだけ。
-     無い人に「合っていますか」と訊いても見せるものが無い。 */
+  /* ---- LINE 直接流入の 4 段（サイト診断を通っていない人だけ）--------
+     判別は ohaeng_main の有無（plan-line-onboarding §2-4 安A）──
+     サイト経由は連携時から入り、直接流入は永く空のまま
+     （fortuneFor は ohaeng_main を読まないので空で運勢も出る）。
+     [리뷰 수정 3] 重なる区間は STEPS の並びが解く。三項は使わない。
+     [2-1] 「わからない(NULL)」と「未質問」は後ろの項目の有無で分ける。 */
+  bdate:   (u) => !u.ohaeng_main && !!u.name_kr && !u.birth_date,
+  btime:   (u) => !u.ohaeng_main && !!u.birth_date
+                  && u.birth_time === null && !cityOf(u),
+  bplace:  (u) => !u.ohaeng_main && !!u.birth_date && !cityOf(u),
+  bgender: (u) => !u.ohaeng_main && !!cityOf(u)
+                  && u.gender === "U" && !u.birth_confirmed,
+
+  /* 2. 生年月日の確定。サイト経由は「ご本人のものですか」、
+     直接流入は要約確認（全項目を 1 画面 ── 決定 2-2）。
+     どちらも birth_confirmed が立って終わる ── 意味は同じ
+     「生年月日情報が確定した」。 */
   birth: (u) => !!u.birth_date && !u.birth_confirmed
 });
 
@@ -387,6 +421,137 @@ export function birthRedo() {
 /* ---- 次の 1 通を作る ------------------------------------------------
    nextStep が返した段の文面を作る。作れないとき（訊く必要が無い）は
    null を返すので、呼ぶ側は送らずに済む。 */
+/* ---- LINE 直接流入の 4 問（plan-line-onboarding.md）------------------
+   datetimepicker は LINE 専用の入れ物で、押した結果は postback の
+   params.date / params.time に載って戻る。data には値を載せない ──
+   値は LINE が運ぶ（改竄面も data より狭い）。 */
+export function askBirthDate() {
+  return {
+    type: "text",
+    text: [
+      "生年月日を教えてください。",
+      "毎朝の運勢は、ここから四柱を立てて出します。"
+    ].join("\n"),
+    quickReply: { items: [{
+      type: "action",
+      action: { type: "datetimepicker", label: "生年月日を選ぶ",
+                data: "action=bdate", mode: "date",
+                initial: "1990-01-01", min: "1930-01-01", max: "2030-12-31" }
+    }] }
+  };
+}
+
+export function askBirthTime() {
+  return {
+    type: "text",
+    text: [
+      "生まれた時刻はお分かりですか？",
+      "（分からない場合は、時柱なしの三柱で占います）"
+    ].join("\n"),
+    quickReply: { items: [
+      { type: "action",
+        action: { type: "datetimepicker", label: "時刻を選ぶ",
+                  data: "action=btime", mode: "time", initial: "12:00" } },
+      { type: "action",
+        action: { type: "postback", label: "わからない",
+                  data: "action=btime&unknown=1", displayText: "わからない" } }
+    ] }
+  };
+}
+
+/* 出生地。CITIES 17 個 > quickReply 13 個の制限なので 2 段
+   （国 → 都市）。都市の一覧は fortune.mjs の cities() ── vm ロードの
+   Saju.CITIES そのもので、写しは持たない（리뷰 수정 1）。
+   国の見分けは tz（seoul / tokyo）── CITIES に国の列は無く、
+   標準時がそのまま国割りになっている。 */
+export function askBirthPlace() {
+  return {
+    type: "text",
+    text: "お生まれの国はどちらですか？",
+    quickReply: { items: [
+      { type: "action", action: { type: "postback", label: "日本",
+          data: "action=bplace&c=tokyo", displayText: "日本" } },
+      { type: "action", action: { type: "postback", label: "韓国",
+          data: "action=bplace&c=seoul", displayText: "韓国" } }
+    ] }
+  };
+}
+
+export function askBirthCity(tzGroup, cityList) {
+  const list = cityList.filter((c) => c.tz === tzGroup);
+  return {
+    type: "text",
+    text: "いちばん近い都市をお選びください。\n（経度で真太陽時を出すのに使います）",
+    quickReply: { items: list.slice(0, 13).map((c) => ({
+      type: "action",
+      action: { type: "postback", label: String(c.ja).slice(0, 20),
+                data: `action=bcity&id=${c.id}`, displayText: c.ja }
+    })) }
+  };
+}
+
+export function askGender() {
+  return {
+    type: "text",
+    text: [
+      "性別を教えてください。",
+      "（現在は保存のみで、運勢の計算にはまだ使っていません。",
+      "　「答えない」も選べます）"
+    ].join("\n"),
+    quickReply: { items: [
+      { type: "action", action: { type: "postback", label: "男性",
+          data: "action=bgender&v=M", displayText: "男性" } },
+      { type: "action", action: { type: "postback", label: "女性",
+          data: "action=bgender&v=F", displayText: "女性" } },
+      { type: "action", action: { type: "postback", label: "答えない",
+          data: "action=bgender&v=U", displayText: "答えない" } }
+    ] }
+  };
+}
+
+/* 要約確認（決定 2-2）。直接流入の締め ── 全項目を 1 画面に並べ、
+   「これで始めます」で birth_confirmed が立つ。項目ごとに再確認
+   しない代わりの、唯一のまとめて見る場所。 */
+export function summaryConfirm(u = {}, cityList = []) {
+  const city = cityList.find((c) => c.id === cityOf(u));
+  const g = { M: "男性", F: "女性", U: "答えない" }[u.gender] || "答えない";
+  return {
+    type: "text",
+    text: [
+      "ご入力の確認です。",
+      "",
+      `　お名前　　${u.name_kr || "（未登録）"}`,
+      `　生年月日　${String(u.birth_date || "").slice(0, 10)}`,
+      `　時刻　　　${u.birth_time ? String(u.birth_time).slice(0, 5) : "わからない（三柱で占います）"}`,
+      `　出生地　　${city ? city.ja : "（未選択）"}`,
+      `　性別　　　${g}`,
+      "",
+      "この内容で始めてよろしいですか？"
+    ].join("\n"),
+    quickReply: quick([
+      { label: "これで始めます", data: "action=birth&ok=1",
+        displayText: "この内容で始めます" },
+      { label: "直したい", data: "action=birth&ok=0", displayText: "直します" }
+    ])
+  };
+}
+
+/* 直したい → どの項目か。答えると各段の質問がもう一度出て、
+   answering 後の followUp が要約確認へ自然に戻す。 */
+export function fixPicker() {
+  return {
+    type: "text",
+    text: "どちらを直しますか？",
+    quickReply: quick([
+      { label: "名前", data: "action=fix&s=reading", displayText: "名前を直します" },
+      { label: "生年月日", data: "action=fix&s=bdate", displayText: "生年月日を直します" },
+      { label: "時刻", data: "action=fix&s=btime", displayText: "時刻を直します" },
+      { label: "出生地", data: "action=fix&s=bplace", displayText: "出生地を直します" },
+      { label: "性別", data: "action=fix&s=bgender", displayText: "性別を直します" }
+    ])
+  };
+}
+
 export function messageForStep(step, u = {}) {
   if (step === "name") {
     return askName({
@@ -400,8 +565,17 @@ export function messageForStep(step, u = {}) {
   if (step === "reading") {
     return askReading();
   }
+  if (step === "bdate")   return askBirthDate();
+  if (step === "btime")   return askBirthTime();
+  if (step === "bplace")  return askBirthPlace();
+  if (step === "bgender") return askGender();
   if (step === "birth") {
-    return askBirth({ birthDate: String(u.birth_date).slice(0, 10), birthTime: u.birth_time });
+    /* サイト経由（ohaeng_main あり）は従来の「ご本人のものですか」。
+       直接流入は要約確認 ── birth_confirmed の意味はどちらも同じ。
+       都市の一覧は vm ロードから遅延で引く（写しを持たない）。 */
+    return u.ohaeng_main
+      ? askBirth({ birthDate: String(u.birth_date).slice(0, 10), birthTime: u.birth_time })
+      : summaryConfirm(u, cities());
   }
   return null;
 }

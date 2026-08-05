@@ -36,8 +36,16 @@ const SRC   = fs.readFileSync("amulet.js", "utf8");
 const HTML  = fs.readFileSync("amulet.html", "utf8");
 
 let failed = 0, passed = 0;
+/* 同期 check に async の検査を渡すと、失敗しても緑になる ── 実際に
+   verify-onboarding で 1 件起きた（2026-08-06 指示書 §1）。Promise が
+   返ってきた時点で検査そのものを失敗させる。async は acheck へ。 */
+const guardSync = (d, label) => {
+  if (d && typeof d.then === "function") {
+    throw new Error("async の検査を同期 check に渡しています（acheck を使うこと）");
+  }
+};
 const check = (label, fn) => {
-  try { const d = fn(); passed++; console.log(`  ✓ ${label}${d ? "  " + d : ""}`); }
+  try { const d = fn(); guardSync(d, label); passed++; console.log(`  ✓ ${label}${d ? "  " + d : ""}`); }
   catch (e) { failed++; console.log(`  ✗ ${label}\n      ${e.message}`); }
 };
 const assert = (c, m) => { if (!c) throw new Error(m); };

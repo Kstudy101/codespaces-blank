@@ -67,7 +67,12 @@ export async function handleMessage(conn, event) {
      読めなければ案内をもう一度。サイトのリンクは readingRetry の
      末尾に**最後の手段**として載るだけで、主導線はあくまでトーク
      （元の「必ずサイトへ戻す」が離脱のもとだった）。 */
-  if (user.name_source === "line" && !user.name_kr
+  if (!user.name_kr
+      /* 「LINEの名前で／べつの名前で」を選んだ人（name_source='line'）と、
+         サイト名の選択肢がそもそも無い直接流入（name_source も
+         name_kanji も無い）── PENDING.reading と同じ区分け。
+         ウェブ名がある未選択の人（name_kr あり）はここに来ない。 */
+      && (user.name_source === "line" || (!user.name_source && !user.name_kanji))
       /* 解約の言葉だけは素通しする。「やめたい」を名前の候補として
          「야메타이 で OK?」と返すのは、いちばん悪いタイミングの冗談になる。
          状況系（きょう 等）は素通しにしない ── きょう は実在の名前。 */

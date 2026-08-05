@@ -17,21 +17,22 @@
 - 결제(선불 횟수권)는 **코드 완성, 의도적으로 잠겨 있음** — §3
 - 관문(자동 검증) **19종 전부 통과** + smoke 29항목 (migrate 2회 연속 검사 포함)
 
-**다음에 할 일 네 가지.**
+**다음에 할 일 세 가지.**
 
-1. **★ 아침·저녁 배신 cron 이 본번 crontab 에 없습니다** — 2026-08-05 배포
-   로그의 `crontab -l` 실측에서 `maintain` 행만 있고 morning/evening 두 줄이
-   부재. plan-deploy-server §체크리스트에는 08-04 등록 완료([x])로 기록돼
-   있어 모순 — **cPanel → Cron Jobs 화면을 확인하고, 없으면 문서의 두 줄을
-   재등록**해 주십시오. 이 상태면 아침 7시 배신이 나가지 않습니다
-   (마이그레이션 사고와는 무관 — 서버·DB·webhook 은 전부 정상)
-2. **점검 후속 §4 의 승인** — LINE 장애 시 일수 소각 / 결제 실패 무권리의
-   설계 2건 ([docs/plan-outage-billing.md](docs/plan-outage-billing.md) 승인 대기).
-   maintain 이 첫 실측에서 台帳 드리프트 1건(#3 beginner 3/0)을 이미 잡았
-   습니다 — 라이브 검증 때 손으로 넣은 3일일 가능성이 높지만 확인 요망
-3. **plan-profile 의 전제 2건** — §4 답(gender 대운 반영 ①/②)과 privacy 문안 확정
+1. **점검 후속 §4 의 판단** — LINE 장애 시 일수 소각 / 결제 실패 무권리의
+   설계 2건 ([docs/plan-outage-billing.md](docs/plan-outage-billing.md)).
+   **대표님 지시(2026-08-05)로 현시점 보류** — 코드 무변경으로 현상 유지.
+   maintain 이 첫 실측에서 台帳 드리프트 1건(#3 beginner 3/0)을 잡았습니다
+   — 라이브 검증 때 손으로 넣은 3일일 가능성이 높지만 확인 요망
+2. **plan-profile 의 전제 2건** — §4 답(gender 대운 반영 ①/②)과 privacy 문안 확정
    ([docs/plan-profile.md](docs/plan-profile.md) 승인 대기)
-4. **§3의 값 3개를 정한다** — 그게 없으면 결제가 안 열립니다
+3. **§3의 값 3개를 정한다** — 그게 없으면 결제가 안 열립니다
+
+> **해소됨 (2026-08-05, `52ac6cc`)**: 본번 crontab 에 morning/evening 이
+> 없던 문제 — 배포가 cron 3행(morning·evening 매시 / maintain 04:00 JST)을
+> 자동 등록하도록 전환했고, 배포 로그의 `crontab -l` 실측으로 3행 전부
+> 확인. 등록은 행 단위 멱등이라 중복되지 않는다. 이후 cron 은 화면이
+> 아니라 `.cpanel.yml` 이 정본이다.
 
 복습 퀴즈는 **라이브 검증까지 통과** (2026-08-05): 테스트 계정 1개로
 발신 판정·스킵 3케이스·실발송·정답/오답 즉답·미학습 차단·DB 쓰기 0을

@@ -61,8 +61,17 @@ const SHELL = (title, body) => `<!doctype html>
 
 export function resultPage(r) {
   if (r && r.ok) {
-    const name = r.nameKr ? `<span class="name">${escapeHtml(r.nameKr)}</span>` : "あなた";
+    /* 名前が未確定なら、この行ごと出さない ── 空欄や「あなた」を
+       名前の場所に置くと、名前の行そのものが誤りに見える
+       （2026-08-05 指示書 §1-C：「null」を画面に出さない）。 */
+    const nameLine = r.nameKr
+      ? `<p>韓国語でのお名前は <span class="name">${escapeHtml(r.nameKr)}</span> です。</p>`
+      : "";
 
+    /* 「翌朝から体験が始まります」とは言わない ── 体験はコースを
+       選んで初めて始まり、いまは販売も closed。売り状態と無関係に
+       真である文だけを置く（指示書 §1-A②③。誘導文句は §7 の
+       待機画面とセットで入れる ── 1-B 保留）。 */
     if (r.friend === false) {
       /* 引き継ぎは終わっているが、まだ友だちではない。
          もう一歩あることを隠さない ── 「完了しました」とだけ出して
@@ -71,10 +80,10 @@ export function resultPage(r) {
         <div class="card ok">
           <div class="mark">◎</div>
           <h1>診断結果を引き継ぎました</h1>
-          <p>韓国語での名前は ${name} です。</p>
+          ${nameLine}
           <hr>
           <p><strong>あと一歩です。</strong>下のボタンから友だち追加すると、
-             翌朝 7 時から 3 日間の無料体験がはじまります。</p>
+             LINE のトークで続きをご案内します。</p>
           <a class="btn" href="${escapeHtml(ADD_FRIEND_URL())}">LINE で友だち追加する</a>
         </div>`);
     }
@@ -83,9 +92,8 @@ export function resultPage(r) {
       <div class="card ok">
         <div class="mark">◎</div>
         <h1>連携が完了しました</h1>
-        <p>韓国語での名前は ${name} です。</p>
-        <p>明日の朝 7 時から、${name} 専用の韓国語が LINE に届きます。
-           まずは 3 日間の無料体験です。</p>
+        ${nameLine}
+        <p>このあとの流れは、LINE のトークでご案内します。</p>
         <a class="btn" href="${escapeHtml(ADD_FRIEND_URL())}">LINE を開く</a>
       </div>`);
   }

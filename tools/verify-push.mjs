@@ -136,13 +136,34 @@ await check("今日ぶんを既に送っていれば、何もしない", async (
   return "確保もしない";
 });
 
-await check("保有日数を超えたら送らない", async () => {
+await check("保有日数を超えたら本編は送らない。再購入の案内だけ 1 回（§3）", async () => {
+  /* 台帳が新しく開く朝 ── 案内が 1 通、レッスンは 0 通。 */
   const conn = fakeConn(READY);
+  let msgs = null;
+  const r = await deliverOne(conn, { ...USER, days_entitled: 3, days_used: 3 },
+    { send: async (_to, m) => { msgs = m; return {}; } });
+  assert(r === "日数切れ", r);
+  assert(msgs && msgs.length === 1, `送った数が ${msgs?.length}（案内 1 通のはず）`);
+  assert(/日数/.test(msgs[0].text) && /続きから/.test(msgs[0].text),
+    `案内の文面が違います: ${msgs[0].text.split("\n")[0]}`);
+  assert(msgs[0].quickReply?.items?.some((i) => /action=plans/.test(i.action.data)),
+    "受講料へ行くボタンがありません");
+  assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)),
+    "日を消費しています（この分岐は advanceDay の手前のはず）");
+  assert(conn.calls.some((c) => /INSERT INTO push_logs/i.test(c.sql) && c.params.includes("upsell")),
+    "upsell の記録がありません");
+  return "本編 0 / 案内 1・日数は減らない";
+});
+
+await check("台帳が既に開いていれば、案内は二度と出ない（毎日スパム防止）", async () => {
+  /* findOpen が行を返す ── openIfAbsent は created=false。 */
+  const conn = fakeConn({ ...READY,
+    "FROM lapse_log": [{ id: 5, user_id: 7, track: "beginner" }] });
   let sent = false;
   const r = await deliverOne(conn, { ...USER, days_entitled: 3, days_used: 3 },
     { send: async () => { sent = true; return {}; } });
   assert(!sent && r === "日数切れ", `${r} / 送信=${sent}`);
-  return "3 日使い切ったら送らない";
+  return "エピソードにつき 1 回";
 });
 
 await check("体験の 3 日目までは送る（境界を 1 日ずらしていない）", async () => {

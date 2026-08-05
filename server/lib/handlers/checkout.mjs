@@ -52,6 +52,35 @@ export function salesOpen() {
   return missingLegalConfig().length === 0;
 }
 
+/* ---- 販売の露出モード（2026-08-05 指示書 §1-1）----------------------
+   法定表示 4 つ（salesOpen）は**必要条件のまま**で、その上にモードを
+   重ねる。分ける理由: Stripe のテスト鍵を入れた瞬間に salesOpen が
+   開き、実利用者に価格表と決済リンクが出てしまう ── テストモードは
+   実カードを拒むので、利用者は決済失敗を経験する。「準備中」より悪い。
+
+     closed … 全員に「準備中」（既定。値が無い・読めない時もこちら）
+     test   … SALES_TEST_USERS（コンマ区切り）に載る人だけ通す。
+              users.id でも line_user_id でもよい ── 画面で見える方を
+              そのまま貼れるように両方で引き当てる
+     open   … 全員
+
+   既定を closed にするのは、書き忘れ・綴り間違いが「売れてしまう」
+   側に倒れないため。 */
+export function salesMode() {
+  const m = String(process.env.SALES_MODE || "closed").trim().toLowerCase();
+  return ["closed", "test", "open"].includes(m) ? m : "closed";
+}
+
+export function salesAllowedFor(user) {
+  if (!salesOpen()) return false;          /* 法定表示は常に必要条件 */
+  const mode = salesMode();
+  if (mode === "open") return true;
+  if (mode !== "test") return false;
+  const list = String(process.env.SALES_TEST_USERS || "")
+    .split(",").map((s) => s.trim()).filter(Boolean);
+  return list.includes(String(user?.id)) || list.includes(String(user?.line_user_id));
+}
+
 const notReady = () => ({
   type: "text",
   text: [
@@ -59,6 +88,38 @@ const notReady = () => ({
     "受講のお申し込みは、もうしばらくお待ちください。"
   ].join("\n")
 });
+
+/* コースはあるが、売れるパッケージが 1 つも無い（原稿が最小の
+   パッケージ日数に満たない）。全体の「準備中」と分けるのは、
+   他のコースは買える状態がありうるため。 */
+export const coursePreparing = (track) => ({
+  type: "text",
+  text: `${TRACK_LABELS[track].ja}（${TRACK_LABELS[track].kr}）は、ただいま準備中です。\nもうしばらくお待ちください。`
+});
+
+/* ---- 残り 0 になった朝の、再購入のご案内（指示書 §3）----------------
+   離脱のエピソードにつき 1 回だけ ── 毎朝の判定で残り 0 には毎日
+   出会うので、条件なしに送ると毎日スパムになる。1 回だけの判定は
+   lapse_log が新しく開いたかどうか（repo/lapses.mjs openIfAbsent の
+   created）に載せる。呼ぶのは db/push-daily.mjs。 */
+export function upsellNotice(track, { lastDay = 0 } = {}) {
+  const l = TRACK_LABELS[track];
+  return {
+    type: "text",
+    text: [
+      `${l.ja}（${l.kr}）は ${lastDay} 日目まで進みました。`,
+      "お持ちの日数を使い切ったため、お届けをいったんお休みしています。",
+      "",
+      "日数を追加されると、続きからそのままお届けします。",
+      "進んだところが消えることはありません。"
+    ].join("\n"),
+    quickReply: { items: [{
+      type: "action",
+      action: { type: "postback", label: "受講料を見る",
+                data: "action=plans", displayText: "受講料を見る" }
+    }] }
+  };
+}
 
 
 /* ---- ① コースを選ぶ ------------------------------------------------- */
@@ -107,12 +168,20 @@ export function askCourse({ owned = [] } = {}) {
 
    体験を使っていない人には、価格表と一緒に体験の入口も出す。
    出さないと、試さずに払うか、払わずに去るかの二択になる。 */
-export function priceList(track, { trialAvailable = false } = {}) {
+export function priceList(track, { trialAvailable = false, availableDays = TOTAL_DAYS } = {}) {
   const l = TRACK_LABELS[track];
-  const rows = Object.entries(PACKAGES)
+
+  /* 原稿の保有日数を超えるパッケージは出さない（指示書 §1-2）。
+     中級 30 日ぶんの原稿で 101 日を売ると、31 日目から「原稿なし」で
+     **黙って**止まる ── 売った側は気づかず、買った側だけが知る。
+     原稿を増やせば、この絞り込みが自動で上のパッケージを開く。 */
+  const sellable = Object.entries(PACKAGES).filter(([, p]) => p.days <= availableDays);
+  if (!sellable.length) return null;   /* 呼ぶ側が「準備中」を出す */
+
+  const rows = sellable
     .map(([key, p]) => `・${String(p.days).padStart(3)} 日分　${p.price.toLocaleString()} 円（税込）`);
 
-  const items = Object.entries(PACKAGES).map(([key, p]) => ({
+  const items = sellable.map(([key, p]) => ({
     type: "action",
     action: {
       type: "postback",

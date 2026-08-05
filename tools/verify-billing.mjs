@@ -391,13 +391,90 @@ check("特商法の表記と返金規定が無ければ売らない", () => {
   return "4 つ揃って初めて開く";
 });
 
-check("価格表を出す前に門を通る", () => {
+check("価格表を出す前に門を通る（SALES_MODE を重ねた salesAllowedFor）", () => {
   const src = stripComments(read("server/lib/handlers/postback.mjs"));
   for (const a of ["plans", "plan", "buy"]) {
     const fn = src.match(new RegExp(`if \\(action === "${a}"\\)[\\s\\S]*?\\n  }`))[0];
-    assert(/salesOpen\(\)/.test(fn), `action=${a} が門を通っていません`);
+    assert(/salesAllowedFor\(user\)/.test(fn), `action=${a} が門を通っていません`);
   }
   return "plans / plan / buy";
+});
+
+check("SALES_MODE ── 既定 closed / test は名簿だけ / open は全員（§1-1）", () => {
+  const keep = { m: process.env.SALES_MODE, u: process.env.SALES_TEST_USERS,
+                 t: process.env.TOKUSHOHO_URL, r: process.env.REFUND_POLICY,
+                 s: process.env.STRIPE_SECRET_KEY, w: process.env.STRIPE_WEBHOOK_SECRET };
+  try {
+    /* 法定表示は全部そろえておく ── 見たいのはモードの段だけ。 */
+    process.env.TOKUSHOHO_URL = "https://example/tokushoho";
+    process.env.REFUND_POLICY = "…";
+    process.env.STRIPE_SECRET_KEY = "sk_test";
+    process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
+    const me = { id: 7, line_user_id: "U_me" };
+    const other = { id: 8, line_user_id: "U_other" };
+
+    delete process.env.SALES_MODE;
+    assert(!checkout.salesAllowedFor(me), "SALES_MODE 未設定なのに売れます（既定は closed のはず）");
+
+    process.env.SALES_MODE = "こわれた値";
+    assert(checkout.salesMode() === "closed", "読めない値が closed に倒れません");
+
+    process.env.SALES_MODE = "test";
+    process.env.SALES_TEST_USERS = "7, U_someone";
+    assert(checkout.salesAllowedFor(me), "名簿に居るのに test で売れません");
+    assert(!checkout.salesAllowedFor(other), "名簿に居ないのに test で売れます ── 実利用者に決済画面が開く事故");
+
+    process.env.SALES_MODE = "open";
+    assert(checkout.salesAllowedFor(other), "open なのに売れません");
+
+    /* モードが open でも法定表示が欠ければ閉じる（必要条件のまま） */
+    delete process.env.TOKUSHOHO_URL;
+    assert(!checkout.salesAllowedFor(other), "表記なしで open が通っています");
+  } finally {
+    for (const [k, v] of Object.entries({ SALES_MODE: keep.m, SALES_TEST_USERS: keep.u,
+        TOKUSHOHO_URL: keep.t, REFUND_POLICY: keep.r,
+        STRIPE_SECRET_KEY: keep.s, STRIPE_WEBHOOK_SECRET: keep.w })) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  }
+  return "closed（既定・誤記も）/ test 名簿 / open、法定表示は常に必要";
+});
+
+const { PACKAGES: PKGS } = await import("../server/lib/repo/billing.mjs");
+
+check("原稿の日数を超えるパッケージは並ばない（§1-2）", () => {
+  process.env.TOKUSHOHO_URL ||= "https://example/tokushoho";
+  process.env.REFUND_POLICY ||= "返金の説明";
+  /* 30 日ぶんしか無いコース ── 30days までしか出ない */
+  const list30 = checkout.priceList("intermediate", { availableDays: 30 });
+  assert(list30, "30 日ぶんあるのに価格表が出ません");
+  const days30 = (list30.text.match(/(\d+) 日分/g) || []).map((s) => parseInt(s));
+  assert(days30.length && Math.max(...days30) <= 30,
+    `原稿 30 日なのに ${Math.max(...days30)} 日を売っています ── 31 日目から黙って止まる`);
+  const dataDays = list30.quickReply.items
+    .map((i) => i.action.data.match(/pkg=(\w+)/)?.[1]).filter(Boolean);
+  for (const key of dataDays) {
+    assert(PKGS[key].days <= 30, `ボタンに ${key} が残っています`);
+  }
+  /* 1 つも売れない ── null（呼ぶ側が「準備中」を出す） */
+  assert(checkout.priceList("advanced", { availableDays: 0 }) === null,
+    "原稿 0 なのに価格表が出ます");
+  /* 全量あれば全パッケージ */
+  const listAll = checkout.priceList("beginner", { availableDays: 101 });
+  const daysAll = (listAll.text.match(/(\d+) 日分/g) || []).map((s) => parseInt(s));
+  assert(Math.max(...daysAll) === Math.max(...Object.values(PKGS).map((p) => p.days)),
+    "全量あるのに上のパッケージが出ません");
+  return "30 日 → 30days まで / 0 日 → 準備中 / 101 日 → 全部";
+});
+
+check("buy と trial も原稿の上限で止まる（data 改竄への蓋）", () => {
+  const src = stripComments(read("server/lib/handlers/postback.mjs"));
+  const buy = src.match(/if \(action === "buy"\)[\s\S]*?\n  }/)[0];
+  assert(/countTemplates/.test(buy), "buy が原稿の日数を見ていません");
+  const trial = src.match(/if \(action === "trial"\)[\s\S]*?\n  }/)[0];
+  assert(/countTemplates/.test(trial) && /TRIAL_DAYS/.test(trial),
+    "trial が原稿の日数を見ていません");
+  return "価格表に出ないものは、名乗られても売らない";
 });
 
 check("価格表に法が求める項目が入っている", () => {
@@ -561,6 +638,75 @@ check("repo/ は渡された conn しか使わない（新しい 2 つも）", (
   return "entitlements / lapses";
 });
 
+
+/* ================================================================== */
+head("[体験]  申込＝同意の時点が 1 日目（指示書 §2）");
+
+const { handlePostback } = await import("../server/lib/handlers/postback.mjs");
+const TRIAL_EVENT = { source: { userId: "U_t" }, replyToken: "rt",
+  postback: { data: "action=trial&track=beginner" } };
+const TRIAL_ROWS = {
+  "FROM users": [{ id: 7, line_user_id: "U_t", display_name: "t", name_kanji: null,
+    name_reading: "たろう", name_kr: "타로", name_source: "web",
+    status: "active", active_track: null }],
+  "COUNT\\(\\*\\) AS n FROM content_templates": [{ n: 50 }]
+};
+
+await acheck("申込が通ったら、その場で deliverNow（creditFromStripe と同じ形）", async () => {
+  const conn = fakeConn(TRIAL_ROWS);
+  const delivered = [];
+  const r = await handlePostback(conn, TRIAL_EVENT, {
+    send: async () => ({}),
+    deliver: async (_c, userId) => { delivered.push(userId); return "送信:1日目"; },
+    push: async () => ({})
+  });
+  assert(r.started === true, JSON.stringify(r));
+  assert(delivered.length === 1 && delivered[0] === 7,
+    `deliverNow が ${delivered.length} 回（1 回・本人のはず）`);
+  return "「このあとすぐ 1 日目」が事実になる";
+});
+
+await acheck("送れない答え（対象外）には一言そえる。体験開始は壊さない", async () => {
+  const conn = fakeConn(TRIAL_ROWS);
+  const pushed = [];
+  const r = await handlePostback(conn, TRIAL_EVENT, {
+    send: async () => ({}),
+    deliver: async () => "対象外",
+    push: async (_to, m) => { pushed.push(...m); return {}; }
+  });
+  assert(r.started === true, JSON.stringify(r));
+  assert(pushed.length === 1 && /準備ができしだい/.test(pushed[0].text),
+    "黙る種類の失敗に一言そえていません（「すぐ届く」と言った直後に無音になる）");
+  return "対象外 → 準備ができしだい";
+});
+
+await acheck("二度目の体験は deliverNow を呼ばない", async () => {
+  /* startTrial の INSERT が一意制約に当たる（1062）＝もう使った。 */
+  const conn = fakeConn({ ...TRIAL_ROWS, "INSERT INTO subscriptions": () => { throw dupErr(); } });
+  const delivered = [];
+  const r = await handlePostback(conn, TRIAL_EVENT, {
+    send: async () => ({}),
+    deliver: async (_c, id) => { delivered.push(id); return "送信:1日目"; },
+    push: async () => ({})
+  });
+  assert(r.started !== true, JSON.stringify(r));
+  assert(delivered.length === 0, "使えない体験で 1 日目を送っています");
+  return "used → 送らない";
+});
+
+await acheck("原稿が体験日数に満たないコースでは体験も始めない（§1-2）", async () => {
+  const conn = fakeConn({ ...TRIAL_ROWS,
+    "COUNT\\(\\*\\) AS n FROM content_templates": [{ n: 0 }] });
+  const delivered = [];
+  const r = await handlePostback(conn, TRIAL_EVENT, {
+    send: async () => ({}),
+    deliver: async (_c, id) => { delivered.push(id); return "送信:1日目"; },
+    push: async () => ({})
+  });
+  assert(r.blocked === "原稿不足", JSON.stringify(r));
+  assert(delivered.length === 0, "原稿 0 のコースで体験を始めています");
+  return "準備中 → 始めない";
+});
 
 console.log(`\n${failed ? "✗" : "✓"} ${passed + failed} 項目中 ${passed} 件成功`
   + (failed ? ` / ${failed} 件失敗` : ""));

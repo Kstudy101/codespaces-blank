@@ -351,6 +351,16 @@ export async function pickReviewQuiz(conn, track, maxDay) {
            question: q.question, choices: q.choices, answer: q.answer };
 }
 
+/* そのコースに原稿が何日ぶんあるか。販売の上限に使う（指示書 §1-2）──
+   原稿より長いパッケージを売ると、越えた日から「原稿なし」で黙って
+   止まり、売った側は気づけない。 */
+export async function countTemplates(conn, track) {
+  if (!isTrack(track)) throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")}）`);
+  const row = await one(conn,
+    `SELECT COUNT(*) AS n FROM content_templates WHERE track = ?`, [track]);
+  return row ? Number(row.n) : 0;
+}
+
 /* 何日目が埋まっていないか。101 日を売る以上、
    「買ったのに 87 日目が来ない」は起きてはいけない。
    P4 の入稿作業と P10 の監視の両方から呼ぶ。

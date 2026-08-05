@@ -33,7 +33,7 @@ import { startLink, completeLink } from "./lib/handlers/link.mjs";
 import { resultPage } from "./lib/pages.mjs";
 import { jstDateTime } from "./lib/jst.mjs";
 import { verifyStripeSignature, readCheckoutEvent } from "./lib/stripe.mjs";
-import { creditFromStripe, missingLegalConfig } from "./lib/handlers/checkout.mjs";
+import { creditFromStripe, missingLegalConfig, salesMode } from "./lib/handlers/checkout.mjs";
 import { deliverNow } from "./db/push-daily.mjs";
 
 loadEnv();
@@ -388,6 +388,16 @@ server.listen(PORT, () => {
     for (const m of missing) logErr(`    ・${m}`);
   } else {
     log("  受講料の案内 有効");
+  }
+
+  /* 販売モード（指示書 §1-1）。test のまま本番に残るのがこの装置の
+     唯一の失敗モードなので、起動のたびに大声で言う。 */
+  const mode = salesMode();
+  if (mode === "test") {
+    logErr("!! SALES_MODE=test ── 価格表は SALES_TEST_USERS の人にしか出ません。");
+    logErr("!! 検証が終わったら open へ。本番に test を残さないこと。");
+  } else {
+    log(`  販売モード ${mode}${mode === "closed" ? "（全員に準備中）" : ""}`);
   }
 });
 

@@ -45,7 +45,7 @@ import { TOTAL_DAYS } from "../lib/repo/learning.mjs";
 import { blockingStep, messageForStep } from "../lib/onboarding.mjs";
 import { fortuneFor } from "../lib/fortune.mjs";
 import { loadLines, fortuneMessage } from "../lib/fortune-text.mjs";
-import { EXPIRING_AT, expiringNotice, completionNotice } from "../lib/handlers/checkout.mjs";
+import { EXPIRING_AT, expiringNotice, completionNotice, upsellNotice } from "../lib/handlers/checkout.mjs";
 
 /* ---- 引数 --------------------------------------------------------- */
 const argv = process.argv.slice(2);
@@ -303,10 +303,27 @@ export async function deliverOne(conn, u, { send = pushMessage, load = loadLines
   const remaining = Number(u.days_entitled ?? 0) - Number(u.days_used ?? 0);
   if (remaining <= 0) {
     /* 切れたことを 1 度だけ台帳に残す。開いている行があれば書かない
-       ので、切れているあいだ毎朝増えることはない（repo/lapses.mjs）。 */
+       ので、切れているあいだ毎朝増えることはない（repo/lapses.mjs）。
+
+       再購入のご案内も**台帳が新しく開いた回だけ**（指示書 §3）──
+       残り 0 には毎朝の判定で毎日出会うので、created に載せないと
+       毎日スパムになる。日数は消費しない（この分岐は advanceDay の
+       ずっと手前）。送信の失敗で台帳は巻き戻さない ── 案内は 1 回
+       きりの約束のほうが重い。 */
     if (!DRY && !DISABLED) {
-      await lapses.openIfAbsent(conn, u.id, u.track,
+      const opened = await lapses.openIfAbsent(conn, u.id, u.track,
         { lastDay: today, daysBought: Number(u.days_entitled ?? 0) });
+      if (opened.created) {
+        try {
+          await send(u.line_user_id, [upsellNotice(u.track, { lastDay: today })],
+            { retryKey: retryKey(u.id, today, "upsell") });
+          await pushlogs.logSent(conn, u.id, { dayNumber: today, pushType: "upsell" });
+        } catch (e) {
+          if (isUnreachable(e)) await users.markUnfollowed(conn, u.line_user_id);
+          await pushlogs.logFailed(conn, u.id, { dayNumber: today, pushType: "upsell",
+            error: String(e.message || e).slice(0, 500) });
+        }
+      }
     }
     return "日数切れ";
   }

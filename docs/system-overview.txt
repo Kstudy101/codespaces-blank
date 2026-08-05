@@ -1451,13 +1451,13 @@ tasks 는 하나의 셸에서 이어 돌므로 export 가 뒤 행에도 미침.
                                  재사용·CORS·XSS·채널 프로바이더 불일치
   verify-render.mjs          39  index.html 의 조사 규칙을 실소스에서 읽어 대조 +
                                  저녁이 아침의 재전송이 아닌 것
-  verify-push.mjs            40  확보→송신 순서를 가짜 send 로 들여다봄 +
+  verify-push.mjs            42  확보→송신 순서를 가짜 send 로 들여다봄 +
                                  코스 미선택 시 날을 안 깎는 것 + 운세가 3통째
   verify-evening.mjs         21  복습은 보너스 — current_day 를 안 건드리는가 /
                                  대상을 진도가 아닌 발신 로그에서 뽑는가
   verify-fortune-server.mjs  16  서버 운세 = 사이트 운세 +
                                  문안 30칸+십신 10 결번·철자
-  verify-billing.mjs         44  선불 횟수권 — 잔여는 entitled - used /
+  verify-billing.mjs         51  선불 횟수권 — 잔여는 entitled - used /
                                  재개해도 받은 일수가 공짜가 안 되는 것
   verify-quiz.mjs            18  3일 주기 복습 퀴즈 — 미학습 배제 /
                                  정답이 data 에 없음 / 무저장 /
@@ -1468,7 +1468,7 @@ tasks 는 하나의 셸에서 이어 돌므로 export 가 뒤 행에도 미침.
                                  570통 전수 대조 / step① 이 사이트로 안
                                  돌려보냄 / postback data 의 이름 불신
   -----------------------  ----
-  합계                      548
+  합계                      557
 
   루트에 package.json 이 없으므로 의존 패키지가 없습니다 —
   각 스크립트가 vm 으로 대상 .js 를 그대로 읽어 실행합니다.

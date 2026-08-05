@@ -1060,7 +1060,7 @@ node db/smoke.mjs
 
 ### 1. 배포 관문 — 저장소에 있고, push 할 때마다 돌아갑니다
 
-`tools/verify-*.mjs` 19종 **548항목**. `.github/workflows/deploy.yml` 이 rsync 앞에
+`tools/verify-*.mjs` 19종 **557항목**. `.github/workflows/deploy.yml` 이 rsync 앞에
 세워 두었으므로, 하나라도 실패하면 배포가 멈춥니다. 루트에 `package.json` 이 없으므로
 의존 패키지도 없습니다 — 각 스크립트가 `vm` 으로 대상 `.js` 를 그대로 읽어 실행합니다.
 `server/` 만 `mysql2` 를 쓰지만 `lib/db.mjs` 한 곳에 갇혀 있어, `verify-server.mjs`
@@ -1081,10 +1081,10 @@ node db/smoke.mjs
 | `verify-webhook.mjs` | 42 | **서명이 유일한 경계** — 생바이트·timingSafeEqual·검증 전 파싱 금지·postback data 불신 |
 | `verify-onboarding.mjs` | 61 | **OAuth 는 틀려도 성공처럼 보인다** — state 예측·재사용·CORS·XSS·채널 프로바이더 불일치 |
 | `verify-render.mjs` | 39 | **한글 완성형 11,172자 전수** — 받침·조사, 그리고 저녁 복습이 아침의 재전송이 아닌 것 |
-| `verify-push.mjs` | 40 | **아침 배치의 순서** — 확보→발신, 코스 미선택 시 날을 안 깎는 것, 운세가 3통째인 것 |
+| `verify-push.mjs` | 42 | **아침 배치의 순서** — 확보→발신, 코스 미선택 시 날을 안 깎는 것, 운세가 3통째인 것 |
 | `verify-evening.mjs` | 21 | **복습은 보너스** — `current_day` 를 건드리지 않는가 / 대상을 진도가 아닌 발신 로그에서 뽑는가 |
 | `verify-fortune-server.mjs` | 16 | **웹과 같은 값** — 사본 없음 / 출생지로 오늘 주 계산 / 문안 30칸+십신 10 결번 |
-| `verify-billing.mjs` | 44 | **선불 횟수권** — 잔여는 `days_entitled - days_used` / 재개 시 일수가 공짜가 안 되는 것 |
+| `verify-billing.mjs` | 51 | **선불 횟수권** — 잔여는 `days_entitled - days_used` / 재개 시 일수가 공짜가 안 되는 것 |
 | `verify-quiz.mjs` | 18 | **3일 주기 복습 퀴즈 + 절목 퀴즈(30/50/75)** — 미학습 배제 / 정답이 data 에 없음 / 복습은 무저장·절목은 학기 합부 기록 + 즉답 / 예고와 겹치는 절목 아침만 5통 |
 | `verify-kana.mjs` | 14 | **가나→한글 사본의 담보** — index.html 실물과 570통 전수 대조 / step① 이 사이트로 안 돌려보냄 / data 의 이름 불신 |
 

@@ -35,15 +35,17 @@
    段そのものは lib/onboarding.mjs が中身から導く（列で持たない）。
    ================================================================== */
 import { users, learning, billing, entitlements } from "../repo/index.mjs";
-import { replyMessage } from "../line.mjs";
+import { replyMessage, pushMessage } from "../line.mjs";
 import { nextStep, messageForStep, askReading, confirmName, nameFixed,
          onboardingDone, birthRedo, serviceGuide } from "../onboarding.mjs";
 import { kanaNameToHangul } from "../kana2hangul.mjs";
 import {
-  salesOpen, notReady, askCourse, priceList, startCheckout, checkoutLink,
-  startTrialFor, applyResume, resumeDone, statusMessage, missingLegalConfig
+  salesAllowedFor, salesMode, notReady, coursePreparing, askCourse, priceList,
+  startCheckout, checkoutLink, startTrialFor, applyResume, resumeDone,
+  statusMessage, missingLegalConfig
 } from "./checkout.mjs";
-import { PACKAGES } from "../repo/billing.mjs";
+import { PACKAGES, TRIAL_DAYS } from "../repo/billing.mjs";
+import { deliverNow } from "../../db/push-daily.mjs";
 import { isTrack } from "../repo/learning.mjs";
 
 /* "a=1&b=2" を読む。URLSearchParams を使うのは、
@@ -122,7 +124,11 @@ async function reply(replyToken, messages, send) {
 }
 
 
-export async function handlePostback(conn, event, { send = replyMessage } = {}) {
+/* deliver / push は試験で差し替えるための口。既定は本物 ──
+   deliver は体験申込の即時 1 日目（指示書 §2、creditFromStripe と
+   同じ考え方で外から注入できる形にしておく）。 */
+export async function handlePostback(conn, event,
+  { send = replyMessage, deliver = deliverNow, push = pushMessage } = {}) {
   const lineUserId = event?.source?.userId;
   if (!lineUserId) return { skipped: "userId がありません" };
 
@@ -245,11 +251,16 @@ export async function handlePostback(conn, event, { send = replyMessage } = {}) 
 
   /* ---- 受講料：① コースを選ぶ --------------------------------------
      売る用意が整っていなければ、ここで止める。表示の義務を満たす前に
-     決済へ進める道を作らない（handlers/checkout.mjs の門）。 */
+     決済へ進める道を作らない（handlers/checkout.mjs の門）。
+
+     salesAllowedFor は法定表示に SALES_MODE を重ねたもの（§1-1）──
+     plans / plan / buy の 3 か所とも同じ判定を通す。1 か所でも素通り
+     すると、テスト鍵を入れた日に実利用者へ決済リンクが出る。 */
   if (action === "plans") {
-    if (!salesOpen()) {
-      console.error("[checkout] 設定が足りません:", missingLegalConfig().join(" / "));
-      return { userId: user.id, action, blocked: "設定不足",
+    if (!salesAllowedFor(user)) {
+      console.error("[checkout] 販売停止中:", `mode=${salesMode()}`,
+        missingLegalConfig().join(" / ") || "(法定表示は充足)");
+      return { userId: user.id, action, blocked: "販売停止",
                replied: await reply(token, [notReady()], send) };
     }
     const owned = (await entitlements.listByUser(conn, user.id)).map((e) => e.track);
@@ -259,17 +270,25 @@ export async function handlePostback(conn, event, { send = replyMessage } = {}) 
 
   /* ---- 受講料：② 価格表（＝最終確認画面）--------------------------- */
   if (action === "plan") {
-    if (!salesOpen()) {
-      console.error("[checkout] 設定が足りません:", missingLegalConfig().join(" / "));
-      return { userId: user.id, action, blocked: "設定不足",
+    if (!salesAllowedFor(user)) {
+      console.error("[checkout] 販売停止中:", `mode=${salesMode()}`);
+      return { userId: user.id, action, blocked: "販売停止",
                replied: await reply(token, [notReady()], send) };
     }
     const track = params.track;
     if (!isTrack(track)) return { skipped: `未知の track: ${track}`, userId: user.id };
 
-    /* 体験を使っていない人にだけ、無料の入口も並べる。 */
-    const trialAvailable = !(await billing.trialUsed(conn, user.id));
-    const replied = await reply(token, [priceList(track, { trialAvailable })], send);
+    /* 原稿の保有日数が売れる上限（§1-2）。体験もこの中に収まるときだけ。 */
+    const availableDays = await learning.countTemplates(conn, track);
+    const trialAvailable = !(await billing.trialUsed(conn, user.id))
+      && TRIAL_DAYS <= availableDays;
+    const list = priceList(track, { trialAvailable, availableDays });
+    if (!list) {
+      /* 売れるパッケージが 1 つも無い ── 原稿が最小パッケージに満たない */
+      return { userId: user.id, action, track, blocked: "原稿不足",
+               replied: await reply(token, [coursePreparing(track)], send) };
+    }
+    const replied = await reply(token, [list], send);
     return { userId: user.id, action, track, replied };
   }
 
@@ -278,14 +297,21 @@ export async function handlePostback(conn, event, { send = replyMessage } = {}) 
      こちらの表から取る ── data は書き換えられるので、金額を載せると
      100 円で 101 日ぶんを買える。 */
   if (action === "buy") {
-    if (!salesOpen()) {
-      console.error("[checkout] 設定が足りません:", missingLegalConfig().join(" / "));
-      return { userId: user.id, action, blocked: "設定不足",
+    if (!salesAllowedFor(user)) {
+      console.error("[checkout] 販売停止中:", `mode=${salesMode()}`);
+      return { userId: user.id, action, blocked: "販売停止",
                replied: await reply(token, [notReady()], send) };
     }
     const track = params.track, pkg = params.pkg;
     if (!isTrack(track)) return { skipped: `未知の track: ${track}`, userId: user.id };
     if (!PACKAGES[pkg])  return { skipped: `未知の package: ${pkg}`, userId: user.id };
+
+    /* data は書き換えられる ── 価格表に出していないパッケージを
+       名乗られても、原稿の上限（§1-2）でここでも止める。 */
+    if (PACKAGES[pkg].days > await learning.countTemplates(conn, track)) {
+      return { userId: user.id, action, track, pkg, blocked: "原稿不足",
+               replied: await reply(token, [coursePreparing(track)], send) };
+    }
 
     let r;
     try {
@@ -303,10 +329,20 @@ export async function handlePostback(conn, event, { send = replyMessage } = {}) 
     return { userId: user.id, action, track, pkg, sessionId: r.sessionId, replied };
   }
 
-  /* ---- 受講料：④ 体験 ---------------------------------------------- */
+  /* ---- 受講料：④ 体験 ----------------------------------------------
+     申し込み（＝内容への同意）の時点を 1 日目と見る（指示書 §2）。
+     有料の入金経路（creditFromStripe が deliverNow を呼ぶ）と同じ
+     やり方で、体験もその場で 1 日目を届ける ── これで案内文の
+     「このあとすぐ 1 日目が届きます」が事実になる。 */
   if (action === "trial") {
     const track = params.track;
     if (!isTrack(track)) return { skipped: `未知の track: ${track}`, userId: user.id };
+
+    /* 原稿が体験日数ぶんも無いコースでは始めない（§1-2 と同じ上限）。 */
+    if (TRIAL_DAYS > await learning.countTemplates(conn, track)) {
+      return { userId: user.id, action, track, blocked: "原稿不足",
+               replied: await reply(token, [coursePreparing(track)], send) };
+    }
 
     const r = await startTrialFor(conn, user, track);
     if (!r.ok) {
@@ -316,7 +352,26 @@ export async function handlePostback(conn, event, { send = replyMessage } = {}) 
     }
     const replied = await reply(token, [{ type: "text",
       text: `無料体験を始めます。まず ${r.days} 日分をお届けします。\nこのあとすぐ 1 日目が届きます。` }], send);
-    return { userId: user.id, action, track, started: true, replied };
+
+    /* 1 日目をその場で。sentToday が立つので、けさの配信バッチが
+       まだ来ていなくても二重には届かない（deliverNow の頭書き）。
+       名前待ち等で送れないときは deliverOne 側が案内を出すか黙るので、
+       黙る種類（対象外・原稿なし）にだけ一言添える ── 「すぐ届きます」と
+       言った直後に何も来ない、を残さない。 */
+    let delivered = null;
+    try {
+      delivered = await deliver(conn, user.id);
+    } catch (e) {
+      delivered = `失敗: ${e.message}`;
+      console.error("[trial] 1 日目を送れません:", e.message);
+    }
+    if (delivered === "対象外" || delivered === "原稿なし") {
+      try {
+        await push(user.line_user_id, [{ type: "text",
+          text: "1 日目の準備ができしだい、お届けします。" }]);
+      } catch { /* 案内の失敗で体験開始は壊さない */ }
+    }
+    return { userId: user.id, action, track, started: true, delivered, replied };
   }
 
   /* ---- ⑥ 続きから / 最初から ---------------------------------------- */

@@ -35,12 +35,16 @@ import { handlePostback } from "./handlers/postback.mjs";
 
 export const HANDLED_TYPES = Object.freeze(["follow", "unfollow", "message", "postback"]);
 
-export async function handleEvent(conn, event) {
+/* opts は postback へそのまま渡す（transact 注入・plan-outage-billing §2-2）。
+   本番は app.mjs が withTransaction を渡し、関門は渡さない（既定＝
+   同じ conn でそのまま）── handlers が db.mjs を直接読むと偽の conn の
+   関門が壊れる、の同じ理由。 */
+export async function handleEvent(conn, event, opts = {}) {
   switch (event?.type) {
     case "follow":   return { type: "follow",   ...(await handleFollow(conn, event)) };
     case "unfollow": return { type: "unfollow", ...(await handleUnfollow(conn, event)) };
     case "message":  return { type: "message",  ...(await handleMessage(conn, event)) };
-    case "postback": return { type: "postback", ...(await handlePostback(conn, event)) };
+    case "postback": return { type: "postback", ...(await handlePostback(conn, event, opts)) };
     default:
       /* join / leave / memberJoined など。使っていないだけで
          異常ではないので、記録に残して先へ進む。 */
@@ -48,7 +52,7 @@ export async function handleEvent(conn, event) {
   }
 }
 
-export async function handleWebhookBody(conn, body) {
+export async function handleWebhookBody(conn, body, opts = {}) {
   const events = Array.isArray(body?.events) ? body.events : [];
 
   /* 直列に回す。並列にすると、同じ人の follow と message が
@@ -58,7 +62,7 @@ export async function handleWebhookBody(conn, body) {
   const results = [];
   for (const event of events) {
     try {
-      results.push(await handleEvent(conn, event));
+      results.push(await handleEvent(conn, event, opts));
     } catch (e) {
       results.push({
         type: event?.type || "(不明)",

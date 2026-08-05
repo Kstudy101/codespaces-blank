@@ -26,7 +26,7 @@
    ================================================================== */
 import http from "node:http";
 import { loadEnv, requireEnv } from "./lib/env.mjs";
-import { getPool } from "./lib/db.mjs";
+import { getPool, withTransaction } from "./lib/db.mjs";
 import { verifyLineSignature } from "./lib/signature.mjs";
 import { handleWebhookBody } from "./lib/webhook.mjs";
 import { startLink, completeLink } from "./lib/handlers/link.mjs";
@@ -152,7 +152,7 @@ async function onWebhook(req, res) {
 
   try {
     const pool = await getPool();
-    const results = await handleWebhookBody(pool, body);
+    const results = await handleWebhookBody(pool, body, { transact: withTransaction });
     for (const r of results) {
       if (r.error) logErr("event 失敗", r);
       else log("event", JSON.stringify(r));

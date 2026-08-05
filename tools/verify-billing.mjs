@@ -716,6 +716,94 @@ await acheck("原稿が体験日数に満たないコースでは体験も始め
   return "準備中 → 始めない";
 });
 
+/* ================================================================== */
+head("[half-done]  台帳があれば日数もある（plan-outage-billing §2）");
+
+await acheck("決済の記録と日数は 1 つのトランザクションで書く", async () => {
+  /* transact を差し替えて、creditPurchase の SQL が全部 tx を
+     通ることを見る ── 一部でも素の conn に流れると、くくった意味が無い。 */
+  const outer = fakeConn({
+    "FROM users": [{ id: 7, line_user_id: "U_t", status: "active", active_track: null }]
+  });
+  const tx = fakeConn({
+    "FROM course_entitlements": [{ track: "beginner", days_entitled: 30, days_used: 0,
+                                   current_day: 0, remaining: 30 }]
+  });
+  let wrapped = 0;
+  const r = await checkout.creditFromStripe(outer,
+    { sessionId: "cs_x", userId: 7, track: "beginner", packageType: "30days", amount: 2980 },
+    { transact: async (fn) => { wrapped++; return fn(tx); },
+      send: async () => ({}) });
+  assert(wrapped === 1, `transact が ${wrapped} 回（1 回のはず）`);
+  const writes = tx.sql().filter((s) => /INSERT INTO purchases|INSERT INTO course_entitlements|UPDATE subscriptions/i.test(s));
+  assert(writes.some((s) => /INSERT INTO purchases/i.test(s))
+      && writes.some((s) => /INSERT INTO course_entitlements/i.test(s)),
+    "台帳と日数が同じ tx を通っていません");
+  assert(!outer.sql().some((s) => /INSERT INTO purchases|INSERT INTO course_entitlements/i.test(s)),
+    "tx の外（素の conn）で台帳・日数を書いています");
+  return "purchases + grant + subscriptions が同じ tx";
+});
+
+await acheck("トランザクションが失敗したら、日数は 1 日も付かない", async () => {
+  /* grant で死ぬ tx。withTransaction 相当のロールバックを模す ──
+     transact が例外を外へ返し、呼び側が ok:false で受けること。 */
+  const outer = fakeConn({
+    "FROM users": [{ id: 7, line_user_id: "U_t", status: "active", active_track: null }]
+  });
+  const r = await checkout.creditFromStripe(outer,
+    { sessionId: "cs_y", userId: 7, track: "beginner", packageType: "30days", amount: 2980 },
+    { transact: async (fn) => {
+        const tx = fakeConn({ "INSERT INTO course_entitlements": () => {
+          throw new Error("死んだ（grant 直前）"); } });
+        return fn(tx);   /* rollback の模擬: 例外はそのまま上へ */
+      },
+      send: async () => ({}) }).catch((e) => ({ ok: false, threw: e.message }));
+  assert(r.ok === false, `失敗が握りつぶされています: ${JSON.stringify(r)}`);
+  assert(!outer.sql().some((s) => /INSERT/i.test(s)), "外の conn に書き込みが漏れています");
+  return "例外は外へ ── 200 を返す前に気づける形";
+});
+
+await acheck("startTrial も同じ形（半分成功が体験を永久に殺す）", async () => {
+  const src = stripComments(read("server/lib/handlers/checkout.mjs"));
+  const fn = src.match(/export async function startTrialFor[\s\S]*?\n}/)[0];
+  assert(/transact\(\s*\(tx\)\s*=>\s*billing\.startTrial\(tx/.test(fn),
+    "startTrial が transact でくくられていません");
+  /* 本番配線: app → webhook → postback に withTransaction が通ること。 */
+  const app = stripComments(read("server/app.mjs"));
+  assert(/handleWebhookBody\(pool, body, \{ transact: withTransaction \}\)/.test(app),
+    "app.mjs が withTransaction を渡していません");
+  return "trial も台帳＋日数が 1 つ / 本番配線あり";
+});
+
+await acheck("逆方向の突き合わせ ── 行ごと無い half-done を拾う", async () => {
+  const conn = fakeConn({
+    "FROM purchases p": [{ user_id: 9, track: "beginner", bought: 30 }],
+    "FROM subscriptions s": [{ user_id: 11, track: "intermediate" }]
+  });
+  const r = await billing.findMissingEntitlements(conn);
+  assert(r.fromPurchases.length === 1 && r.fromPurchases[0].user_id === 9,
+    "購入の half-done を拾えていません");
+  assert(r.fromTrials.length === 1 && r.fromTrials[0].user_id === 11,
+    "体験の half-done（再試行できない状態）を拾えていません");
+  assert(!conn.sql().some((s) => /INSERT|UPDATE|DELETE/i.test(s)),
+    "検出のはずが書き込んでいます（自動修正は禁止）");
+  return "purchases 起点 + subscriptions 起点 / 読むだけ";
+});
+
+check("async_payment_succeeded を受ける（コンビニ・振込の入金）", () => {
+  const base = { data: { object: { id: "cs_1", payment_status: "paid",
+    metadata: { user_id: "7", track: "beginner", package: "30days" }, amount_total: 2980 } } };
+  const a = readCheckoutEvent({ ...base, type: "checkout.session.async_payment_succeeded" });
+  assert(a && a.sessionId === "cs_1", "async_payment_succeeded を捨てています（入金したのに日数 0）");
+  /* completed(unpaid) は従来どおり捨てる ── 振込の「まだ払っていない」 */
+  const unpaid = readCheckoutEvent({ type: "checkout.session.completed",
+    data: { object: { ...base.data.object, payment_status: "unpaid" } } });
+  assert(unpaid === null, "未払いを日数に替えています");
+  /* 無関係のイベントは従来どおり */
+  assert(readCheckoutEvent({ ...base, type: "charge.refunded" }) === null, "知らないイベントを受けています");
+  return "async(paid) 受理 / completed(unpaid) 拒否";
+});
+
 console.log(`\n${failed ? "✗" : "✓"} ${passed + failed} 項目中 ${passed} 件成功`
   + (failed ? ` / ${failed} 件失敗` : ""));
 process.exit(failed ? 1 : 0);

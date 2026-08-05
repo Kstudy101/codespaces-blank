@@ -270,10 +270,14 @@ export function checkoutLink(track, packageType, url) {
 /* ---- ④ 体験 ---------------------------------------------------------
    1 アカウント 1 回だけ。コース別にすると、コースを変えるだけで
    3 コース ×3 日 = 9 日を無料で受け取れる（repo/billing.mjs）。 */
-export async function startTrialFor(conn, user, track) {
+export async function startTrialFor(conn, user, track,
+  { transact = (fn) => fn(conn) } = {}) {
   if (!isTrack(track)) return { ok: false, reason: `未知の track: ${track}` };
 
-  const r = await billing.startTrial(conn, user.id, track);
+  /* subscriptions と grant を 1 つに（creditFromStripe と同じ理由）。
+     半分だけ成功すると subscriptions.user_id UNIQUE のせいで
+     体験を**永遠に再試行できない**状態が残る。 */
+  const r = await transact((tx) => billing.startTrial(tx, user.id, track));
   if (!r.created) {
     return { ok: false, kind: "used", reason: "体験は 1 回だけです" };
   }
@@ -300,7 +304,17 @@ export async function startTrialFor(conn, user, track) {
 
    1 を先にするのは、送信で落ちても入金が消えないため。逆にすると
    「払ったのに日数が無い」が残る。 */
-export async function creditFromStripe(conn, ev, { deliver = null, send = pushMessage } = {}) {
+/* transact は注入で受ける（plan-outage-billing §2-2 B）。本番は app.mjs が
+   withTransaction を渡し、関門は既定値（同じ conn でそのまま実行）で
+   SQL の順序を検証する ── handlers が db.mjs(=mysql2) を直接 import
+   すると、偽の conn で回る関門が壊れるため。
+
+   くくる単位は「台帳＋日数」だけ。守る不変式は
+   **「台帳があれば日数もある」** の 1 つで、ensureProgress /
+   setActiveTrack は接点の自己回復（healProgress）が拾う種類なので
+   トランザクションに含めない。 */
+export async function creditFromStripe(conn, ev,
+  { deliver = null, send = pushMessage, transact = (fn) => fn(conn) } = {}) {
   if (!ev) return { ok: false, reason: "対象外のイベント" };
   if (!Number.isInteger(ev.userId) || ev.userId <= 0) {
     return { ok: false, reason: `metadata の user_id が読めません: ${ev.userId}` };
@@ -313,8 +327,13 @@ export async function creditFromStripe(conn, ev, { deliver = null, send = pushMe
 
   /* 1. 台帳と日数。payment_ref に Checkout Session の id を入れる。
         同じセッションが二度届いても 1062 で弾かれ、日数は増えない。 */
-  const credited = await billing.creditPurchase(conn, user.id, ev.track, ev.packageType,
-    { paymentRef: ev.sessionId, pricePaid: ev.amount || null });
+  /* 台帳（purchases）と日数（grant）と subscriptions を 1 つの
+     トランザクションで。INSERT の後・grant の前に死ぬと「決済の記録は
+     あるのに日数が無い」が残り、再送は payment_ref UNIQUE の 1062 で
+     **静かに無視**される ── 回復の道が無い half-done を作らない。 */
+  const credited = await transact((tx) =>
+    billing.creditPurchase(tx, user.id, ev.track, ev.packageType,
+      { paymentRef: ev.sessionId, pricePaid: ev.amount || null }));
 
   if (!credited.created) {
     return { ok: true, duplicate: true, userId: user.id, track: ev.track };

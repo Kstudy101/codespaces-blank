@@ -135,7 +135,10 @@ async function reply(replyToken, messages, send) {
    deliver は体験申込の即時 1 日目（指示書 §2、creditFromStripe と
    同じ考え方で外から注入できる形にしておく）。 */
 export async function handlePostback(conn, event,
-  { send = replyMessage, deliver = deliverNow, push = pushMessage } = {}) {
+  { send = replyMessage, deliver = deliverNow, push = pushMessage,
+    /* 本番は webhook 経由で withTransaction が入る。既定は同じ conn で
+       そのまま ── 偽の conn の関門を壊さない（plan-outage-billing §2-2）。 */
+    transact = (fn) => fn(conn) } = {}) {
   const lineUserId = event?.source?.userId;
   if (!lineUserId) return { skipped: "userId がありません" };
 
@@ -452,7 +455,7 @@ export async function handlePostback(conn, event,
                replied: await reply(token, [coursePreparing(track)], send) };
     }
 
-    const r = await startTrialFor(conn, user, track);
+    const r = await startTrialFor(conn, user, track, { transact });
     if (!r.ok) {
       const replied = await reply(token, [{ type: "text",
         text: "無料でお試しいただけるのは 1 回までです。\n［受講料］から日数をお選びください。" }], send);

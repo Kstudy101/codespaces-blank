@@ -67,6 +67,22 @@ if (drift.length) {
   console.log("  台帳とのずれ: なし");
 }
 
+/* ---- 3.5 逆方向 ── 台帳はあるのに保有の行が無い --------------------
+   上の 3 は e 行を起点に数えるので、行ごと無い half-done
+   （初回購入・体験の反쯤 실패）を見られない。台帳の側から引く。
+   検出だけ ── 直すのは人（plan-outage-billing §2-2 C）。 */
+const missing = await billing.findMissingEntitlements(pool);
+if (missing.fromPurchases.length || missing.fromTrials.length) {
+  for (const m of missing.fromPurchases) {
+    console.log(`  ⚠ 決済の記録はあるのに保有の行が無い: #${m.user_id} ${m.track} bought=${m.bought}`);
+  }
+  for (const m of missing.fromTrials) {
+    console.log(`  ⚠ 体験の記録はあるのに保有の行が無い: #${m.user_id} ${m.track}（体験を再試行できない状態）`);
+  }
+} else {
+  console.log("  逆方向のずれ: なし");
+}
+
 /* ---- 4. 買ったのに始まっていない人 ---------------------------------- */
 const unstarted = await entitlements.listUnstarted(pool);
 if (unstarted.length) {

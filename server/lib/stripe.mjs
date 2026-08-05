@@ -159,7 +159,18 @@ export function verifyStripeSignature(rawBody, headerValue, secret, {
 /* 本文から要るものだけ取り出す。Stripe の event は大きいので、
    使うものを 1 か所に集めておくと、増やしたときに追える。 */
 export function readCheckoutEvent(event) {
-  if (!event || event.type !== "checkout.session.completed") return null;
+  /* async_payment_succeeded も受ける（plan-outage-billing §2-3 (가)）。
+     コンビニ・銀行振込は completed が **unpaid** で来て（下の判定で
+     捨てる）、入金の瞬間にこちらのイベントが paid で届く ── 受けないと
+     「入金されたのに日数が永遠に 0」。session の形は completed と同じで、
+     payment_ref（session id）も同じなので、二重に来ても 1062 が防ぐ。
+
+     ★ 危険の在りか: この事故は Stripe のダッシュボードで決済手段を
+     増やす**だけ**で発生し、コード変更を伴わない。日本の PSP へ替えると
+     コンビニ払いが標準で載るので、その日が来る前にここで受けておく。 */
+  const OK_TYPES = ["checkout.session.completed",
+                    "checkout.session.async_payment_succeeded"];
+  if (!event || !OK_TYPES.includes(event.type)) return null;
   const s = event?.data?.object;
   if (!s) return null;
 

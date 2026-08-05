@@ -218,3 +218,33 @@ export async function recountEntitledDays(conn, userId, track) {
 export async function findEntitlementDrift(conn) {
   return all(conn, `${DRIFT_SQL} WHERE e.days_entitled <> ${EXPECTED}`);
 }
+
+/* ---- 逆方向の突き合わせ（plan-outage-billing §2-2 C）----------------
+   上の DRIFT_SQL は course_entitlements を起点にするので、
+   **e 行そのものが生まれなかった** half-done を見られない:
+     (i)  初回購入が INSERT purchases の後・grant の前に死んだ
+     (ii) startTrial が subscriptions の後・grant の前に死んだ
+          ── (ii) は user_id UNIQUE のせいで体験を永遠に再試行できない
+   台帳の側から引き直して、行ごと無い欠けを拾う。
+   **検出・報告だけ。自動修正はしない**（直すのは人 ── 消えた原因を
+   見ずに埋めると、同じ穴に何度でも落ちる）。 */
+export async function findMissingEntitlements(conn) {
+  /* 台帳（purchases）はあるのに、そのコースの e 行が無い */
+  const fromPurchases = await all(conn, `
+    SELECT p.user_id, p.track, SUM(p.days_granted) AS bought
+      FROM purchases p
+      LEFT JOIN course_entitlements e
+        ON e.user_id = p.user_id AND e.track = p.track
+     WHERE e.user_id IS NULL
+     GROUP BY p.user_id, p.track`);
+
+  /* 体験の記録（subscriptions.trial_track）はあるのに e 行が無い */
+  const fromTrials = await all(conn, `
+    SELECT s.user_id, s.trial_track AS track
+      FROM subscriptions s
+      LEFT JOIN course_entitlements e
+        ON e.user_id = s.user_id AND e.track = s.trial_track
+     WHERE s.trial_track IS NOT NULL AND e.user_id IS NULL`);
+
+  return { fromPurchases, fromTrials };
+}

@@ -116,19 +116,21 @@ deployment:
     # 呼ぶと、cron の道（activate を探すところ）だけが試されない。
     - if [ -f "$HOME/.run-push-dry" ]; then /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; bash db/push-cron.sh --dry-run' && /bin/rm -f "$HOME/.run-push-dry"; else echo "配信の下見はしません（~/.run-push-dry がありません）"; fi
 
-    # --- 保守の cron を確かめる ---------------------------------
-    # maintain（db/maintain.mjs ── pending_links の期限切れ削除・古い
-    # 配信ログの掃除・台帳の見張り）は、cron の行が無いと永久に
-    # 走らない。privacy.html の「30 分後に自動的に削除」はこの行が
-    # 守るので、登録を人の記憶に置かない ── 配置のたびに有無を見て、
-    # 無ければ足す。既存の行には触らない（morning / evening は
-    # cPanel の画面から入れたもの。消すのも直すのもここではしない）。
+    # --- cron の 3 行を確かめる ---------------------------------
+    # morning / evening / maintain は、cron の行が無いと永久に走らない。
+    # 実際、2026-08-05 の配置ログの crontab -l 実測で morning / evening が
+    # **無かった**（文書には 08-04 に画面から登録済みと記録されていたのに、
+    # crontab には maintain しか居なかった）── 登録を人の記憶と画面操作に
+    # 置かない。配置のたびに 3 行の有無を見て、**無いものだけ**足す。
+    # 既存の行には触らない（mode 名の grep で行単位に守る）。
     #
-    # 19:00 UTC = 04:00 JST。配信（朝 7 時・夕 18 時 JST）と重ならない
-    # 未明帯（db/push-cron.sh の頭書き）。
-    # 行の形は cPanel の画面から入れた morning / evening と同じ（~ 表記）。
-    - export MAINTAIN_LINE='0 19 * * * /bin/bash ~/kstudy101-line/db/push-cron.sh maintain >> ~/logs/push.log 2>&1'
-    - if crontab -l 2>/dev/null | /bin/grep -qF "push-cron.sh maintain"; then echo "OK - maintain の cron は登録済み"; else ( crontab -l 2>/dev/null; echo "$MAINTAIN_LINE" ) | crontab - && echo "OK - maintain の cron を登録しました" || echo "NG - crontab に登録できません。cPanel の Cron Jobs で手で追加してください → $MAINTAIN_LINE"; fi
+    # morning / evening が毎時なのは設計どおり ── 何時に送るかは各バッチが
+    # 日本時間を見て決める（--not-before=7 / 18。借りたサーバーの地方時は
+    # 移設・夏時間で黙ってずれるため。db/push-cron.sh の頭書き）。
+    # maintain だけ 19:00 UTC = 04:00 JST 固定 ── 届く時刻の約束が無く、
+    # 消すのは期限切れと 400 日前のログだけなので、ずれても配信と
+    # 表を取り合わない。
+    - for spec in "0 * * * *:morning" "0 * * * *:evening" "0 19 * * *:maintain"; do mode="${spec##*:}"; sched="${spec%:*}"; line="$sched /bin/bash ~/kstudy101-line/db/push-cron.sh $mode >> ~/logs/push.log 2>&1"; if crontab -l 2>/dev/null | /bin/grep -qF "push-cron.sh $mode"; then echo "OK - $mode の cron は登録済み"; else ( crontab -l 2>/dev/null; echo "$line" ) | crontab - && echo "OK - $mode の cron を登録しました（$sched）" || echo "NG - $mode を crontab に登録できません。cPanel の Cron Jobs で手で追加してください → $line"; fi; done
     # いま cron に何が居るかを配置ログへ（登録の成否を後から読めるように）。
     - crontab -l 2>/dev/null | /bin/grep -F "push-cron.sh" || echo "（push-cron の行が 1 本もありません）"
 

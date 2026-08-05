@@ -175,7 +175,7 @@ const DELIVERABLE_SQL = `
          e.days_entitled,
          e.days_entitled - p.days_used AS remaining,
          j.ohaeng_main, j.raw_result_json, j.birth_date, j.birth_time,
-         j.birth_confirmed, j.lucky_hour_display
+         j.birth_confirmed, j.gender, j.lucky_hour_display
     FROM users u
     JOIN learning_progress   p ON p.user_id = u.id AND p.track = u.active_track
     JOIN course_entitlements e ON e.user_id = u.id AND e.track = u.active_track

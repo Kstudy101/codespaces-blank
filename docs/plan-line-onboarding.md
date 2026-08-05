@@ -3,10 +3,10 @@
 작성: 2026-08-05 / **갱신: 2026-08-05 대표 지시(문면 확정+계획서 갱신 지시서 §2) 반영** /
 근거: 지시서 정정 1·2 + [research-onboarding-gap.md](research-onboarding-gap.md)
 
-> **상태: 갱신 완료 — 승인 대기.** 코드 착수 금지(지시서 §3-2).
-> 반영된 대표 결정: 2-1 **(가)** — 추가 열 없이 「뒤 항목 채워짐」으로 도출 /
-> 2-2 — 확인은 생략이 아니라 **체인 말미의 요약 확인 1통**으로 모으고 기존
-> `birth` 단계를 재사용 / 2-4 는 (A)/(B) 비교를 §2-4 에 제시(권고 A).
+> **상태: 조건부 승인 (2026-08-05 리뷰) — 수정 5건 반영 완료, 착수 가능(재승인 불요).**
+> **배포 게이트: privacy 제2항 게시가 코드 배포보다 먼저** (성별 수집 시작 시점).
+> 반영된 대표 결정: 2-1 (가) / 2-2 요약 확인·birth 재사용 / 2-4 (A) 권고 /
+> 리뷰 수정 1~5 (아래 각 절에 표시).
 
 ---
 
@@ -29,9 +29,12 @@
 | 출생지 | **2단계 quickReply**: ①한국/일본 → ②도시 | 정정 1: 위경도 아님. `CITIES` 17개(한 7·일 10) > quickReply 13개 제한이라 2단계 필수. 저장은 `raw_result_json.city` 에 도시 id (fortune.mjs 가 읽는 곳 그대로) |
 | 성별 | quickReply 3택 (男/女/回答しない) | 정정 2: `gender ENUM('M','F','U')` 열 기존. **이번엔 저장만** — 대운 계산 반영은 대표 미결(§4 보류 중) |
 
-CITIES 는 사이트(saju.js)에만 있음 → **kana2hangul 과 같은 방식**: 서버 사본 +
-verify 관문이 saju.js 실물과 전수 대조 (id·표기·개수). 사본 금지 규칙의 두 번째
-허가 예외로 CLAUDE.md 에 명기.
+**[리뷰 수정 1] CITIES 사본을 만들지 않습니다.** `saju.js:297` 이 공개 API 로
+`Saju.CITIES` 를 이미 내보내고, [fortune.mjs](../server/lib/fortune.mjs) 가 `node:vm` 으로
+saju.js 를 통째 로드 중입니다. **기존 vm 로드에서 꺼내 쓰는 접근자 1개**
+(`fortune.mjs` 에 `export function cities() { return load().Saju.CITIES; }`)로
+충분 — 사본·패리티 관문·CLAUDE.md 예외 2호 전부 불필요, 사본 금지 원칙이
+그대로 지켜집니다.
 
 ## 2. 상태 기계 설계 (지시서 필수 항목)
 
@@ -51,11 +54,10 @@ PENDING = {
   name:        (u) => !u.name_kr,                    /* §0.5: name_kr 존재가 유일 판정 */
   birth_date:  (u) => !u.birth_date,
   /* time: 뒤 항목(출생지)이 차 있으면 「물었고 わからない(NULL)」다.
-     비어 있으면 아직 안 물었다. undefined 비교는 쓰지 않는다 ──
-     드라이버가 NULL 을 null 로 돌려주므로 어차피 성립하지 않는다. */
+     비어 있으면 아직 안 물었다. [리뷰 수정 3] 삼항 없이 ──
+     둘 다 참인 구간은 STEPS 배열 순서(find 가 앞을 집음)가 해결한다. */
   birth_time:  (u) => !!u.birth_date && u.birth_time === null && !cityOf(u),
-  birth_place: (u) => !!u.birth_date && !cityOf(u) ? false /* time 이 먼저 */ : !cityOf(u),
-  /*            └ 실제 구현은 순서 배열이 보장하므로 단순히 !cityOf(u) */
+  birth_place: (u) => !!u.birth_date && !cityOf(u),
   gender:      (u) => !!cityOf(u) && u.gender === "U" && !u.birth_confirmed
                /* + §2-4 의 경로 판별(안 A 채택 시) */,
   /* 체인 말미의 요약 확인(결정 2-2). 기존 birth 단계 재사용 ──
@@ -104,13 +106,14 @@ PENDING = {
 판정이 전부 값의 유무이므로 **분기 코드가 따로 없음** — 사이트 경유자는
 name_kr·birth_date·city 가 이미 있어 해당 단계가 자연히 스킵. §0.5 재확인 금지 충족.
 
-### BLOCKING_STEPS
+### BLOCKING_STEPS — [리뷰 수정 2] `["name"]` 유지
 
-현행: name 만 막음(회화문을 못 만듦), birth 는 안 막음(운세만 빠짐).
-제안: **`["name", "birth_date"]`** — 생년월일이 아예 없으면 사주·운세 전부 불능이라
-막는 편이 정직. 시간·출생지·성별·진위확인은 안 막음(빠지는 건 정밀도뿐).
-※ 단 birth_date 를 막으면 「사이트 경유 없이 이름만 있는」 기존 이용자의 배신이
-멈추므로, **기존 이용자 전원이 birth_date 보유인지 배포 전 실측** 필요.
+파는 것은 **문법·회화·단어의 101일 강좌**이고 운세는 매일 붙는 부가물입니다.
+`birth_date` 로 배송을 막으면 돈을 낸 사람이 레슨을 못 받습니다. `name` 은
+회화문을 만들 수 없는 **하드 의존**이라 막고, 생년월일은 **소프트 의존**이라
+운세만 빠집니다. 생년월일 미제출자에게도 사주 없이 레슨을 계속 보냅니다.
+(Stripe 재심사에서 운세를 유료 배송에서 뺄 가능성도 열려 있어, 이 구분은
+그때도 그대로 섭니다.) 「기존 이용자 birth_date 보유 실측」은 불필요해짐.
 
 ### 중단 복구 (사전 지시 7-4)
 
@@ -126,17 +129,30 @@ name_kr·birth_date·city 가 이미 있어 해당 단계가 자연히 스킵. �
 모든 안내문 말미에 **다음 행동 1개**가 반드시 보이게 (§2 결손 A 의 교훈 —
 `onboardingDone` 패턴을 각 단계 문면에 일관 적용).
 
-## 3. 수정 파일 (예상)
+## 3. 수정 파일 (리뷰 수정 1·4·5 반영판)
 
 | 경로 | 변경 |
 |---|---|
-| `server/lib/cities.mjs` | **신규** — CITIES 사본 (saju.js 에서 이식) |
-| `server/lib/onboarding.mjs` | STEPS·PENDING 확장 + 각 단계 문면 (datetimepicker·2단 quickReply) |
-| `server/lib/handlers/postback.mjs` | `action=bdate/btime/bplace/bgender` 수신·저장 |
-| `server/lib/handlers/message.mjs` | (이름 かな 수신은 기존 그대로) |
+| `server/lib/fortune.mjs` | `cities()` 접근자 1개 (기존 vm 로드에서 `Saju.CITIES` 반환) — **사본 없음** |
+| `server/lib/onboarding.mjs` | STEPS·PENDING 확장 + **`ONBOARD_COLUMNS`**(수정 4 — PENDING 이 읽는 열의 유일한 출처) + 각 단계 문면 |
+| `server/lib/repo/users.mjs` | **`DELIVERABLE_SQL` 에 `j.gender` 추가** (실측: 현재 누락 — 배치 경로의 판정이 조용히 어긋나는 실물) |
+| `server/lib/handlers/postback.mjs` | `action=bdate/btime/bplace/bgender` + 요약 확인(기존 birth 재사용)·直したい 복귀 |
+| `server/lib/handlers/message.mjs` | `pendingStep` 의 상태 객체에 새 열 포함 |
 | `server/lib/handlers/follow.mjs` | 인사 후 첫 질문 진입 |
-| `tools/verify-onboarding.mjs` | 단계별 + 부분 상태 + CITIES 패리티 |
-| `CLAUDE.md`·문서 | 사본 예외 2호(cities) 명기, 관문 수 갱신 |
+| `tools/verify-onboarding.mjs` | 아래 관문 2종 + 단계 도출 전수 |
+
+### 관문 2종 (리뷰 수정 4·5 — 「조용한 흘리기」를 정적으로 잡는다)
+
+1. **열 커버리지 관문 (수정 4)**: `ONBOARD_COLUMNS` (name_kr·birth_date·birth_time·
+   birth_confirmed·gender·ohaeng_main·raw_result_json)를 한 곳에 두고, 상태를
+   만드는 **모든 경로**(DELIVERABLE_SQL / getSajuProfile+COLS / stateOf /
+   pendingStep)가 그 열 전부를 SELECT·전달하는지 소스 검사. 하나라도 빠지면
+   `undefined` 로 판정이 조용히 어긋난다 — 이미 `DELIVERABLE_SQL` 의 gender
+   누락으로 실증됨
+2. **ohaeng_main 순서 제약 관문 (수정 5)**: 「LINE 체인 도중 `ohaeng_main` 을
+   쓰는 경로가 없다」— bdate/btime/bplace/bgender 핸들러가 `ohaengMain` 을
+   전달하지 않음을 정적 검사. 주석이 아니라 관문이 불변식을 지킨다
+   (사본 금지·제외 7종·3경로 일치와 같은 부류)
 
 ## 4. 트레이드오프
 

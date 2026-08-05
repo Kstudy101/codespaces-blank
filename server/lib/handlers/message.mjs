@@ -161,11 +161,16 @@ export async function handleMessage(conn, event) {
    ここも handlers/postback.mjs も配信バッチも、同じものを見る。 */
 async function pendingStep(conn, user) {
   const saju = await users.getSajuProfile(conn, user.id);
+  /* ONBOARD_COLUMNS（lib/onboarding.mjs）を全部運ぶ ── stateOf
+     （handlers/postback.mjs）と同じ形。verify-onboarding が見張る。 */
   const state = {
     ...user,
     birth_date: saju ? saju.birth_date : null,
     birth_time: saju ? saju.birth_time : null,
     birth_confirmed: saju ? saju.birth_confirmed : false,
+    gender: saju ? saju.gender : "U",
+    ohaeng_main: saju ? saju.ohaeng_main : null,
+    raw_result_json: saju ? saju.raw_result_json : null,
     track: user.active_track || null
   };
   const step = nextStep(state);

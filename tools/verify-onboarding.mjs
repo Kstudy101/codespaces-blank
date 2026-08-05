@@ -743,6 +743,46 @@ await acheck("進みの器の自己回復 ── 欠けていて持ち日数が�
   return "作る 1 / 触らない 3";
 });
 
+/* ================================================================== */
+head("[列の運搬]  PENDING が読む列を、状態を組むどの経路も欠かさない"
+  + "（2026-08-05 リビュー修正 4）");
+
+await acheck("ONBOARD_COLUMNS を全経路が運ぶ ── 欠けは undefined で静かに逸れる", async () => {
+  const { ONBOARD_COLUMNS } = await import("../server/lib/onboarding.mjs");
+  assert(ONBOARD_COLUMNS.length >= 9, `一覧が短すぎます: ${ONBOARD_COLUMNS.length}`);
+
+  /* users 由来の列と saju 由来の列を分けて見る。 */
+  const USER_COLS = ["name_kr", "name_source", "display_name"];
+  const SAJU_COLS = ONBOARD_COLUMNS.filter((c) => !USER_COLS.includes(c));
+
+  /* ① 配信経路（DELIVERABLE_SQL）── バッチの askOnboarding が使う。 */
+  const usersSrc = stripComments(read("server/lib/repo/users.mjs"));
+  const dsql = usersSrc.match(/const DELIVERABLE_SQL = `[\s\S]*?`/)[0];
+  for (const c of ONBOARD_COLUMNS) {
+    assert(dsql.includes(c), `DELIVERABLE_SQL に ${c} がありません（バッチ経路だけ判定が狂う）`);
+  }
+
+  /* ② getSajuProfile ── stateOf / pendingStep の素材。 */
+  const gsp = usersSrc.match(/export async function getSajuProfile[\s\S]*?\n}/)[0];
+  for (const c of SAJU_COLS) {
+    assert(gsp.includes(c), `getSajuProfile が ${c} を引いていません`);
+  }
+
+  /* ③ stateOf（postback）と pendingStep（message）── saju 由来の列を
+        state に写しているか。users 由来は ...user が運ぶ。 */
+  for (const [file, fnName] of [
+    ["server/lib/handlers/postback.mjs", "stateOf"],
+    ["server/lib/handlers/message.mjs", "pendingStep"]
+  ]) {
+    const src = stripComments(read(file));
+    const fn = src.match(new RegExp(`function ${fnName}[\\s\\S]*?\\n}`))[0];
+    for (const c of SAJU_COLS) {
+      assert(fn.includes(c), `${file} の ${fnName} が ${c} を運んでいません`);
+    }
+  }
+  return `${ONBOARD_COLUMNS.length} 列 × 4 経路`;
+});
+
 console.log(`\n${failed ? "✗" : "✓"} ${passed + failed} 項目中 ${passed} 件成功`
   + (failed ? ` / ${failed} 件失敗` : ""));
 process.exit(failed ? 1 : 0);

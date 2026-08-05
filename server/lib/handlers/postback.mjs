@@ -87,11 +87,16 @@ async function stateOf(conn, userId) {
     users.getSajuProfile(conn, userId)
   ]);
   if (!user) return null;
+  /* ONBOARD_COLUMNS（lib/onboarding.mjs）を全部運ぶ。1 つ欠けると
+     undefined で判定が静かに逸れる ── verify-onboarding が見張る。 */
   return {
     ...user,
     birth_date: saju ? saju.birth_date : null,
     birth_time: saju ? saju.birth_time : null,
     birth_confirmed: saju ? saju.birth_confirmed : false,
+    gender: saju ? saju.gender : "U",
+    ohaeng_main: saju ? saju.ohaeng_main : null,
+    raw_result_json: saju ? saju.raw_result_json : null,
     /* 段にコースはもう無い（買うときに選ぶ）。それでも track を
        入れておくのは、listDeliverable の 1 行と同じ形にするため ──
        形が違うと、片方でだけ段が進む。 */

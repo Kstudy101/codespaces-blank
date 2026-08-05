@@ -43,6 +43,20 @@ const SITE_URL = process.env.SITE_URL || "https://www.kstudy101.jp";
    「コースを選んでください」が飛び、押しても買う所へ行けない。 */
 export const STEPS = Object.freeze(["name", "reading", "birth"]);
 
+/* ---- PENDING が読む列（2026-08-05 リビュー修正 4）--------------------
+   ここが唯一の出どころ。状態を組み立てるどの経路（配信の
+   DELIVERABLE_SQL / getSajuProfile / postback の stateOf /
+   message の pendingStep）も、この列を**全部**運ばなければならない ──
+   1 つ欠けると undefined になり、判定が静かに逸れる。実際
+   DELIVERABLE_SQL に gender が無く、バッチ経路だけ判定が狂いうる
+   状態が実測された（LINE 直接流入の段が増える前に塞ぐ）。
+   verify-onboarding が全経路をこの一覧と突き合わせる。 */
+export const ONBOARD_COLUMNS = Object.freeze([
+  "name_kr", "name_source", "display_name",
+  "birth_date", "birth_time", "birth_confirmed",
+  "gender", "ohaeng_main", "raw_result_json"
+]);
+
 
 /* ---- 次に訊くこと --------------------------------------------------
    listDeliverable の 1 行をそのまま渡せる形にしてある。

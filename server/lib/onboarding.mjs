@@ -65,6 +65,16 @@ export function cityOf(u) {
   return raw && typeof raw === "object" && raw.city ? String(raw.city) : null;
 }
 
+/* 生まれ時刻「わからない」と答えた事実（지시서⑩ §2-2 (가)）。
+   birth_time は NULL のまま（時柱なしの三柱計算が実際に読む値）で、
+   答えたことだけをこの키が持つ。**特定の 키**を見る ── オブジェクトの
+   存在有無で経路を判別する形は、チェーン中間の raw.city 書き込みで
+   自己矛盾するとして以前却下された。키 단위면 그 반박에 걸리지 않는다。 */
+export function timeUnknown(u) {
+  const raw = u?.raw_result_json;
+  return !!(raw && typeof raw === "object" && raw.birth_time_unknown === true);
+}
+
 /* ---- PENDING が読む列（2026-08-05 リビュー修正 4）--------------------
    ここが唯一の出どころ。状態を組み立てるどの経路（配信の
    DELIVERABLE_SQL / getSajuProfile / postback の stateOf /
@@ -119,8 +129,12 @@ const PENDING = Object.freeze({
      [리뷰 수정 3] 重なる区間は STEPS の並びが解く。三項は使わない。
      [2-1] 「わからない(NULL)」と「未質問」は後ろの項目の有無で分ける。 */
   bdate:   (u) => !u.ohaeng_main && !!u.name_kr && !u.birth_date,
+  /* 「わからない」と答えた事実は raw.birth_time_unknown（saveSaju）。
+     birth_time は NULL のままなので、この키を見ないと同じ質問が
+     出続ける（지시서⑩ ── 「後ろの項目で分かる」は、後ろがまだ
+     空の瞬間には働かなかった）。 */
   btime:   (u) => !u.ohaeng_main && !!u.birth_date
-                  && u.birth_time === null && !cityOf(u),
+                  && u.birth_time === null && !timeUnknown(u) && !cityOf(u),
   bplace:  (u) => !u.ohaeng_main && !!u.birth_date && !cityOf(u),
   bgender: (u) => !u.ohaeng_main && !!cityOf(u)
                   && u.gender === "U" && !u.birth_confirmed,
@@ -554,8 +568,11 @@ export function askGender() {
           data: "action=bgender&v=M", displayText: "男性" } },
       { type: "action", action: { type: "postback", label: "女性",
           data: "action=bgender&v=F", displayText: "女性" } },
+      /* 「答えない」は v=N（migrations/005）。'U' は「未質問」の既定値で、
+         答えとして保存すると状態が変わらず同じ質問が出続けた（지시서⑩）。
+         古いボタンの v=U は postback 側が 'N' に写して受ける。 */
       { type: "action", action: { type: "postback", label: "答えない",
-          data: "action=bgender&v=U", displayText: "答えない" } }
+          data: "action=bgender&v=N", displayText: "答えない" } }
     ] }
   };
 }

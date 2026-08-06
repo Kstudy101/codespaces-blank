@@ -779,6 +779,26 @@ await acheck("push_type は 9 種。ENUM に無い値を DB へ通さない", as
   return pushlogs.PUSH_TYPES.join(" / ");
 });
 
+await acheck("gender の ENUM は 4 種（005）── コードの白リストと一致", async () => {
+  /* 'U' が「未質問」と「答えない」を兼ねて同じ質問が無限に出た
+     （지시서⑩）。'N' を足した正は migrations/005 ── schema.sql は
+     初期 3 種のまま（push_type と同じ理由: 既にデータのある表には
+     効かない）。白リストが ENUM より狭いと、来た値が黙って落ちる。 */
+  const M005 = read("server/db/migrations/005-gender-not-answered.sql");
+  const enumStr = M005.match(/gender ENUM\(([^)]*)\)/)[1];
+  for (const g of ["'M'", "'F'", "'U'", "'N'"]) {
+    assert(enumStr.includes(g), `${g} が 005 の ENUM にありません`);
+  }
+  const schemaEnum = SCHEMA.match(/gender\s+ENUM\(([^)]*)\)/)[1];
+  assert(!schemaEnum.includes("'N'"),
+    "schema.sql を直接書き換えています（既にデータのある表には効きません）");
+  const pb = read("server/lib/handlers/postback.mjs");
+  assert(pb.includes(`["M", "F", "U", "N"]`), "postback の白リストが 4 種ではありません");
+  const link = read("server/lib/handlers/link.mjs");
+  assert(link.includes(`["M", "F", "U", "N"]`), "link の白リストが 4 種ではありません");
+  return "005 = M / F / U / N = 白リスト 2 か所";
+});
+
 await acheck("users.setStatus も ENUM の外を拒む", async () => {
   assert(await rejects(() => users.setStatus(fakeConn(), 1, "paused")),
     "'paused' が通りました。MySQL の設定次第で空文字が入り、配信対象から静かに外れます");

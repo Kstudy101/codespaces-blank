@@ -137,6 +137,17 @@ check("生まれた時刻が分からない人にも出る", () => {
   return "hour = null";
 });
 
+check("gender は運勢を変えない（'N' 追加が結果に触れない・지시서⑩）", () => {
+  /* 대표 결정(2026-08-06): 성별은 저장만, 계산 미사용。'N'(答えない)
+     추가가 운세를 바꾸면 그 결정이 조용히 깨진 것。 */
+  const base = JSON.stringify(fortuneFor({ ...ME, gender: "U" }, "2026-08-04"));
+  for (const g of ["M", "F", "N"]) {
+    assert(JSON.stringify(fortuneFor({ ...ME, gender: g }, "2026-08-04")) === base,
+      `gender=${g} で運勢が変わりました`);
+  }
+  return "M / F / U / N とも同一";
+});
+
 check("四柱が無い人には出さない（既定の運勢を作らない）", () => {
   /* 作ってしまうと、全員が同じ運勢を受け取る。 */
   assert(fortuneFor({}, "2026-08-04") === null, "出してしまいました");

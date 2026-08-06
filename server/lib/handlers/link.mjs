@@ -82,7 +82,10 @@ export function normalizeProfile(input) {
     nameKr:      str(b.nameKr ?? b.name_kr, 50),
     birthDate:   birthDate(b.birthDate ?? b.birth_date),
     birthTime:   birthTime(b.birthTime ?? b.birth_time),
-    gender:      ["M", "F", "U"].includes(b.gender) ? b.gender : "U",
+    /* 'N'（答えないと答えた）も通す（migrations/005）。サイトは性別を
+       訊かないので実際に来るのは 'U'（未質問）だけだが、白リストが
+       ENUM より狭いと、来た日に黙って 'U' に化ける。 */
+    gender:      ["M", "F", "U", "N"].includes(b.gender) ? b.gender : "U",
     ohaengMain:  str(b.ohaengMain ?? b.ohaeng_main, 10),
     /* 元の診断結果は丸ごと預かるが、大きさは抑える。
        ここが無制限だと、この口が保管庫として使える。 */

@@ -254,11 +254,19 @@ export async function handlePostback(conn, event,
     const cur = await users.getSajuProfile(conn, user.id) || {};
     const raw = cur.raw_result_json && typeof cur.raw_result_json === "object"
       ? cur.raw_result_json : {};
+    /* timeUnknown: 「わからない」も**答え**として残す（지시서⑩ §2-2 가안）。
+       birth_time は NULL のままにする（時柱の計算が実際にそれを見る）ので、
+       答えた事実は raw_result_json の birth_time_unknown 키에 둔다 ──
+       열 추가 없이, cityOf 와 같은 자리。키가 없으면 「未質問」。 */
+    const rawPatched =
+      patch.city !== undefined ? { ...raw, city: patch.city }
+      : patch.timeUnknown ? { ...raw, birth_time_unknown: true }
+      : (cur.raw_result_json ?? null);
     await users.upsertSajuProfile(conn, user.id, {
       birthDate: patch.birthDate !== undefined ? patch.birthDate : (cur.birth_date || null),
       birthTime: patch.birthTime !== undefined ? patch.birthTime : (cur.birth_time || null),
       gender:    patch.gender    !== undefined ? patch.gender    : (cur.gender || "U"),
-      rawResult: patch.city      !== undefined ? { ...raw, city: patch.city } : (cur.raw_result_json ?? null)
+      rawResult: rawPatched
     });
   };
 
@@ -283,9 +291,13 @@ export async function handlePostback(conn, event,
     if (!unknown && !/^\d{2}:\d{2}$/.test(String(time || ""))) {
       return { skipped: `time が読めません: ${time}`, userId: user.id };
     }
-    await saveSaju({ birthTime: unknown ? null : `${time}:00` });
-    /* 「わからない」は birth_time=NULL のまま ── 次の質問（出生地）が
-       済むと、その NULL は「訊いたが不明」と読める（2-1 の導出）。 */
+    /* 「わからない」は birth_time=NULL のまま、答えた事実だけを
+       raw.birth_time_unknown に残す（지시서⑩ §2-2）。以前は NULL の
+       ままで何も書かず、PENDING.btime が同じ質問を出し続けた ──
+       「後ろの項目の有無で分かる」つもりの導出は、後ろの項目が
+       まだ空の時点では働かない。 */
+    await saveSaju(unknown ? { birthTime: null, timeUnknown: true }
+                           : { birthTime: `${time}:00` });
     const replied = await reply(token, [await followUp(conn, user.id)], send);
     return { userId: user.id, action, unknown, replied };
   }
@@ -309,8 +321,14 @@ export async function handlePostback(conn, event,
   }
 
   if (action === "bgender") {
-    const v = ["M", "F", "U"].includes(params.v) ? params.v : null;
-    if (!v) return { skipped: `性別が読めません: ${params.v}`, userId: user.id };
+    /* 「答えない」は 'N' で保存する（migrations/005・지시서⑩）。
+       'U' は「まだ訊いていない」の既定値なので、答えとして書くと
+       状態が変わらず、同じ質問が永遠に出る ── 実際に出ていた。
+       v=U を受けるのは、既に送った古いボタン（data は変えられない）
+       のため ── 意味は同じ「答えない」なので 'N' に写す。 */
+    const raw = ["M", "F", "U", "N"].includes(params.v) ? params.v : null;
+    if (!raw) return { skipped: `性別が読めません: ${params.v}`, userId: user.id };
+    const v = raw === "U" ? "N" : raw;
     await saveSaju({ gender: v });
     const replied = await reply(token, [await followUp(conn, user.id)], send);
     return { userId: user.id, action, gender: v, replied };

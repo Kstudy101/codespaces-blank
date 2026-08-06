@@ -1442,17 +1442,19 @@ tasks 는 하나의 셸에서 이어 돌므로 export 가 뒤 행에도 미침.
   verify-birth.mjs           17  sessionStorage 만 씀 / 이름이 안 섞임 /
                                  절기표와 같은 1930〜2030
   verify-pages.mjs           14  9페이지를 가로로 늘어놓고 대조
-  verify-server.mjs          83  DB 없이 SQL 을 읽음 — JST 경계·결제 재전송·
+  verify-server.mjs          84  DB 없이 SQL 을 읽음 — JST 경계·결제 재전송·
                                  배치 이중기동·보유일수를 안 깎는 약속·
                                  코스 ENUM 과 migrations 대조
   verify-webhook.mjs         52  서명이 유일한 경계 — 생바이트·timingSafeEqual·
                                  검증 전 파싱 금지·postback data 불신 +
                                  「受講料」 텍스트 경로도 같은 판매 문
-  verify-onboarding.mjs      75  OAuth 는 틀려도 성공처럼 보임 — state 예측·
+  verify-onboarding.mjs      85  OAuth 는 틀려도 성공처럼 보임 — state 예측·
                                  재사용·CORS·XSS·채널 프로바이더 불일치 +
                                  연동 화면의 코스 안내·체험 조건구·이름행 제거 +
                                  코스 선택 단계 — trackpick 판매 게이트 부재·
-                                 즉시 1일차·원고 가드·await+conn 호출형
+                                 즉시 1일차·원고 가드·await+conn 호출형 +
+                                 상태 전환 불변식 — 전 단계 × 전 선택지가
+                                 답하면 반드시 나아감 (答えない·わからない)
   verify-render.mjs          44  index.html 의 조사 규칙을 실소스에서 읽어 대조 +
                                  저녁이 아침의 재전송이 아닌 것 +
                                  문제 Flex — altText 에 답 금지·공통부 공유
@@ -1466,8 +1468,9 @@ tasks 는 하나의 셸에서 이어 돌므로 export 가 뒤 행에도 미침.
                                  upsell 비간섭·미소비 +
                                  문제만 1통·답은 눌러서 — answer 분기의
                                  무기록·무소비(소스)·track 변조 무시·폴백
-  verify-fortune-server.mjs  16  서버 운세 = 사이트 운세 +
-                                 문안 30칸+십신 10 결번·철자
+  verify-fortune-server.mjs  17  서버 운세 = 사이트 운세 +
+                                 문안 30칸+십신 10 결번·철자 +
+                                 gender 는 운세 불변 (N 포함)
   verify-billing.mjs         67  선불 횟수권 — 잔여는 entitled - used /
                                  재개해도 받은 일수가 공짜가 안 되는 것 +
                                  tax_code + 1탭 결제 — uri 버튼·priceList 순수·
@@ -1481,7 +1484,7 @@ tasks 는 하나의 셸에서 이어 돌므로 export 가 뒤 행에도 미침.
                                  570통 전수 대조 / step① 이 사이트로 안
                                  돌려보냄 / postback data 의 이름 불신
   -----------------------  ----
-  합계                      626
+  합계                      638
 
   루트에 package.json 이 없으므로 의존 패키지가 없습니다 —
   각 스크립트가 vm 으로 대상 .js 를 그대로 읽어 실행합니다.

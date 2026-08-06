@@ -239,12 +239,24 @@ check("名前は列幅で切る（DB まで届かせない）", () => {
   return "50 文字";
 });
 
-check("gender は 3 種以外を受けない", () => {
+check("gender は 4 種以外を受けない（'N' = 答えないと答えた・migrations/005）", () => {
   assert(normalizeProfile({ gender: "F" }).gender === "F", "F を弾きました");
+  assert(normalizeProfile({ gender: "N" }).gender === "N",
+    "'N' を弾きました ── ENUM より狭い白リストは、来た日に黙って 'U' に化けます");
   for (const bad of ["X", "male", "", null, 1]) {
     assert(normalizeProfile({ gender: bad }).gender === "U", `${JSON.stringify(bad)} が通りました`);
   }
-  return "M / F / U 以外は U";
+  return "M / F / U / N 以外は U";
+});
+
+check("サイトは今も gender:'U'（未質問）を送る ── 'N' に変えない", () => {
+  /* サイトは性別を訊かない。訊いていないのに「答えない」を名乗ると、
+     事実でないものが DB に刻まれる（지시서⑩ §2-1）。 */
+  const html = read("index.html");
+  assert(/key:'gender',\s*label:null,\s*value:'U'/.test(html.replace(/\s+/g, " ")) ||
+         /gender'?,?\s*.*value:'U'/.test(html),
+    "index.html が gender:'U' を送っていません");
+  return "사이트 = 미질문(U) 그대로";
 });
 
 check("時刻は HH:MM も HH:MM:SS も受け、それ以外は捨てる", () => {
@@ -911,6 +923,154 @@ check("反対方向の関門 ── trackpick に salesAllowedFor が**無い**�
   }
   return "trackpick 禁止 / plans・plan・buy 必須";
 });
+
+/* ================================================================== */
+head("[答えたら必ず進む]  状態遷移の不変式（지시서⑩ §3）");
+
+/* 段階 × 選択肢の全数。答えを**本物のハンドラに通して**保存値を捕まえ、
+   その状態で nextStep を再計算する ── 同じ段階がもう一度出たら失敗。
+   「答えない」「わからない」のように状態を何も変えない選択肢は、
+   値から導出する設計にとって沈黙と区別がつかない ── それを人の
+   注意ではなく機械が捕まえる。
+
+   STEPS に段階を足すと、ここに登録するまで失敗する（自動カバー ──
+   列運搬の自動探索関門と同じ思想）。見るのは**答えた直後**だけ:
+   fix（項目を選んで直す）・ok=0（入れ直す）のような明示的な
+   再質問は対象外。bplace の国タップは都市一覧へ進む 2 段 UI の
+   中間なので、終端の答え（都市）だけを見る。 */
+
+const { cities: cityList } = await import("../server/lib/fortune.mjs");
+const { handlePostback: chainPost } = await import("../server/lib/handlers/postback.mjs");
+const { STEPS: CHAIN_STEPS, nextStep: chainNext } = await import("../server/lib/onboarding.mjs");
+
+function chainConn(st) {
+  return {
+    async execute(sql, params = []) {
+      const flat = sql.replace(/\s+/g, " ");
+      if (/UPDATE users SET name_source/i.test(flat)) {
+        st.user.name_source = params[0]; return [{ affectedRows: 1 }, []];
+      }
+      if (/UPDATE users SET name_kanji = \?, name_reading = \?, name_kr = \?/i.test(flat)) {
+        [st.user.name_kanji, st.user.name_reading, st.user.name_kr] = params;
+        return [{ affectedRows: 1 }, []];
+      }
+      if (/UPDATE users SET active_track/i.test(flat)) {
+        st.user.active_track = params[0]; return [{ affectedRows: 1 }, []];
+      }
+      if (/UPDATE saju_profiles SET birth_confirmed/i.test(flat)) {
+        st.saju = { ...(st.saju || {}), birth_confirmed: params[0] };
+        return [{ affectedRows: 1 }, []];
+      }
+      if (/INSERT INTO saju_profiles/i.test(flat)) {
+        const [, bd, bt, g, oh, raw] = params;
+        st.saju = { ...(st.saju || {}), birth_date: bd, birth_time: bt, gender: g,
+          ohaeng_main: oh,
+          raw_result_json: raw == null ? null
+            : (typeof raw === "string" ? JSON.parse(raw) : raw) };
+        return [{ affectedRows: 1, insertId: 1 }, []];
+      }
+      if (/SELECT COUNT\(\*\) AS n FROM content_templates/i.test(flat)) return [[{ n: 50 }], []];
+      if (/FROM saju_profiles/i.test(flat)) return [st.saju ? [{ ...st.saju }] : [], []];
+      if (/FROM users/i.test(flat)) return [[{ ...st.user }], []];
+      if (/^\s*(INSERT|UPDATE|DELETE)/i.test(sql)) return [{ affectedRows: 1, insertId: 1 }, []];
+      return [[], []];
+    }
+  };
+}
+const chainShape = (st) => ({
+  ...st.user,
+  birth_date: st.saju?.birth_date ?? null,
+  birth_time: st.saju?.birth_time ?? null,
+  birth_confirmed: !!st.saju?.birth_confirmed,
+  gender: st.saju?.gender ?? "U",
+  ohaeng_main: st.saju?.ohaeng_main ?? null,
+  raw_result_json: st.saju?.raw_result_json ?? null,
+  track: st.user.active_track || null
+});
+
+const CU = { id: 7, line_user_id: "U", status: "trial", display_name: "たなか",
+  name_kanji: null, name_reading: null, name_kr: null, name_source: null,
+  active_track: null };
+const CITY0 = cityList()[0].id;
+const pb = (data, params = null) => ({ source: { userId: "U" }, replyToken: "rt",
+  postback: params ? { data, params } : { data } });
+
+/* 段階 → { base: その段階が出る状態, answers: 終端の答え（postback）} */
+const CHAIN = {
+  name: {
+    base: () => ({ user: { ...CU, name_kanji: "田中", name_kr: "다나카" },
+      saju: { birth_date: "1990-04-12", birth_confirmed: 1, gender: "U", ohaeng_main: "목" } }),
+    answers: [pb("action=name&use=web"), pb("action=name&use=line"), pb("action=name&use=other")]
+  },
+  reading: {
+    base: () => ({ user: { ...CU, name_source: "line", name_reading: "たなか" },
+      saju: { birth_date: "1990-04-12", birth_confirmed: 1, gender: "U", ohaeng_main: "목" } }),
+    answers: [pb("action=name&use=confirm&ok=1")]
+  },
+  bdate: {
+    base: () => ({ user: { ...CU, name_source: "line", name_kr: "다나카" }, saju: null }),
+    answers: [pb("action=bdate", { date: "1990-04-12" })]
+  },
+  btime: {
+    base: () => ({ user: { ...CU, name_source: "line", name_kr: "다나카" },
+      saju: { birth_date: "1990-04-12", birth_time: null, gender: "U",
+              birth_confirmed: 0, ohaeng_main: null, raw_result_json: null } }),
+    answers: [pb("action=btime", { time: "12:00" }), pb("action=btime&unknown=1")]
+  },
+  bplace: {
+    base: () => ({ user: { ...CU, name_source: "line", name_kr: "다나카" },
+      saju: { birth_date: "1990-04-12", birth_time: "12:00:00", gender: "U",
+              birth_confirmed: 0, ohaeng_main: null, raw_result_json: null } }),
+    answers: [pb(`action=bcity&id=${CITY0}`)]
+  },
+  bgender: {
+    base: () => ({ user: { ...CU, name_source: "line", name_kr: "다나카" },
+      saju: { birth_date: "1990-04-12", birth_time: "12:00:00", gender: "U",
+              birth_confirmed: 0, ohaeng_main: null, raw_result_json: { city: CITY0 } } }),
+    answers: [pb("action=bgender&v=M"), pb("action=bgender&v=F"), pb("action=bgender&v=U")]
+  },
+  birth: {
+    base: () => ({ user: { ...CU, name_source: "web", name_kanji: "田中", name_kr: "다나카" },
+      saju: { birth_date: "1990-04-12", birth_time: null, gender: "U",
+              birth_confirmed: 0, ohaeng_main: "목", raw_result_json: null } }),
+    answers: [pb("action=birth&ok=1")]
+  },
+  track: {
+    base: () => ({ user: { ...CU, name_source: "web", name_kanji: "田中", name_kr: "다나카" },
+      saju: { birth_date: "1990-04-12", birth_time: null, gender: "U",
+              birth_confirmed: 1, ohaeng_main: "목", raw_result_json: null } }),
+    answers: [pb("action=trackpick&track=beginner")]
+  }
+};
+
+await acheck("STEPS の全段階が遷移検査に登録されている（未登録は失敗）", async () => {
+  for (const s of CHAIN_STEPS) {
+    assert(CHAIN[s], `STEPS の「${s}」が遷移検査に未登録です ── 답이 상태를 바꾸는지 아무도 안 봅니다`);
+  }
+  for (const s of Object.keys(CHAIN)) {
+    assert(CHAIN_STEPS.includes(s), `検査にだけある段階: ${s}`);
+  }
+  return `${CHAIN_STEPS.length} 段階`;
+});
+
+for (const [step, def] of Object.entries(CHAIN)) {
+  await acheck(`「${step}」── どの答えでも、同じ質問には戻らない`, async () => {
+    const notes = [];
+    for (const ev of def.answers) {
+      const st = structuredClone(def.base());
+      const before = chainNext(chainShape(st));
+      assert(before === step, `前提が崩れています: nextStep=${before}（${step} のはず）`);
+      const r = await chainPost(chainConn(st), ev,
+        { send: async () => ({}), deliver: async () => "送信:1日目", push: async () => ({}) });
+      assert(!r.skipped, `ハンドラが答えを捨てました: ${JSON.stringify(r)}`);
+      const after = chainNext(chainShape(st));
+      assert(after !== step,
+        `「${ev.postback.data}」に答えたのに同じ質問が出ます（状態が変わっていません）`);
+      notes.push(`${ev.postback.data.replace("action=", "")}→${after ?? "済"}`);
+    }
+    return notes.join(" / ");
+  });
+}
 
 check("messageForStep の呼び出しは全部 await + conn（Promise を LINE へ流さない）", () => {
   /* async 化したので、await を欠くと Promise オブジェクトがそのまま

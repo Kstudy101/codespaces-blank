@@ -6,10 +6,11 @@
    「ありがとう」「解約したい」「今何日目？」。
 
    無言だと、届いていないのか無視されたのかが分からない。
-   ここでは 3 つだけ返す。文面は決め打ちで、AI 応答は使わない
+   ここでは 4 つだけ返す。文面は決め打ちで、AI 応答は使わない
    （費用も、誤った韓国語を教える危険もあるため）。
 
      状況を訊く系   → 今何日目・残り何日
+     受講料を訊く系 → リッチメニューの［受講料］と同じ応答・同じ門
      止めたい系     → ブロックの案内（こちらから退会させない）
      それ以外       → 何もしない（既読のまま）
 
@@ -21,6 +22,8 @@ import { users, learning, entitlements } from "../repo/index.mjs";
 import { replyMessage } from "../line.mjs";
 import { nextStep, messageForStep, confirmName, readingRetry } from "../onboarding.mjs";
 import { kanaNameToHangul } from "../kana2hangul.mjs";
+import { askCourse, notReady, salesAllowedFor, salesMode, missingLegalConfig }
+  from "./checkout.mjs";
 
 /* 受け取る文面は日本語。ひらがな・カタカナ・漢字が混ざるので
    単語の一致で見る（形態素解析は入れない）。 */
@@ -35,9 +38,20 @@ const ASK_STOP   = ["解約", "退会", "やめたい", "停止", "配信停止"
    押せない ── そこで手が無くなる。ここを開けておく。 */
 const ASK_SETUP  = ["コース", "こーす", "初級", "中級", "上級", "設定", "はじめ", "始め", "名前", "なまえ", "生年月日"];
 
+/* 受講料を言葉で訊いてくる語。下の案内文（ASK_STATUS の返事）が
+   「下のメニューの［受講料］」と書いているので、その語をそのまま
+   打つ人が必ず出る ── リッチメニューが未登録の間は、ここだけが
+   入口になる（2026-08-06 指示書 §0 の実測）。 */
+export const ASK_PLANS = ["受講料", "じゅこうりょう", "料金", "値段", "いくら",
+                          "購入", "買い", "買いたい", "申し込", "支払"];
+
 const hit = (text, words) => words.some((w) => text.includes(w));
 
-export async function handleMessage(conn, event) {
+/* send は差し替えられる（handlers/postback.mjs の { send } と同じ形）。
+   既定は本物の replyMessage ── 検査だけが応答の中身を受け取るために
+   差し替える。replyToken の扱い（isVerifyToken・try/catch・失敗時の
+   { replied: false, error }）はどの分岐でも同じ。 */
+export async function handleMessage(conn, event, { send = replyMessage } = {}) {
   const lineUserId = event?.source?.userId;
   const replyToken = event?.replyToken;
   if (!lineUserId) return { skipped: "userId がありません" };
@@ -89,12 +103,54 @@ export async function handleMessage(conn, event) {
     }
     if (replyToken && !isVerifyToken(replyToken)) {
       try {
-        await replyMessage(replyToken, [out]);
+        await send(replyToken, [out]);
       } catch (e) {
         return { userId: user.id, replied: false, error: e.message };
       }
     }
     return { userId: user.id, replied: true, reading: kr ? "candidate" : "retry" };
+  }
+
+  /* ---- 受講料を言葉で訊いてきた --------------------------------------
+     応答はリッチメニューの action=plans（handlers/postback.mjs）と
+     **同じ関数**で組む。似た応答を別に作ると、後で片方だけ直す日が来る。
+
+     順番の決めごと（上から強い順）:
+       1 ASK_STOP の語が混ざる文（「購入をキャンセルしたい」）は取らない
+         ── やめたい人に価格表を返すのは最悪の売り込みになる。従来どおり
+         下の ASK_STOP の分岐が受ける（既存動作を変えない）
+       2 pending（始める前の確認）より先に見る ── postback の plans は
+         pending を見ずに答えるので、ここだけ pending で止めると
+         同じ意図に違う応答が出る（指示書 §3-3）
+       3 ASK_SETUP と重なる文（「コースの受講料はいくら」）はこちらが
+         取る ── 価格の語が入る方が意図が具体的。素の「コース」は
+         従来どおり下の pending の分岐が受ける */
+  if (hit(text, ASK_PLANS) && !hit(text, ASK_STOP)) {
+    /* 販売の門。postback.mjs の plans と同じ判定・同じ応答・同じログ ──
+       plans / plan / buy / ここ の 4 か所とも salesAllowedFor を通す。
+       1 か所でも素通りすると、テスト鍵を入れた日に実利用者へ決済リンクが
+       出る（handlers/checkout.mjs の門）。自前の判定は書かない。 */
+    if (!salesAllowedFor(user)) {
+      console.error("[checkout] 販売停止中:", `mode=${salesMode()}`,
+        missingLegalConfig().join(" / ") || "(法定表示は充足)");
+      if (replyToken && !isVerifyToken(replyToken)) {
+        try {
+          await send(replyToken, [notReady()]);
+        } catch (e) {
+          return { userId: user.id, replied: false, error: e.message };
+        }
+      }
+      return { userId: user.id, replied: true, blocked: "販売停止" };
+    }
+    const owned = (await entitlements.listByUser(conn, user.id)).map((e) => e.track);
+    if (replyToken && !isVerifyToken(replyToken)) {
+      try {
+        await send(replyToken, [askCourse({ owned })]);
+      } catch (e) {
+        return { userId: user.id, replied: false, error: e.message };
+      }
+    }
+    return { userId: user.id, replied: true, plans: true };
   }
 
   /* 始める前の 3 つ（名前・生年月日・コース）が残っていれば、
@@ -105,7 +161,7 @@ export async function handleMessage(conn, event) {
   if (pending && hit(text, [...ASK_SETUP, ...ASK_STATUS])) {
     if (replyToken && !isVerifyToken(replyToken)) {
       try {
-        await replyMessage(replyToken, [pending]);
+        await send(replyToken, [pending]);
       } catch (e) {
         return { userId: user.id, replied: false, error: e.message };
       }
@@ -153,7 +209,7 @@ export async function handleMessage(conn, event) {
      こちらの失敗ではないので、送信できなかったことだけ返す。 */
   if (replyToken && !isVerifyToken(replyToken)) {
     try {
-      await replyMessage(replyToken, [{ type: "text", text: reply }]);
+      await send(replyToken, [{ type: "text", text: reply }]);
     } catch (e) {
       return { userId: user.id, replied: false, error: e.message };
     }

@@ -489,6 +489,117 @@ await acheck("心当たりの無い文面には返さない（通知を増やさ
 
 
 /* ================================================================== */
+head("[受講料]  テキストで訊いても、リッチメニューと同じ門・同じ応答");
+
+/* 販売の門は環境変数で開閉する。検査ごとに開け閉めして、終わったら
+   必ず元へ戻す ── 戻さないと後続の検査が「開いた門」で走る。 */
+const SALES_ENV = ["TOKUSHOHO_URL", "REFUND_POLICY", "STRIPE_SECRET_KEY",
+                   "STRIPE_WEBHOOK_SECRET", "SALES_MODE", "SALES_TEST_USERS"];
+async function withSalesEnv(values, fn) {
+  const saved = Object.fromEntries(SALES_ENV.map((k) => [k, process.env[k]]));
+  try {
+    for (const k of SALES_ENV) delete process.env[k];
+    Object.assign(process.env, values);
+    return await fn();
+  } finally {
+    for (const k of SALES_ENV) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  }
+}
+
+const OPEN_ENV = { TOKUSHOHO_URL: "https://example.jp/tokushoho",
+                   REFUND_POLICY: "テスト用の 1 行",
+                   STRIPE_SECRET_KEY: "sk_test_x",
+                   STRIPE_WEBHOOK_SECRET: "whsec_x",
+                   SALES_MODE: "open" };
+
+const { handleMessage: handleMsg, ASK_PLANS } =
+  await import("../server/lib/handlers/message.mjs");
+const { askCourse, notReady } = await import("../server/lib/handlers/checkout.mjs");
+
+/* 応答は { send } 差し替えで受け取る（handlePostback と同じ形）。 */
+async function askPlans(text, rows = {}) {
+  const conn = fakeConn({ "FROM users": USER_ROW, ...rows });
+  const sent = [];
+  const r = await handleMsg(conn,
+    { source: { userId: "U_test" }, replyToken: "t",
+      message: { type: "text", text } },
+    { send: async (_t, m) => { sent.push(...m); return {}; } });
+  return { r, sent, conn };
+}
+
+const ENT_ROW = [{ track: "beginner", days_entitled: 3, days_used: 0,
+                   current_day: 0, remaining: 3 }];
+
+await acheck("販売許可のとき「受講料」は plans と同じ応答（askCourse を同じ引数で）", async () =>
+  withSalesEnv(OPEN_ENV, async () => {
+    const { r, sent } = await askPlans("受講料はいくらですか",
+      { "FROM course_entitlements": ENT_ROW });
+    assert(sent.length === 1, `送った通数: ${sent.length}`);
+    const expected = askCourse({ owned: ["beginner"] });
+    assert(JSON.stringify(sent[0]) === JSON.stringify(expected),
+      "postback の plans（askCourse({ owned })）と同じ応答ではありません");
+    assert(r.replied === true && r.plans === true, JSON.stringify(r));
+    return "askCourse({ owned }) と一致";
+  }));
+
+await acheck("販売停止のとき notReady ── pending の途中でも postback と同じ", async () =>
+  withSalesEnv({}, async () => {   /* 何も無い ＝ closed */
+    /* USER_ROW は saju が無い＝オンボーディング途中の人。それでも
+       onboarding の応答ではなく plans と同じ門の応答が出ること ──
+       postback の plans は pending を見ない（指示書 §3-3）。 */
+    const { r, sent } = await askPlans("受講料");
+    assert(!r.onboarding, "pending の応答が出ました（postback と挙動が割れています）");
+    assert(sent.length === 1, `送った通数: ${sent.length}`);
+    assert(JSON.stringify(sent[0]) === JSON.stringify(notReady()),
+      `notReady() ではありません: ${JSON.stringify(sent[0]).slice(0, 80)}`);
+    assert(r.blocked === "販売停止", JSON.stringify(r));
+    return "notReady / blocked";
+  }));
+
+await acheck("ASK_PLANS の全語が同じ分岐へ（販売停止 → 全語 notReady）", async () =>
+  withSalesEnv({}, async () => {
+    for (const w of ASK_PLANS) {
+      const { r } = await askPlans(w);
+      assert(r.blocked === "販売停止", `「${w}」が門を通っていません: ${JSON.stringify(r)}`);
+    }
+    return `${ASK_PLANS.length} 語とも門へ`;
+  }));
+
+await acheck("ASK_STOP・ASK_SETUP の従来動作は変わらない（境界の語も含む）", async () =>
+  withSalesEnv(OPEN_ENV, async () => {
+    /* 止めたい系はそのまま解約の案内。「購入をキャンセルしたい」の
+       ように ASK_PLANS の語が混ざっても、やめたい人に価格表を出さない。 */
+    for (const text of ["解約したい", "購入をキャンセルしたい"]) {
+      const { r, sent } = await askPlans(text);
+      assert(!r.plans && !r.blocked, `「${text}」が plans に取られました`);
+      assert(sent.length === 1 && /ブロック/.test(sent[0].text),
+        `「${text}」の返事が解約の案内ではありません`);
+    }
+    /* 素の「コース」は従来どおり pending（オンボーディング）の分岐。 */
+    const { r: r2 } = await askPlans("コース");
+    assert(r2.onboarding === true, `「コース」: ${JSON.stringify(r2)}`);
+    /* 価格の語が付けば plans が取る。 */
+    const { r: r3 } = await askPlans("コースの受講料はいくら",
+      { "FROM course_entitlements": ENT_ROW });
+    assert(r3.plans === true, `「コースの受講料はいくら」: ${JSON.stringify(r3)}`);
+    return "止めたい系・コース系とも従来どおり";
+  }));
+
+check("message.mjs は販売判定を自前で持たない（門は checkout.mjs だけ）", () => {
+  const src = stripComments(read("server/lib/handlers/message.mjs"));
+  assert(!/process\.env\.SALES/.test(src),
+    "SALES_MODE を直接読んでいます ── 4 か所の門が割れます（指示書 §2）");
+  assert(!/salesOpen/.test(src), "salesOpen で自前の門を作っています");
+  assert(/salesAllowedFor\(user\)/.test(src), "salesAllowedFor を通していません");
+  assert(/\[checkout\] 販売停止中/.test(src), "postback と同じ停止ログを残していません");
+  return "salesAllowedFor だけを通す";
+});
+
+
+/* ================================================================== */
 head("[友だち追加]  名前が無い人を、そのまま放り出さない");
 
 const NAMELESS = [{ id: 7, line_user_id: "U_new", status: "trial", name_kr: null }];

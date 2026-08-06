@@ -194,9 +194,9 @@ export function askCourse({ owned = [], pick = null } = {}) {
      忘れて同じコースをもう一度買う ── 返金の手間になる。 */
   const mark = (t) => (owned.includes(t) ? "（受講中）" : "");
   const DESC = {
-    beginner:     "ハングルの読み書きから。韓国語がはじめての方",
-    intermediate: "文と文をつなぐ・敬語。あいさつができる方",
-    advanced:     "書き言葉・ニュースの韓国語。日常会話に困らない方"
+    beginner:     "ハングルの読み書きから。韓国語がはじめての方（TOPIK 0~2級レベル）",
+    intermediate: "文と文をつなぐ・敬語。あいさつができる方（TOPIK 3~4級レベル）",
+    advanced:     "書き言葉・ニュースの韓国語。日常会話に困らない方（TOPIK 5~6級レベル）"
   };
   const list = pick ? pick.tracks : TRACKS;
   return {
@@ -208,7 +208,6 @@ export function askCourse({ owned = [], pick = null } = {}) {
         `${TRACK_LABELS[t].ja}（${TRACK_LABELS[t].kr}）${mark(t)}`, DESC[t]
       ]),
       "",
-      "コースはそれぞれ 101 日ぶんの別の講座です。",
       "あとから変更できませんので、じっくりお選びください。"
     ].join("\n"),
     quickReply: {
@@ -295,16 +294,16 @@ export function priceList(track,
       "",
       ...rows,
       "",
-      `全 ${TOTAL_DAYS} 日で 1 つの講座です。`,
+      `全 ${TOTAL_DAYS} 日で1つの講座です。`,
       "",
       "──────────",
-      "お支払い　クレジットカード（申込時に 1 回）",
+      "お支払い:　クレジットカード（申込時に1回）",
       "　　　　　自動更新はありません",
-      "お届け　　ご入金後すぐに 1 日目",
-      "　　　　　翌日から 毎朝 7 時 ＋ 毎夕 6 時",
-      `返金　　　${process.env.REFUND_POLICY || ""}`,
+      "サービス開始　:　ご入金後すぐ",
+      "　　　　　翌日から毎朝7時＋毎夕6時",
+      `返金　　:　${process.env.REFUND_POLICY || ""}`,
       "",
-      `販売者の表記　${process.env.TOKUSHOHO_URL || ""}`,
+      `販売者の表記:　${process.env.TOKUSHOHO_URL || ""}`,
       "",
       /* 有効期限の案内は checkoutLink() からここへ移した（지시서⑦
          §2-6）── ボタンの先が Stripe の期限切れ画面だったとき、
@@ -359,7 +358,7 @@ export function checkoutLink(track, packageType, url) {
       url,
       "",
       "※ このリンクは一定時間で使えなくなります。",
-      "　 切れていたら、もう一度［受講料］からお試しください。"
+      " 切れていたら、もう一度［受講料］からお試しください。"
     ].join("\n")
   };
 }
@@ -555,8 +554,9 @@ export function resumeDone(track, mode, currentDay) {
     text: [
       head,
       "",
-      "毎朝 7 時と毎夕 6 時にお送りします。",
-      "K:study101と楽しくハングルを勉強!お楽しみください。"
+      "毎朝7時と毎夕6時にお送りします。",
+      "K:study101と楽しくハングルを勉強!",
+      "お楽しみください^^ 화이팅! 응원합니다^^"
     ].join("\n")
   };
 }
@@ -622,7 +622,7 @@ export function completionNotice(track, { owned = [] } = {}) {
           + `\n${TRACK_LABELS[next].ja}も 1 日目からの ${TOTAL_DAYS} 日間です。`
         : "同じコースをもう一度受けることもできます。",
       "",
-      "もう一度受ける場合は 1 日目からお届けします。"
+      "もう一度受ける場合は1日目からお届けします。"
     ].join("\n"),
     quickReply: { items }
   };

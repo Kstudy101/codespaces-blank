@@ -564,7 +564,7 @@ check("価格表に法が求める項目が入っている", () => {
     ["税込表示", /税込/],
     ["支払時期", /申込時|お支払い/],
     ["自動更新なし", /自動更新はありません/],
-    ["提供時期", /ご入金後すぐに 1 日目/],
+    ["提供時期", /ご入金後すぐ/],
     ["返金",     /返金/],
     ["事業者表記", /販売者の表記/]
   ]) assert(re.test(t), `${what} がありません`);
@@ -697,7 +697,8 @@ check("再開の案内は restart / continue とも 3 行以上（지시서⑧ �
   for (const [name, m] of [["restart", r], ["continue", c]]) {
     const lines = m.text.split("\n").filter((s) => s.trim());
     assert(lines.length >= 3, `${name} が ${lines.length} 行しかありません`);
-    assert(/毎朝 7 時と毎夕 6 時/.test(m.text), `${name} に配達のリズムがありません`);
+    /* 表記の詰め（毎朝7時 / 毎朝 7 時）は대표 문면 개정을 따라간다。 */
+    assert(/毎朝\s?7\s?時と毎夕\s?6\s?時/.test(m.text), `${name} に配達のリズムがありません`);
   }
   assert(/を 1 日目からおとどけします/.test(r.text), r.text);
   assert(/の 12 日目から続けます/.test(c.text), c.text);

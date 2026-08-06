@@ -209,7 +209,7 @@ export function renderDay(template, user = {}) {
   return lines.map((text) => ({ type: "text", text }));
 }
 
-/* ---- 夕方のふりかえり ----------------------------------------------
+/* ---- 夕方のふりかえり（지시서⑨で「押して開く」形へ）-----------------
    朝と同じものを送り直さない。同じ 2 通がもう一度届くだけなら、
    通知が 1 回増えただけで読まれない。
 
@@ -217,63 +217,136 @@ export function renderDay(template, user = {}) {
    ハングルだけを並べる ── 思い出そうとした分だけ残るので、
    読み流しとは別のことが起きる。
 
-     1 通目  文法の名前 ＋ 会話 1 文（韓国語だけ）＋ 単語（ハングルだけ）
-     2 通目  答え
+     夕方の便   問い（Flex 1 通、「こたえを見る」ボタン）
+     押したら   答え（テキスト 1 通、postback の answer）
 
-   2 通に分けるのは、1 通だと答えが同じ画面に出て、思い出す間が
-   無いため。pushMessage は配列を受けるので、2 通でも通知は 1 回。
+   はじめは 2 通同時だった ── 「2 通に分ければ思い出す間ができる」
+   つもりが、LINE は配列を**同時に**表示するので、答えが問いのすぐ
+   下に並んで間は生まれていなかった（지시서⑨ §0）。
 
    進みには触らない。復習は「保有日数を削らないボーナス」という
    取り決め（計画書 1-2）で、current_day を動かすのは朝だけ。
    だからこの関数は DB を知らない ── 文字列を作るだけにしておくと、
    触りようが無い。 */
-export function renderReview(template, user = {}) {
+/* ---- 共通部（지시서⑨ §2-4）------------------------------------------
+   会話 1 文の**選び方**とスロット置換は、問いと答えでここ 1 か所を
+   共有する ── 別々に選ぶと、直した日に問いと答えが別の文になり、
+   利用者にはただの故障に見える。選び方は決定的（同じ原稿なら
+   いつ呼んでも同じ文）── この性質を崩さないこと。
+
+   会話は 1 文だけ拾う。全部出すと朝の再送になる。
+   名前の入る文を優先するのは、この講座で覚えてほしいのが
+   「自分の名前で言える形」だから ── 無ければ先頭で足りる。 */
+function reviewParts(template, user) {
   if (!template) throw new Error("template がありません");
-
   const day = Number(template.day_number);
-
-  /* 会話は 1 文だけ拾う。全部出すと朝の再送になる。
-     名前の入る文を優先するのは、この講座で覚えてほしいのが
-     「自分の名前で言える形」だから ── 無ければ先頭で足りる。 */
   const dialogue = Array.isArray(template.dialogue_template) ? template.dialogue_template : [];
   const pick = dialogue.find((r) => /\{NAME(_[A-Z]+)?\}/.test(String(r.kr ?? ""))) || dialogue[0] || null;
 
   const krLine = pick ? fillSlots(pick.kr, user) : null;
   if (pick && krLine === null) return null;        /* 名前が要るのに無い */
   const jaLine = pick && pick.ja ? fillSlots(pick.ja, user) : "";
-
   const vocab = Array.isArray(template.vocab_3) ? template.vocab_3 : [];
+  return { day, krLine, jaLine, vocab };
+}
 
-  /* --- 1 通目：問い --- */
-  const q = [`🌙 ${day}日目のふりかえり`];
+/* 問いの本文（文字列）。Flex でもテキスト 2 通のフォールバックでも
+   同じ行を使う ── スロット置換は文字列の段階で終える（§4-4。
+   ロジックを JSON ツリーの中へ持ち込まない）。 */
+function questionLines(template, p) {
+  const q = [`🌙 ${p.day}日目のふりかえり`];
   if (template.grammar_point) q.push("", `【今日の文法】${template.grammar_point}`);
-
-  if (krLine) {
-    q.push("", "今朝の会話から1文。意味を思い出せますか？", `　${krLine}`);
+  if (p.krLine) {
+    q.push("", "今朝の会話から1文。意味を思い出せますか？", `　${p.krLine}`);
   }
-  if (vocab.length) {
-    q.push("", "🔖 今日の単語", ...vocab.map((w) => `　${w.kr}`));
+  if (p.vocab.length) {
+    q.push("", "🔖 今日の単語", ...p.vocab.map((w) => `　${w.kr}`));
   }
-  q.push("", "…");
+  return q;
+}
 
-  /* --- 2 通目：答え --- */
+function answerLines(template, p) {
   const a = ["✅ こたえ"];
   if (template.grammar_point) a.push("", `【文法】${template.grammar_point}`);
   if (template.grammar_tip_kr) a.push(template.grammar_tip_kr);
-
-  if (krLine) {
-    a.push("", `　${krLine}`);
-    if (jaLine) a.push(`　${jaLine}`);
+  if (p.krLine) {
+    a.push("", `　${p.krLine}`);
+    if (p.jaLine) a.push(`　${p.jaLine}`);
   }
-  if (vocab.length) {
-    a.push("", ...vocab.map((w) => {
+  if (p.vocab.length) {
+    a.push("", ...p.vocab.map((w) => {
       const note = w.note ? `　（${w.note}）` : "";
       return `　${w.kr}　${w.meaning}${note}`;
     }));
   }
+  /* 「明日の朝 7 時」は지시서⑧の --not-after=9 が真に保つ（§2-6）。 */
   a.push("", "明日の朝7時に、次の日をおとどけします。");
+  return a;
+}
 
-  return [q.join("\n"), a.join("\n")].map((text) => ({ type: "text", text }));
+/* ---- 問い：Flex 1 通（지시서⑨）--------------------------------------
+   答えは同封しない ── 携帯の画面では 2 通が同時に並び、思い出す間が
+   作られていなかった。ボタン「こたえを見る」を押して初めて答えが来る。
+
+   quickReply にしないのは、体験 2 日目の勧誘が後ろに付く夕方が
+   実在するため（push-evening の bundle）── quickReply は次の
+   メッセージで消えるが、Flex のボタンは吹き出しに残り、あとから
+   でも押せる。この repo で Flex を使う最初の場所（承認 2026-08-06）。
+
+   LINE 公式リファレンス（developers.line.biz/en/reference/messaging-api/
+   の原文 index.html.md、2026-08-06 確認）:
+     ・altText  Max character limit: 1500（Unicode emoji 可）
+     ・postback action の label、Flex Message Button 上では Required・Max 40
+       （「Specifications of the label」の表）
+     ・postback action の data  Max character limit: 300
+   「こたえを見る」は 6 字、data は 20 字前後 ── 余裕の内。
+
+   altText に答えを入れない（§4-1）── 通知プレビューに答えが出たら、
+   この仕組み全体が無意味になる。 */
+export function renderReviewQuestion(template, user = {}) {
+  const p = reviewParts(template, user);
+  if (p === null) return null;                     /* 名前待ち ── 夕方は黙る */
+  return {
+    type: "flex",
+    altText: `🌙 ${p.day}日目のふりかえり`,
+    contents: {
+      type: "bubble",
+      body: {
+        type: "box", layout: "vertical",
+        contents: [
+          { type: "text", text: questionLines(template, p).join("\n"),
+            wrap: true, size: "sm" }
+        ]
+      },
+      footer: {
+        type: "box", layout: "vertical",
+        contents: [
+          { type: "button", style: "primary", height: "sm",
+            action: { type: "postback", label: "こたえを見る",
+                      data: `action=answer&day=${p.day}`,
+                      displayText: "こたえを見る" } }
+        ]
+      }
+    }
+  };
+}
+
+/* ---- 答え：テキスト 1 通。押されたときだけ（handlers/postback.mjs）。 */
+export function renderReviewAnswer(template, user = {}) {
+  const p = reviewParts(template, user);
+  if (p === null) return null;
+  return { type: "text", text: answerLines(template, p).join("\n") };
+}
+
+/* ---- テキスト 2 通（Flex 組み立てが落ちたときのフォールバック §4-3）--
+   夕方が丸ごと止まるより、答えが同時に見えるほうが軽い。
+   問い・答えとも上の共通部から組む ── 3 つ目の選び方を作らない。 */
+export function renderReview(template, user = {}) {
+  const p = reviewParts(template, user);
+  if (p === null) return null;
+  const q = [...questionLines(template, p), "", "…"];
+  return [q.join("\n"), answerLines(template, p).join("\n")]
+    .map((text) => ({ type: "text", text }));
 }
 
 

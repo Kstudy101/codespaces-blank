@@ -33,7 +33,7 @@ import { getPool, closePool } from "../lib/db.mjs";
 import { users, learning, pushlogs } from "../lib/repo/index.mjs";
 import { pushMessage, isUnreachable } from "../lib/line.mjs";
 import { jstDate, jstDateTime } from "../lib/jst.mjs";
-import { renderReview } from "../lib/render.mjs";
+import { renderReview, renderReviewQuestion } from "../lib/render.mjs";
 import { salesAllowedFor, sellablePackages, trialUpsellNotice } from "../lib/handlers/checkout.mjs";
 
 /* ---- 引数 --------------------------------------------------------- */
@@ -129,7 +129,11 @@ async function trialUpsellSection(conn, u) {
    ないのが「日を進めない」で、それは本物へ送っても確かめられない
    ── 送ったあとに current_day を見ても、朝の +1 と区別できない。
    偽の send を渡して、呼ばれた時点の DB を覗く。 */
-export async function deliverOne(conn, u, { send = pushMessage } = {}) {
+/* renderQ を差し替えられるのは検査のため ── Flex 組み立てが落ちたとき
+   テキスト 2 通のフォールバックへ降りること（§4-3）は、本物を
+   わざと壊さないと確かめられない。 */
+export async function deliverOne(conn, u,
+  { send = pushMessage, renderQ = renderReviewQuestion } = {}) {
   const day = Number(u.day_number) || 0;
   if (!day) return "日付なし";
 
@@ -145,7 +149,19 @@ export async function deliverOne(conn, u, { send = pushMessage } = {}) {
   const tpl = await learning.getTemplate(conn, u.track, day);
   if (!tpl) return "原稿なし";
 
-  const messages = renderReview(tpl, u);
+  /* 問いは Flex 1 通（지시서⑨）。答えは「こたえを見る」が押されて
+     初めて送る（handlers/postback.mjs の answer）── 2 通同時だと
+     携帯の画面で答えが問いのすぐ下に並び、思い出す間が無かった。
+     Flex の組み立てが落ちたら、従来のテキスト 2 通へ降りる（§4-3）
+     ── 夕方が丸ごと止まるよりよい。降りたことはログに残す。 */
+  let messages;
+  try {
+    const q = renderQ(tpl, u);
+    messages = q === null ? null : [q];
+  } catch (e) {
+    console.error(`  ! user ${u.id}: Flex 組み立てに失敗 ── テキスト 2 通で送ります: ${e.message}`);
+    messages = renderReview(tpl, u);
+  }
   /* 名前が要るのに無い。朝が届いている以上ふつうは起きないが、
      間に名前を消した人（「LINEの名前にする」を選んだ）が居うる。
      復習で登録を促すと朝夕 2 回お願いすることになるので、黙る。 */

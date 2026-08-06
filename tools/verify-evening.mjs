@@ -183,31 +183,34 @@ await check("名前が消えた人には黙る（朝夕 2 回お願いしない�
 });
 
 
-console.log("\n[中身]  朝の再送にしない");
+console.log("\n[中身]  問いだけ届く ── 答えは押されてから（지시서⑨）");
 
-await check("問いと答えの 2 通に分かれる", async () => {
+const flexText = (m) => m.contents.body.contents[0].text;
+
+await check("夕方の便は問い（Flex）1 通だけ ── 答えを同封しない", async () => {
+  /* 2 通同時だと、携帯の画面で答えが問いのすぐ下に並び、
+     思い出す間が作られない ── 이 개편의 목적 그 자체。 */
   const conn = fakeConn(READY);
   let msgs = null;
   await deliverOne(conn, TARGET, { send: async (_t, m) => { msgs = m; return {}; } });
-  assert(msgs && msgs.length === 2, `${msgs ? msgs.length : 0} 通でした`);
-  assert(/ふりかえり/.test(msgs[0].text), msgs[0].text.slice(0, 30));
-  assert(/こたえ/.test(msgs[1].text), msgs[1].text.slice(0, 30));
-  return "問い → 答え";
+  assert(msgs && msgs.length === 1, `${msgs ? msgs.length : 0} 通でした`);
+  assert(msgs[0].type === "flex", msgs[0].type);
+  assert(/ふりかえり/.test(msgs[0].altText), msgs[0].altText);
+  const btn = msgs[0].contents.footer.contents[0].action;
+  assert(btn.data === "action=answer&day=4", btn.data);
+  return "問い 1 通 ＋ こたえを見る";
 });
 
-await check("問いの側に答えを混ぜない", async () => {
-  /* 同じ画面に答えが出ていると、思い出す間が無い。
-     単語は 1 通目でハングルだけ、意味は 2 通目。 */
+await check("問いに答えを混ぜない（意味・訳は押されるまで出ない）", async () => {
   const conn = fakeConn(READY);
   let msgs = null;
   await deliverOne(conn, TARGET, { send: async (_t, m) => { msgs = m; return {}; } });
-  const [q, a] = msgs.map((m) => m.text);
-  assert(q.includes("네") && !q.includes("はい"), `1 通目に意味が出ています: ${q}`);
-  assert(a.includes("네") && a.includes("はい"), `2 通目に意味がありません: ${a}`);
-  assert(q.includes("다나카예요") && !q.includes("たなかです"),
-    `1 通目に訳が出ています: ${q}`);
-  assert(a.includes("たなかです"), `2 通目に訳がありません: ${a}`);
-  return "意味と訳は 2 通目だけ";
+  const q = flexText(msgs[0]);
+  assert(q.includes("네") && !q.includes("はい"), `問いに意味が出ています: ${q}`);
+  assert(q.includes("다나카예요") && !q.includes("たなかです"), `問いに訳が出ています: ${q}`);
+  assert(!msgs[0].altText.includes("はい") && !msgs[0].altText.includes("たなかです"),
+    "altText に答えが出ています（通知プレビューで台無し）");
+  return "問いはハングルだけ";
 });
 
 await check("名前は夕方も差し込まれる（받침 の規則ごと）", async () => {
@@ -215,9 +218,78 @@ await check("名前は夕方も差し込まれる（받침 の規則ごと）", 
   let msgs = null;
   await deliverOne(conn, TARGET, { send: async (_t, m) => { msgs = m; return {}; } });
   /* 다나카 は母音終わりなので 예요。받침 があれば 이에요。 */
-  assert(msgs[0].text.includes("다나카예요"), msgs[0].text);
-  assert(!/\{[A-Z_]+\}/.test(msgs[0].text + msgs[1].text), "差し込み口が残っています");
+  const q = flexText(msgs[0]);
+  assert(q.includes("다나카예요"), q);
+  assert(!/\{[A-Z_]+\}/.test(q + msgs[0].altText), "差し込み口が残っています");
   return "다나카예요";
+});
+
+await check("Flex の組み立てが落ちたら、テキスト 2 通へ降りる（§4-3）", async () => {
+  /* 夕方が丸ごと止まるより、答えが同時に見えるほうが軽い。 */
+  const conn = fakeConn(READY);
+  let msgs = null;
+  const r = await deliverOne(conn, TARGET, {
+    send: async (_t, m) => { msgs = m; return {}; },
+    renderQ: () => { throw new Error("わざと壊す"); }
+  });
+  assert(/送信:4日目/.test(r), r);
+  assert(msgs && msgs.length === 2, `${msgs ? msgs.length : 0} 通でした`);
+  assert(msgs.every((m) => m.type === "text"), "フォールバックがテキストではありません");
+  assert(/こたえ/.test(msgs[1].text), "答えの通がありません");
+  return "폴백 = 종전 2통";
+});
+
+console.log("\n[こたえを見る]  押した人にだけ・記録も消費もしない");
+
+const { handlePostback } = await import("../server/lib/handlers/postback.mjs");
+const ANSWER_ROW = [{ id: 7, line_user_id: "U_test", status: "active",
+  active_track: "beginner", name_kanji: "田中", name_reading: "たなか",
+  name_kr: "다나카", name_source: "web", display_name: "田中" }];
+
+await check("押すと答えが 1 通返る ── 進みにも日数にも記録にも触れない", async () => {
+  const conn = fakeConn({ "FROM users": ANSWER_ROW, "FROM content_templates": TPL });
+  let sent = null;
+  const r = await handlePostback(conn,
+    { source: { userId: "U_test" }, replyToken: "rt",
+      postback: { data: "action=answer&day=4" } },
+    { send: async (_t, m) => { sent = m; return {}; } });
+  assert(r.day === 4 && r.replied === true, JSON.stringify(r));
+  assert(sent && sent.length === 1 && /こたえ/.test(sent[0].text), sent && sent[0].text);
+  assert(sent[0].text.includes("다나카예요") && sent[0].text.includes("たなかです"),
+    "答えの中身が組まれていません");
+  assert(!conn.calls.some((c) => /UPDATE learning_progress|days_used/i.test(c.sql)),
+    "答えで進み・日数に触りました（ボーナスの不変式）");
+  assert(!conn.calls.some((c) => /INSERT INTO push_logs/i.test(c.sql)),
+    "押した事実を記録しています（無測定の原則 2026-08-04）");
+  return "答え 1 通・書き込み 0";
+});
+
+await check("track は data から受けない ── 書き換えても active_track の原稿", async () => {
+  /* data に track を載せて他コースの原稿（有料資産）を覗く道を
+     作らない。 */
+  const conn = fakeConn({ "FROM users": ANSWER_ROW, "FROM content_templates": TPL });
+  await handlePostback(conn,
+    { source: { userId: "U_test" }, replyToken: "rt",
+      postback: { data: "action=answer&day=4&track=advanced" } },
+    { send: async () => ({}) });
+  const q = conn.calls.find((c) => /FROM content_templates/i.test(c.sql));
+  assert(q && q.params[0] === "beginner", `track=${q && q.params[0]} で引きました`);
+  return "active_track だけを信じる";
+});
+
+await check("answer 分岐は advanceDay・days_used・current_day・push_logs に触れない（ソース）", async () => {
+  /* verify-evening は夕方バッチのソースしか見ていなかった ── 答えは
+     postback.mjs を通るので、ここで**約束を機械に移す**（§3-1・§3-2）。 */
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../server/lib/handlers/postback.mjs", import.meta.url), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+  const block = src.match(/if \(action === "answer"\)[\s\S]*?(?=if \(action === ")/);
+  assert(block, "answer の分岐が見つかりません");
+  assert(!/advanceDay|days_used|current_day/.test(block[0]),
+    "answer 분기가 진도·일수를 건드립니다");
+  assert(!/push_logs|pushlogs\.|logSent|logFailed/.test(block[0]),
+    "answer 분기가 누른 사실을 기록합니다（무측정 원칙）");
+  return "소스에 없음 ── 사람의 약속이 아니라 관문";
 });
 
 
@@ -263,11 +335,11 @@ await check("買える人には文面 A ── 復習の後ろに 1 通、日数
     let msgs = null;
     const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
     assert(r === "送信+勧誘:2日目", r);
-    assert(msgs.length === 3, `${msgs.length} 通でした（復習 2 + 勧誘 1 のはず）`);
-    const t = msgs[2].text;
+    assert(msgs.length === 2, `${msgs.length} 通でした（問い 1 + 勧誘 1 のはず）`);
+    const t = msgs[1].text;
     assert(/明日が最後の 1 日/.test(t), t);
     assert(/日数を追加できます/.test(t), t);
-    const qr = msgs[2].quickReply?.items?.[0]?.action;
+    const qr = msgs[1].quickReply?.items?.[0]?.action;
     assert(qr && qr.data === "action=plan&track=beginner", JSON.stringify(qr));
     assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)),
       "勧誘で日数が動きました ── ボーナスの不変式が崩れています");
@@ -282,10 +354,10 @@ await check("販売が閉じていれば文面 B ── quickReply 無し・約�
     let msgs = null;
     const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
     assert(r === "送信+勧誘:2日目", r);
-    const t = msgs[2].text;
+    const t = msgs[1].text;
     assert(/ただいま準備中です/.test(t), t);
     assert(/［受講料］/.test(t), "どこを見ればよいかが無い");
-    assert(!msgs[2].quickReply, "押しても準備中の quickReply が付いています");
+    assert(!msgs[1].quickReply, "押しても準備中の quickReply が付いています");
     /* 「整いましたらお知らせします」は書かない ── 知らせる機能が
        コードに無い。文書がコードより先に出るのを関門で止める。 */
     assert(!/お知らせ/.test(t), `能動通知を約束しています: ${t}`);
@@ -301,8 +373,8 @@ await check("販売が開いていても、原稿が最小パッケージ未満�
     let msgs = null;
     const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
     assert(r === "送信+勧誘:2日目", r);
-    assert(/ただいま準備中です/.test(msgs[2].text), msgs[2].text);
-    assert(!msgs[2].quickReply, "買えないのに quickReply が付いています");
+    assert(/ただいま準備中です/.test(msgs[1].text), msgs[1].text);
+    assert(!msgs[1].quickReply, "買えないのに quickReply が付いています");
     return "sellablePackages = 0 → B";
   }));
 
@@ -314,7 +386,7 @@ await check("勧誘は通算 1 回だけ（trial_end の記録で二度目を止
     let msgs = null;
     const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
     assert(r === "送信:2日目", r);
-    assert(msgs.length === 2, `${msgs.length} 通でした（復習だけのはず）`);
+    assert(msgs.length === 1, `${msgs.length} 通でした（問いだけのはず）`);
     return "trial_end=1 → 復習だけ";
   }));
 
@@ -329,7 +401,7 @@ await check("残り 0 の勧誘（upsell）とは数を分ける ── 互い�
     let msgs = null;
     const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
     assert(r === "送信+勧誘:2日目", r);
-    assert(msgs.length === 3, `${msgs.length} 通でした`);
+    assert(msgs.length === 2, `${msgs.length} 通でした`);
     return "upsell=5 でも trial_end=0 なら出る";
   }));
 
@@ -340,7 +412,7 @@ await check("体験でない人（購入者）の 2 日目には勧誘しない"
     let msgs = null;
     const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
     assert(r === "送信:2日目", r);
-    assert(msgs.length === 2, `${msgs.length} 通でした`);
+    assert(msgs.length === 1, `${msgs.length} 通でした`);
     return "trial 以外 → 復習だけ";
   }));
 

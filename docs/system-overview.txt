@@ -1453,16 +1453,19 @@ tasks 는 하나의 셸에서 이어 돌므로 export 가 뒤 행에도 미침.
                                  연동 화면의 코스 안내·체험 조건구·이름행 제거 +
                                  코스 선택 단계 — trackpick 판매 게이트 부재·
                                  즉시 1일차·원고 가드·await+conn 호출형
-  verify-render.mjs          39  index.html 의 조사 규칙을 실소스에서 읽어 대조 +
-                                 저녁이 아침의 재전송이 아닌 것
+  verify-render.mjs          44  index.html 의 조사 규칙을 실소스에서 읽어 대조 +
+                                 저녁이 아침의 재전송이 아닌 것 +
+                                 문제 Flex — altText 에 답 금지·공통부 공유
   verify-push.mjs            51  확보→송신 순서를 가짜 send 로 들여다봄 +
                                  코스 미선택 시 날을 안 깎는 것 + 운세가 3통째 +
                                  장애 아침의 재조준 — 확보 없이 같은 날 재송신 +
                                  기한 예고 — 체험 중 억제·구매자 유지
-  verify-evening.mjs         28  복습은 보너스 — current_day 를 안 건드리는가 /
+  verify-evening.mjs         32  복습은 보너스 — current_day 를 안 건드리는가 /
                                  대상을 진도가 아닌 발신 로그에서 뽑는가 +
                                  체험 2일차 유도 — A/B 분기·trial_end 1회·
-                                 upsell 비간섭·미소비
+                                 upsell 비간섭·미소비 +
+                                 문제만 1통·답은 눌러서 — answer 분기의
+                                 무기록·무소비(소스)·track 변조 무시·폴백
   verify-fortune-server.mjs  16  서버 운세 = 사이트 운세 +
                                  문안 30칸+십신 10 결번·철자
   verify-billing.mjs         67  선불 횟수권 — 잔여는 entitled - used /
@@ -1478,7 +1481,7 @@ tasks 는 하나의 셸에서 이어 돌므로 export 가 뒤 행에도 미침.
                                  570통 전수 대조 / step① 이 사이트로 안
                                  돌려보냄 / postback data 의 이름 불신
   -----------------------  ----
-  합계                      617
+  합계                      626
 
   루트에 package.json 이 없으므로 의존 패키지가 없습니다 —
   각 스크립트가 vm 으로 대상 .js 를 그대로 읽어 실행합니다.

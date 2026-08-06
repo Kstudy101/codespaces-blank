@@ -194,9 +194,9 @@ export function askCourse({ owned = [], pick = null } = {}) {
      忘れて同じコースをもう一度買う ── 返金の手間になる。 */
   const mark = (t) => (owned.includes(t) ? "（受講中）" : "");
   const DESC = {
-    beginner:     "　ハングルの読み書きから。韓国語がはじめての方",
-    intermediate: "　文と文をつなぐ・敬語。あいさつができる方",
-    advanced:     "　書き言葉・ニュースの韓国語。日常会話に困らない方"
+    beginner:     "ハングルの読み書きから。韓国語がはじめての方",
+    intermediate: "文と文をつなぐ・敬語。あいさつができる方",
+    advanced:     "書き言葉・ニュースの韓国語。日常会話に困らない方"
   };
   const list = pick ? pick.tracks : TRACKS;
   return {
@@ -555,8 +555,8 @@ export function resumeDone(track, mode, currentDay) {
     text: [
       head,
       "",
-      "あしたの朝 7 時から、毎朝 7 時と毎夕 6 時にお送りします。",
-      "Kstudy101 と楽しくハングルを勉強して、お楽しみください。"
+      "毎朝 7 時と毎夕 6 時にお送りします。",
+      "K:study101と楽しくハングルを勉強!お楽しみください。"
     ].join("\n")
   };
 }

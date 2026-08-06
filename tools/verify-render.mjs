@@ -18,7 +18,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
-  hasJong, fillSlots, renderDay, renderReview, findMisplacedSlot, SLOTS, nameMissingNotice
+  hasJong, fillSlots, renderDay, renderReview, renderReviewQuestion,
+  renderReviewAnswer, findMisplacedSlot, SLOTS, nameMissingNotice
 } from "../server/lib/render.mjs";
 import { semesterForDay, SEMESTERS, TOTAL_DAYS } from "../server/lib/repo/learning.mjs";
 
@@ -436,7 +437,68 @@ check("受け取る側が何日目か分かる", () => {
 check("名前が要るのに無ければ null（朝と同じ扱い）", () => {
   /* 既定名を入れない。入れると全員が同じ名前で呼ばれる。 */
   assert(renderReview(REVIEW_TPL, {}) === null, "名前なしで組み立ててしまいました");
-  return "呼ぶ側が黙る";
+  /* Flex の問い・押されたときの答えも同じ扱い（지시서⑨ §2-5）。 */
+  assert(renderReviewQuestion(REVIEW_TPL, {}) === null, "Flex 問いが名前なしで組めました");
+  assert(renderReviewAnswer(REVIEW_TPL, {}) === null, "答えが名前なしで組めました");
+  return "呼ぶ側が黙る（Flex・答えも）";
+});
+
+/* ---- 夕方の問いは Flex（지시서⑨）------------------------------------ */
+
+const flexQ = () => renderReviewQuestion(REVIEW_TPL, { name_kr: "아이", name_reading: "あい" });
+const flexBodyText = (m) => m.contents.body.contents[0].text;
+
+check("問いは Flex 1 通で、altText に答えを入れない（§4-1）", () => {
+  const m = flexQ();
+  assert(m.type === "flex", m.type);
+  /* altText: LINE 公式リファレンス（index.html.md 原文、2026-08-06 確認）
+     Max character limit: 1500・Unicode emoji 可。通知プレビューに
+     出る文字列なので、答え（訳・意味）を入れたらこの仕組みごと無意味。 */
+  assert(m.altText && m.altText.length <= 1500, `altText: ${m.altText}`);
+  assert(new RegExp(`^🌙 ${REVIEW_TPL.day_number}日目のふりかえり$`).test(m.altText), m.altText);
+  assert(!m.altText.includes("あいです") && !m.altText.includes("日本"),
+    `altText に答えが入っています: ${m.altText}`);
+  return m.altText;
+});
+
+check("ボタンは action=answer&day= の postback（label 40 字以内）", () => {
+  const m = flexQ();
+  const btn = m.contents.footer.contents[0];
+  assert(btn.type === "button", JSON.stringify(btn));
+  const a = btn.action;
+  assert(a.type === "postback", a.type);
+  assert(a.data === `action=answer&day=${REVIEW_TPL.day_number}`, a.data);
+  /* Flex Message の Button 上の postback label は Required・Max 40
+     （公式「Specifications of the label」の表、2026-08-06 確認）。
+     data は Max 300 ── どちらも余裕の内であることを機械で保つ。 */
+  assert(a.label && a.label.length <= 40, `label: ${a.label}`);
+  assert(a.data.length <= 300, `data が 300 字を超えています`);
+  return `${a.label} → ${a.data}`;
+});
+
+check("Flex の問い本文にも答えを入れない・差し込み口を残さない", () => {
+  const t = flexBodyText(flexQ());
+  assert(t.includes("아이예요"), `名前の文がありません: ${t}`);
+  assert(!t.includes("あいです"), `問いに訳が出ています: ${t}`);
+  assert(t.includes("일본") && !t.includes("日本"), `単語の意味が出ています: ${t}`);
+  assert(!/\{[A-Z_]+\}/.test(t), "差し込み口が残っています");
+  return "問いはハングルだけ";
+});
+
+check("問いと答えが同じ会話文 1 文を選ぶ（共通部の共有・§2-4）", () => {
+  /* 選び方が 2 か所にあると、直した日に問いと答えが別の文になり、
+     利用者にはただの故障に見える。 */
+  const q = flexBodyText(flexQ());
+  const a = renderReviewAnswer(REVIEW_TPL, { name_kr: "아이", name_reading: "あい" }).text;
+  assert(q.includes("아이예요") && a.includes("아이예요"), "同じ文を選んでいません");
+  assert(!q.includes("반가워요") && !a.includes("반가워요"), "別の文が混ざっています");
+  return "同じ 1 文";
+});
+
+check("答えの末尾に「明日の朝7時」が残る（§2-6 ── ⑧の --not-after が真に保つ）", () => {
+  const a = renderReviewAnswer(REVIEW_TPL, { name_kr: "아이", name_reading: "あい" }).text;
+  assert(/明日の朝7時に、次の日をおとどけします。/.test(a), a.split("\n").pop());
+  return "残す（配達の約束は cron の上限が守る）";
 });
 
 check("받침 の規則は朝と同じものを通る", () => {

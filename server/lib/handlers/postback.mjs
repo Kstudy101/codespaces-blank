@@ -20,6 +20,9 @@
      節目
        action=quiz&day=30&choice=2     クイズ（docs/plan-quiz-checkpoint.md）
 
+     夕方のふりかえり
+       action=answer&day=…             「こたえを見る」（지시서⑨）
+
    data は利用者の端末を経由して戻ってくる文字列で、こちらが
    送ったものがそのまま返る保証は無い（作り替えられる）。
    正解番号を data に入れてはいけない ── 入れると、押す前に
@@ -50,6 +53,7 @@ import {
 import { PACKAGES, TRIAL_DAYS } from "../repo/billing.mjs";
 import { deliverNow } from "../../db/push-daily.mjs";
 import { isTrack } from "../repo/learning.mjs";
+import { renderReviewAnswer } from "../render.mjs";
 
 /* "a=1&b=2" を読む。URLSearchParams を使うのは、
    自前で split すると値に & や = が入ったときに崩れるため。 */
@@ -581,6 +585,40 @@ export async function handlePostback(conn, event,
     const replied = await reply(token,
       [resumeDone(r.track, r.mode, r.currentDay)], send);
     return { userId: user.id, action, track: r.track, mode: r.mode, replied };
+  }
+
+  /* ---- 夕方のふりかえり：こたえ（지시서⑨）--------------------------
+     「こたえを見る」が押されて初めて答えを送る。夕方の便は問い
+     （Flex）だけを送っている（db/push-evening.mjs）。
+
+     track は data から受けない ── data は端末を経由して戻る文字列で、
+     書き換えれば他コースの原稿（有料資産）を覗ける。user.active_track
+     だけを信じる。answer という名前は review（3 日周期クイズの採点）と
+     分けてある ── 同名にすると採点経路へ流れ込む（§2-2）。
+
+     押した事実は記録しない（無測定の原則 2026-08-04 ── 3 日周期
+     クイズと同じ）。進み・日数にも触れない。どちらも관문이 소스를
+     감시한다（verify-evening）。
+
+     問いと答えが食い違いうる唯一の道: 18 時の発送とタップの間に
+     その日の原稿を재배치した場合。防御コードは置かない ──
+     「원고 재배치는 저녁 배치(JST 18시) 전에 끝낸다」は運用規則
+     （STATUS.md §8）。 */
+  if (action === "answer") {
+    const day = int(params.day);
+    if (day === null || day < 1) {
+      return { skipped: `day が読めません: ${params.day}`, userId: user.id };
+    }
+    const track = user.active_track;
+    if (!track) return { skipped: "コース未選択", userId: user.id };
+    const tpl = await learning.getTemplate(conn, track, day);
+    if (!tpl) return { skipped: `原稿なし: ${track} ${day}`, userId: user.id };
+    /* 名前が要るのに消えている ── 問いが出た後に名前を消した人だけ。
+       例外にせず黙って降りる（§2-5）。 */
+    const a = renderReviewAnswer(tpl, user);
+    if (a === null) return { skipped: "名前なし", userId: user.id };
+    const replied = await reply(token, [a], send);
+    return { userId: user.id, action, day, replied };
   }
 
   /* ---- 復習クイズ（3 日周期、docs/plan-quiz.md）--------------------

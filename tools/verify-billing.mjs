@@ -697,7 +697,7 @@ check("再開の案内は restart / continue とも 3 行以上（지시서⑧ �
   for (const [name, m] of [["restart", r], ["continue", c]]) {
     const lines = m.text.split("\n").filter((s) => s.trim());
     assert(lines.length >= 3, `${name} が ${lines.length} 行しかありません`);
-    assert(/あしたの朝 7 時から/.test(m.text), `${name} に開始時点がありません`);
+    assert(/毎朝 7 時と毎夕 6 時/.test(m.text), `${name} に配達のリズムがありません`);
   }
   assert(/を 1 日目からおとどけします/.test(r.text), r.text);
   assert(/の 12 日目から続けます/.test(c.text), c.text);

@@ -688,6 +688,22 @@ await acheck("戻り先 URL は設定が空でも既定値で埋まる（空文�
   return "既定 = line.me（プロフィール。友だちなら 1:1 トークが開く）";
 });
 
+check("再開の案内は restart / continue とも 3 行以上（지시서⑧ §2-3）", () => {
+  /* 1 行だけだと「いつから・何が約束か」が無い。開始時点は
+     「あしたの朝 7 時から」── これを真に保つのは push-cron.sh の
+     --not-after=9（verify-push の文字列検査）。 */
+  const r = checkout.resumeDone("beginner", "restart", 0);
+  const c = checkout.resumeDone("beginner", "continue", 11);
+  for (const [name, m] of [["restart", r], ["continue", c]]) {
+    const lines = m.text.split("\n").filter((s) => s.trim());
+    assert(lines.length >= 3, `${name} が ${lines.length} 行しかありません`);
+    assert(/あしたの朝 7 時から/.test(m.text), `${name} に開始時点がありません`);
+  }
+  assert(/を 1 日目からおとどけします/.test(r.text), r.text);
+  assert(/の 12 日目から続けます/.test(c.text), c.text);
+  return "いつから・どのリズムか、まで言う";
+});
+
 check("最初の購入の文面に「あしたの朝」を入れない（即時 1 日目と矛盾・§2-3-1）", () => {
   /* 첫 구매는 그 자리에서 1일차가 온다（creditFromStripe → deliverNow）。
      재개(resumeDone)의 「あしたの朝 7 時から」를 여기에 복사하면

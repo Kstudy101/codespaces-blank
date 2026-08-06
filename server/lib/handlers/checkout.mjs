@@ -539,13 +539,25 @@ export async function applyResume(conn, user, { track, mode }) {
   return { ok: true, track, mode, currentDay: prog ? Number(prog.current_day) : 0 };
 }
 
+/* 문면은 2026-08-06 대표 확정(지시서⑧ §2-3)。1 行だけだと「で、何が
+   どうなるのか」が読めない ── いつから・どのリズムで、まで言う。
+   「あしたの朝 7 時から」を真に保つのは push-cron.sh の --not-after=9
+   （관문이 문자열을 감시）。この文面を最初の購入経路（boughtNotice）へ
+   複写しない ── あちらは**その場で** 1 日目が届くので正面から矛盾する
+   （§2-3-1。관문이 boughtNotice 의 「あしたの朝」 부재를 감시）。 */
 export function resumeDone(track, mode, currentDay) {
   const l = TRACK_LABELS[track];
+  const head = mode === "restart"
+    ? `${l.ja}（${l.kr}）を 1 日目からおとどけします。`
+    : `${l.ja}（${l.kr}）の ${currentDay + 1} 日目から続けます。`;
   return {
     type: "text",
-    text: mode === "restart"
-      ? `${l.ja}（${l.kr}）を 1 日目からお届けします。`
-      : `${l.ja}（${l.kr}）の ${currentDay + 1} 日目から続けます。`
+    text: [
+      head,
+      "",
+      "あしたの朝 7 時から、毎朝 7 時と毎夕 6 時にお送りします。",
+      "Kstudy101 と楽しくハングルを勉強して、お楽しみください。"
+    ].join("\n")
   };
 }
 

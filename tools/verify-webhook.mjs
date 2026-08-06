@@ -568,6 +568,26 @@ await acheck("ASK_PLANS の全語が同じ分岐へ（販売停止 → 全語 no
     return `${ASK_PLANS.length} 語とも門へ`;
   }));
 
+await acheck("残りの返事に「（全 101 日）」を付けない（지시서⑧ §3）", async () => {
+  /* 진행 상황 화면에는 잔여만. 전량(全 101 日)은 파는 화면(가격표)
+     쪽에 남는다 ── verify-billing 의 「分量 /全 101 日/」이 그쪽을 지킨다. */
+  const { sent } = await askPlans("いま何日目？", {
+    "FROM users": [{ id: 7, line_user_id: "U_test", status: "active",
+      active_track: "beginner", name_kr: "다나카", name_kanji: "田中",
+      name_source: "web", display_name: "田中" }],
+    "FROM course_entitlements": [{ track: "beginner", days_entitled: 30,
+      days_used: 3, current_day: 3, remaining: 27 }],
+    /* pending を空にする ── オンボーディングが残っていると、状況の
+       返事より先にそちらが出る（それが正しい既存動作）。 */
+    "FROM saju_profiles": [{ user_id: 7, birth_date: "1990-01-01",
+      birth_confirmed: 1, ohaeng_main: "목" }]
+  });
+  assert(sent.length === 1, `送った通数: ${sent.length}`);
+  assert(/残り 27 日/.test(sent[0].text), sent[0].text);
+  assert(!/全 \d+ 日/.test(sent[0].text), `全量が残っています: ${sent[0].text}`);
+  return "残りだけ";
+});
+
 await acheck("ASK_STOP・ASK_SETUP の従来動作は変わらない（境界の語も含む）", async () =>
   withSalesEnv(OPEN_ENV, async () => {
     /* 止めたい系はそのまま解約の案内。「購入をキャンセルしたい」の

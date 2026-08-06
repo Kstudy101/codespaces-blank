@@ -185,7 +185,9 @@ export async function handleMessage(conn, event, { send = replyMessage } = {}) {
     } else {
       const left = Math.max(0, ent.remaining);
       reply = left > 0
-        ? `いま ${ent.currentDay} 日目まで進んでいます。残り ${left} 日ぶんお届けできます（全 ${learning.TOTAL_DAYS} 日）。`
+        /* 「（全 101 日）」は付けない（지시서⑧ §3）── 진행 상황
+           화면에는 잔여만, 전량은 파는 화면(가격표)에만. */
+        ? `いま ${ent.currentDay} 日目まで進んでいます。残り ${left} 日ぶんお届けできます。`
         : `いま ${ent.currentDay} 日目まで進んでいます。お届けできる日数を使い切りました。`
           + `\n下のメニューの［受講料］から追加できます。`;
     }

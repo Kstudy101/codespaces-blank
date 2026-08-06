@@ -662,6 +662,41 @@ await acheck("セッション作成に失敗したら notReady 1 通（部分成
   }
 });
 
+/* ================================================================== */
+head("[決済のあと]  지시서⑧ ── 404 ではなく LINE のトークへ");
+
+check("戻り先はどちらも LINE のトーク ── /thanks(404) を指さない", () => {
+  const src = stripComments(read("server/lib/handlers/checkout.mjs"));
+  assert(!/thanks/.test(src),
+    "/thanks への参照が残っています ── 存在しないページで、払った直後に 404 が出ます");
+  const fn = src.match(/export async function startCheckout[\s\S]*?\n}\n/)[0];
+  assert(/successUrl: ADD_FRIEND_URL\(\)/.test(fn) && /cancelUrl: ADD_FRIEND_URL\(\)/.test(fn),
+    "success / cancel が ADD_FRIEND_URL の一か所読みになっていません");
+  return "success = cancel = トーク（一か所読み）";
+});
+
+await acheck("戻り先 URL は設定が空でも既定値で埋まる（空文字で 404 へ落とさない）", async () => {
+  const { ADD_FRIEND_URL } = await import("../server/lib/pages.mjs");
+  const saved = process.env.LINE_ADD_FRIEND_URL;
+  delete process.env.LINE_ADD_FRIEND_URL;
+  try {
+    const u = ADD_FRIEND_URL();
+    assert(/^https:\/\/line\.me\//.test(u), `既定値が不正です: ${u}`);
+  } finally {
+    if (saved !== undefined) process.env.LINE_ADD_FRIEND_URL = saved;
+  }
+  return "既定 = line.me（プロフィール。友だちなら 1:1 トークが開く）";
+});
+
+check("最初の購入の文面に「あしたの朝」を入れない（即時 1 日目と矛盾・§2-3-1）", () => {
+  /* 첫 구매는 그 자리에서 1일차가 온다（creditFromStripe → deliverNow）。
+     재개(resumeDone)의 「あしたの朝 7 時から」를 여기에 복사하면
+     즉시 도착과 정면 모순 ── 두 문면을 공통 함수로 묶지 않는 이유. */
+  const m = checkout.boughtNotice("beginner", 7);
+  assert(!/あしたの朝/.test(m.text), `첫 구매 문면에 「あしたの朝」: ${m.text}`);
+  return "boughtNotice は即時前提のまま";
+});
+
 check("有効期限の案内が価格表の本文にある（checkoutLink から移設・§2-6）", () => {
   process.env.TOKUSHOHO_URL ||= "https://example/tokushoho";
   process.env.REFUND_POLICY ||= "返金の説明";

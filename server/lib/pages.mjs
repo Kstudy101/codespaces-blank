@@ -19,7 +19,11 @@
 
 import { TRIAL_DAYS } from "./repo/billing.mjs";
 
-const ADD_FRIEND_URL = () =>
+/* LINE のトークへ戻る先。決済の成功・キャンセル（handlers/checkout.mjs、
+   지시서⑧ §1）もここを読む ── 同じ値を別の名前で二度持たない。
+   プロフィール URL だが、既に友だちなら 1:1 トークが開く。既定値を
+   コードに置き、設定が空でも 404 へ落とさない。 */
+export const ADD_FRIEND_URL = () =>
   process.env.LINE_ADD_FRIEND_URL || "https://line.me/R/ti/p/@kstudy101";
 
 export function escapeHtml(s) {

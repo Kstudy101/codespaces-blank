@@ -34,7 +34,13 @@ import { createCheckoutSession } from "../stripe.mjs";
 import { pushMessage, replyMessage, isUnreachable } from "../line.mjs";
 import { jstDateTime } from "../jst.mjs";
 
-const SITE_URL = () => process.env.SITE_URL || "https://www.kstudy101.jp";
+/* 決済のあとの戻り先はどちらも LINE のトーク（지시서⑧ §1）。
+   以前は success が `${SITE_URL}/thanks` ── **存在しないページ**で、
+   払った直後に 404。「お金は出たのにエラー画面」に見える、いちばん
+   不安な瞬間の画面だった。cancel も사이트 홈이 아니라 토크로 ──
+   그 자리에서 [受講料]를 다시 누를 수 있다. 값은 pages.mjs 의
+   ADD_FRIEND_URL 한 곳에서 읽는다（既定値つき）。 */
+import { ADD_FRIEND_URL } from "../pages.mjs";
 
 /* ---- 門 ------------------------------------------------------------
    足りないものを名前で返す。1 つ目で止めないのは env.mjs と同じ理由 ──
@@ -323,8 +329,8 @@ export async function startCheckout(conn, user, { track, packageType }) {
     track, packageType,
     days: pkg.days, price: pkg.price,
     productName: `${TRACK_LABELS[track].ja}（${TRACK_LABELS[track].kr}） ${pkg.days}日分`,
-    successUrl: `${SITE_URL()}/thanks`,
-    cancelUrl: `${SITE_URL()}/`,
+    successUrl: ADD_FRIEND_URL(),
+    cancelUrl: ADD_FRIEND_URL(),
     /* 参照用（ダッシュボードで誰の何かを並べて見る）。重複防止では
        ない ── それは purchases.payment_ref の UNIQUE の仕事。 */
     clientRef: `u${user.id}-${track}-${packageType}`

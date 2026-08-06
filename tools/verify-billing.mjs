@@ -509,25 +509,34 @@ check("SALES_MODE ── 既定 closed / test は名簿だけ / open は全員�
 
 const { PACKAGES: PKGS } = await import("../server/lib/repo/billing.mjs");
 
+/* 지시서⑦：ボタンは uri（決済ページを先に作って渡す）。関門は
+   偽 URL を渡して同じ検査をする ── ネットワークは要らない。 */
+const FAKE_URLS = Object.fromEntries(
+  Object.keys(PKGS).map((k) => [k, `https://checkout.stripe.test/${k}`]));
+
 check("原稿の日数を超えるパッケージは並ばない（§1-2）", () => {
   process.env.TOKUSHOHO_URL ||= "https://example/tokushoho";
   process.env.REFUND_POLICY ||= "返金の説明";
   /* 30 日ぶんしか無いコース ── 30days までしか出ない */
-  const list30 = checkout.priceList("intermediate", { availableDays: 30 });
+  const list30 = checkout.priceList("intermediate",
+    { availableDays: 30, checkoutUrls: FAKE_URLS });
   assert(list30, "30 日ぶんあるのに価格表が出ません");
   const days30 = (list30.text.match(/(\d+) 日分/g) || []).map((s) => parseInt(s));
   assert(days30.length && Math.max(...days30) <= 30,
     `原稿 30 日なのに ${Math.max(...days30)} 日を売っています ── 31 日目から黙って止まる`);
-  const dataDays = list30.quickReply.items
-    .map((i) => i.action.data.match(/pkg=(\w+)/)?.[1]).filter(Boolean);
-  for (const key of dataDays) {
+  /* ボタン側も同じ絞り込み ── uri の末尾（FAKE_URLS の鍵）で見る */
+  const keys30 = list30.quickReply.items
+    .map((i) => i.action.uri?.split("/").pop()).filter(Boolean);
+  assert(keys30.length, "uri ボタンがありません");
+  for (const key of keys30) {
     assert(PKGS[key].days <= 30, `ボタンに ${key} が残っています`);
   }
   /* 1 つも売れない ── null（呼ぶ側が「準備中」を出す） */
-  assert(checkout.priceList("advanced", { availableDays: 0 }) === null,
+  assert(checkout.priceList("advanced", { availableDays: 0, checkoutUrls: FAKE_URLS }) === null,
     "原稿 0 なのに価格表が出ます");
   /* 全量あれば全パッケージ */
-  const listAll = checkout.priceList("beginner", { availableDays: 101 });
+  const listAll = checkout.priceList("beginner",
+    { availableDays: 101, checkoutUrls: FAKE_URLS });
   const daysAll = (listAll.text.match(/(\d+) 日分/g) || []).map((s) => parseInt(s));
   assert(Math.max(...daysAll) === Math.max(...Object.values(PKGS).map((p) => p.days)),
     "全量あるのに上のパッケージが出ません");
@@ -547,7 +556,8 @@ check("buy と trial も原稿の上限で止まる（data 改竄への蓋）", 
 check("価格表に法が求める項目が入っている", () => {
   process.env.TOKUSHOHO_URL ||= "https://example/tokushoho";
   process.env.REFUND_POLICY ||= "返金の説明";
-  const m = checkout.priceList("beginner", { trialAvailable: false });
+  const m = checkout.priceList("beginner",
+    { trialAvailable: false, checkoutUrls: FAKE_URLS });
   const t = m.text;
   for (const [what, re] of [
     ["分量",     /全 101 日/],
@@ -563,6 +573,102 @@ check("価格表に法が求める項目が入っている", () => {
     assert(i.action.label.length <= 20, `label が 20 字を超えています: ${i.action.label}`);
   }
   return "7 項目";
+});
+
+
+/* ================================================================== */
+head("[1 タップで決済へ]  지시서⑦ ── URL を先に作ってボタンに乗せる");
+
+check("購入ボタンは全部 uri・URL 空なし。体験だけ postback のまま", () => {
+  process.env.TOKUSHOHO_URL ||= "https://example/tokushoho";
+  process.env.REFUND_POLICY ||= "返金の説明";
+  const m = checkout.priceList("beginner",
+    { trialAvailable: true, availableDays: 101, checkoutUrls: FAKE_URLS });
+  const items = m.quickReply.items;
+  const trial = items.filter((i) => i.action.type === "postback");
+  const buys  = items.filter((i) => i.action.type === "uri");
+  /* 体験はサーバー処理（startTrialFor）が要るので postback のまま。
+     uri に替えると何も始まらないボタンになる。 */
+  assert(trial.length === 1 && /action=trial/.test(trial[0].action.data),
+    `体験ボタンが postback 1 個ではありません: ${trial.length}`);
+  assert(trial.length + buys.length === items.length, "uri でも postback でもないボタンがあります");
+  /* ボタン数 = sellablePackages ── 原稿の上限がボタンにもそのまま効く */
+  assert(buys.length === checkout.sellablePackages(101).length,
+    `売れるパッケージ ${checkout.sellablePackages(101).length} 個にボタンが ${buys.length} 個`);
+  for (const b of buys) {
+    assert(b.action.uri && /^https:/.test(b.action.uri), `uri が空か不正: ${b.action.uri}`);
+    assert(!b.action.data, "uri ボタンに data が残っています");
+    assert(b.action.label.length <= 20, `label が 20 字超: ${b.action.label}`);
+  }
+  return `uri ${buys.length} + 体験 postback 1`;
+});
+
+check("priceList は同期・純粋のまま（関門がネットワーク無しで回る）", () => {
+  /* ここが最重要の制約（§2-2）。中で Stripe を呼ぶ形になった瞬間、
+     この関門ファイル全体がネットワークを要求する。 */
+  const src = stripComments(read("server/lib/handlers/checkout.mjs"));
+  const fn = src.match(/export function priceList[\s\S]*?\n}\n/)[0];
+  assert(!/\bawait\b|\bfetch\b|createCheckoutSession|startCheckout/.test(fn),
+    "priceList の中で非同期・ネットワークを呼んでいます");
+  const r = checkout.priceList("beginner", { checkoutUrls: FAKE_URLS });
+  assert(!(r && typeof r.then === "function") && r.type === "text",
+    "priceList が Promise を返しています");
+  return "同期・純粋";
+});
+
+check("plan 分岐がセッションを並列で先に作る（押されてからではない）", () => {
+  const src = stripComments(read("server/lib/handlers/postback.mjs"));
+  const plan = src.match(/if \(action === "plan"\)[\s\S]*?(?=if \(action === "buy"\))/)[0];
+  assert(/Promise\.all/.test(plan), "並列（Promise.all）で作っていません ── reply token が死にます");
+  assert(/startCheckout/.test(plan), "plan 分岐がセッションを作っていません");
+  assert(/sellablePackages/.test(plan), "売れるぶんだけ、の判定を共有していません");
+  /* 상실 판정 유지（§4）: 게이트와 재고 상한이 plan 분기에 있다 */
+  assert(/salesAllowedFor/.test(plan), "販売ゲートが plan 分岐から消えています");
+  assert(/countTemplates/.test(plan), "原稿の上限が plan 分岐から消えています");
+  return "先に・並列に・門の内側で";
+});
+
+await acheck("セッション作成に失敗したら notReady 1 通（部分成功を見せない）", async () => {
+  /* STRIPE_API_BASE を閉じたポートへ向ける ── 実ネットワークに
+     出ずに「Stripe が落ちている」を作る。1 つでも失敗＝全部失敗。 */
+  const { handlePostback } = await import("../server/lib/handlers/postback.mjs");
+  const OLD = {};
+  for (const [k, v] of Object.entries({
+    TOKUSHOHO_URL: "https://example/tokushoho", REFUND_POLICY: "返金",
+    STRIPE_SECRET_KEY: "sk_test_x", STRIPE_WEBHOOK_SECRET: "whsec_x",
+    SALES_MODE: "open", STRIPE_API_BASE: "http://127.0.0.1:9",
+    SITE_URL: "https://example.test"
+  })) { OLD[k] = process.env[k]; process.env[k] = v; }
+  try {
+    const conn = fakeConn({
+      "FROM users": [{ id: 7, line_user_id: "U", status: "active", active_track: null }],
+      "SELECT COUNT\\(\\*\\) AS n FROM content_templates": [{ n: 50 }],
+      "FROM subscriptions": []
+    });
+    let msgs = null;
+    const r = await handlePostback(conn,
+      { source: { userId: "U" }, replyToken: "rt",
+        postback: { data: "action=plan&track=beginner" } },
+      { send: async (_t, m) => { msgs = m; return {}; } });
+    assert(r.error, `失敗になっていません: ${JSON.stringify(r)}`);
+    assert(msgs && msgs.length === 1, "返信が 1 通ではありません");
+    assert(/ただいま準備中です/.test(msgs[0].text), msgs[0].text);
+    assert(!msgs[0].quickReply, "失敗なのに価格表のボタンが付いています");
+    return "全滅 → 準備中の 1 通だけ";
+  } finally {
+    for (const [k, v] of Object.entries(OLD)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  }
+});
+
+check("有効期限の案内が価格表の本文にある（checkoutLink から移設・§2-6）", () => {
+  process.env.TOKUSHOHO_URL ||= "https://example/tokushoho";
+  process.env.REFUND_POLICY ||= "返金の説明";
+  const m = checkout.priceList("beginner", { checkoutUrls: FAKE_URLS });
+  assert(/期限切れ/.test(m.text) && /受講料/.test(m.text),
+    "期限切れのときに何をすればよいかが本文にありません");
+  return "本文に 1 行";
 });
 
 

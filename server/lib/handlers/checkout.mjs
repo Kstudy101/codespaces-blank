@@ -233,7 +233,21 @@ export function askCourse({ owned = [], pick = null } = {}) {
 
    体験を使っていない人には、価格表と一緒に体験の入口も出す。
    出さないと、試さずに払うか、払わずに去るかの二択になる。 */
-export function priceList(track, { trialAvailable = false, availableDays = TOTAL_DAYS } = {}) {
+/* 【1 タップで決済へ（지시서⑦）】
+   購入ボタンは postback ではなく **uri** ── 決済ページの URL を
+   ボタンに直接乗せ、タップひとつで Stripe の画面が開く。以前は
+   postback → 長い生 URL を返信 → もう 1 タップ、で、お金を出す直前に
+   チャットで届く見知らぬ長文 URL はフィッシングと見分けがつかなかった。
+
+   URL は**呼ぶ側**（postback.mjs の plan 分岐）が Stripe で先に作って
+   checkoutUrls で渡す。この関数の中で Stripe を呼ばない ── ここが
+   同期・純粋のままなので、関門 19 種がネットワーク無しで回る。
+
+   uri アクションに displayText は無い（LINE の仕様）。「〜を申し込み
+   ます」の吹き出しが消えるのは意図どおり ── あの吹き出し自体が
+   「もう 1 段ある」の合図だった。 */
+export function priceList(track,
+  { trialAvailable = false, availableDays = TOTAL_DAYS, checkoutUrls = {} } = {}) {
   const l = TRACK_LABELS[track];
 
   /* 原稿の保有日数を超えるパッケージは出さない（指示書 §1-2）。
@@ -249,10 +263,9 @@ export function priceList(track, { trialAvailable = false, availableDays = TOTAL
   const items = sellable.map(([key, p]) => ({
     type: "action",
     action: {
-      type: "postback",
+      type: "uri",
       label: `${p.days}日 ${p.price.toLocaleString()}円`.slice(0, 20),
-      data: `action=buy&track=${track}&pkg=${key}`,
-      displayText: `${TRACK_LABELS[track].ja} ${p.days}日分を申し込みます`
+      uri: checkoutUrls[key]
     }
   }));
 
@@ -285,7 +298,13 @@ export function priceList(track, { trialAvailable = false, availableDays = TOTAL
       "　　　　　翌日から 毎朝 7 時 ＋ 毎夕 6 時",
       `返金　　　${process.env.REFUND_POLICY || ""}`,
       "",
-      `販売者の表記　${process.env.TOKUSHOHO_URL || ""}`
+      `販売者の表記　${process.env.TOKUSHOHO_URL || ""}`,
+      "",
+      /* 有効期限の案内は checkoutLink() からここへ移した（지시서⑦
+         §2-6）── ボタンの先が Stripe の期限切れ画面だったとき、
+         何をすればよいかが無いと詰む。文面은 대표 확정 대상（후보 1）。 */
+      "※ お支払いのご案内は一定時間で期限切れになります。",
+      "　 期限切れの画面が出たときは、もう一度［受講料］からお試しください。"
     ].join("\n"),
     quickReply: { items: items.slice(0, 13) }
   };
@@ -306,13 +325,21 @@ export async function startCheckout(conn, user, { track, packageType }) {
     productName: `${TRACK_LABELS[track].ja}（${TRACK_LABELS[track].kr}） ${pkg.days}日分`,
     successUrl: `${SITE_URL()}/thanks`,
     cancelUrl: `${SITE_URL()}/`,
-    /* 同じ人・同じコース・同じ数量なら Stripe 側でもまとまる。 */
+    /* 参照用（ダッシュボードで誰の何かを並べて見る）。重複防止では
+       ない ── それは purchases.payment_ref の UNIQUE の仕事。 */
     clientRef: `u${user.id}-${track}-${packageType}`
   });
 
   return { ok: true, url: session.url, sessionId: session.id };
 }
 
+/* ★ 지시서⑦（1 タップ化）以後、新しい価格表からは使われない経路。
+   価格表のボタンが uri になり、buy postback もこの返信も新規には
+   発生しない。残すのは、既に送った古い価格表のボタンが押されたとき
+   無反応にしないため ── 除去予定日 = **2026-09-06**（古い quickReply
+   ボタンは次のメッセージ到着で押せなくなるので、毎朝の配信がある限り
+   実質数日で死ぬ。1 か月は余裕側）。予定日が来たら buy 分岐
+   （postback.mjs）とこの関数を一緒に消すこと。 */
 export function checkoutLink(track, packageType, url) {
   const l = TRACK_LABELS[track], p = PACKAGES[packageType];
   return {

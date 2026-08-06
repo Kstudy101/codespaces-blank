@@ -44,8 +44,8 @@ import { cities } from "../fortune.mjs";
 import { kanaNameToHangul } from "../kana2hangul.mjs";
 import {
   salesAllowedFor, salesMode, notReady, coursePreparing, askCourse, priceList,
-  startCheckout, checkoutLink, startTrialFor, applyResume, resumeDone,
-  statusMessage, missingLegalConfig
+  sellablePackages, startCheckout, checkoutLink, startTrialFor, applyResume,
+  resumeDone, statusMessage, missingLegalConfig
 } from "./checkout.mjs";
 import { PACKAGES, TRIAL_DAYS } from "../repo/billing.mjs";
 import { deliverNow } from "../../db/push-daily.mjs";
@@ -397,17 +397,54 @@ export async function handlePostback(conn, event,
     const availableDays = await learning.countTemplates(conn, track);
     const trialAvailable = !(await billing.trialUsed(conn, user.id))
       && TRIAL_DAYS <= availableDays;
-    const list = priceList(track, { trialAvailable, availableDays });
-    if (!list) {
+
+    const sellable = sellablePackages(availableDays);
+    if (!sellable.length) {
       /* 売れるパッケージが 1 つも無い ── 原稿が最小パッケージに満たない */
       return { userId: user.id, action, track, blocked: "原稿不足",
                replied: await reply(token, [coursePreparing(track)], send) };
     }
+
+    /* ---- 決済ページを**先に**作る（지시서⑦ §2）------------------------
+       価格表のボタンは uri ── タップひとつで Stripe が開く。URL は
+       押されてからでは渡せない（postback は画面を動かせない）ので、
+       売れるパッケージぶんをここで作ってから価格表を組む。
+       priceList は URL を受け取るだけの純粋関数のまま ── 関門 19 種が
+       ネットワーク無しで回る性質を壊さない。
+
+       並列で作る。reply token は数十秒で死ぬ ── 直列 3〜5 往復は
+       間に合わない日が出る。1 つでも失敗したら**全部**失敗にして
+       notReady を返す ── 失敗したものだけ抜くと、利用者には
+       「30 日券が売っていない」に見え、原因を尋ねる方法が無い。
+
+       開くたびに未使用セッションが 3〜5 個できるのは織り込み済み
+       （24 時間で期限切れ。売上の正本は purchases 表）。 */
+    let checkoutUrls;
+    try {
+      const sessions = await Promise.all(sellable.map(([key]) =>
+        startCheckout(conn, user, { track, packageType: key })));
+      checkoutUrls = {};
+      sessions.forEach((r, i) => {
+        if (!r.ok || !r.url) throw new Error(r.reason || "URL がありません");
+        checkoutUrls[sellable[i][0]] = r.url;
+      });
+    } catch (e) {
+      console.error("[checkout] 決済ページの事前作成に失敗:", e.message);
+      return { userId: user.id, action, track, error: e.message,
+               replied: await reply(token, [notReady()], send) };
+    }
+
+    const list = priceList(track, { trialAvailable, availableDays, checkoutUrls });
     const replied = await reply(token, [list], send);
     return { userId: user.id, action, track, replied };
   }
 
   /* ---- 受講料：③ 決済ページへ --------------------------------------
+     ★ 지시서⑦（1 タップ化）以後、新しい価格表からは来ない経路 ──
+     ボタンが uri になり、buy postback は新規に発生しない。残すのは
+     既に送った古い価格表のボタンが押されたとき無反応にしないため。
+     除去予定日 = **2026-09-06**（checkoutLink の注記と一緒に消すこと）。
+
      pkg をそのまま金額にしない。PACKAGES の鍵で引き当てて、値段は
      こちらの表から取る ── data は書き換えられるので、金額を載せると
      100 円で 101 日ぶんを買える。 */

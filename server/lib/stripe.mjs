@@ -98,9 +98,12 @@ export async function createCheckoutSession({
     "metadata[days]": String(days)
   });
 
-  /* 同じボタンを連打されても Stripe 側で 1 つにまとめる。
-     こちらの payment_ref の一意制約とは別の層で、こちらは
-     「決済が 2 件立つ」こと自体を防ぐ。 */
+  /* 参照用のフィールド。Stripe は**この値で重複をまとめない** ──
+     以前の注記（「連打されても 1 つにまとまる」）は事実と違った。
+     二重付与を防ぐのは purchases.payment_ref（= session id）の
+     UNIQUE（repo/billing.mjs）。価格表を開くたびにセッションを先に
+     複数作る形（지시서⑦）では、同じ clientRef のセッションが
+     ダッシュボードに並ぶのが**正常**。 */
   if (clientRef) form.set("client_reference_id", String(clientRef));
 
   const res = await fetch(`${apiBase()}/v1/checkout/sessions`, {

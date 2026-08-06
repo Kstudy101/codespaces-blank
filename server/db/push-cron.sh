@@ -87,5 +87,12 @@ if [ "$WHICH" = "evening" ]; then
 elif [ "$WHICH" = "maintain" ]; then
   node db/with-env.mjs db/maintain.mjs "$@"
 else
-  node db/with-env.mjs db/push-daily.mjs --not-before=7 "$@"
+  # --not-after=9: 朝の便は JST 7〜9 時台だけ（지시서⑧ §2-2、대표 확정）。
+  # 価格表が「毎朝 7 時」と約束して売っているので、夜に「朝の講座」を
+  # 届けない ── 9 時を過ぎて資格が生まれた人は翌朝から。
+  # ★ ここ（push-cron.sh）を直す。crontab の行ではない ── .cpanel.yml の
+  #   登録ループは「あるかどうか」しか見ないので、行を変えても既存
+  #   サーバーには反映されず、ログには「OK - 登録済み」だけが出る。
+  #   このファイルは配置のたびに更新される。
+  node db/with-env.mjs db/push-daily.mjs --not-before=7 --not-after=9 "$@"
 fi

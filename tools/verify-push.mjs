@@ -518,6 +518,19 @@ await check("--not-after も、指定なし・不正値の扱いは --not-before
   return "なし → いつでも走る / 不正 4 通り → 通さない";
 });
 
+await check("朝の cron 行に --not-after が実際に入っている（지시서⑧ §2-2）", async () => {
+  /* 재개 문면의 「あしたの朝 7 時から」를 참으로 유지하는 유일한
+     장치. --not-before 만으로는 7~23시 매시 발송 ── 밤 10시 재개가
+     밤 11시에 「아침 강좌」를 받는다. 고치는 곳은 push-cron.sh ──
+     crontab 의 행은 .cpanel.yml 등록 루프가 존재 여부만 보므로,
+     기존 서버에는 영원히 반영되지 않는다. */
+  const { readFileSync } = await import("node:fs");
+  const sh = readFileSync(new URL("../server/db/push-cron.sh", import.meta.url), "utf8");
+  assert(/push-daily\.mjs --not-before=7 --not-after=9/.test(sh),
+    "morning の行に --not-after=9 がありません");
+  return "JST 7〜9 時台だけ配る";
+});
+
 console.log("\n[重複防止キー]");
 
 await check("同じ人・同じ日なら、毎回同じ鍵になる", () => {

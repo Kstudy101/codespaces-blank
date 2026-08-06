@@ -17,7 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fortuneFor, engineDir, categories } from "../server/lib/fortune.mjs";
 import {
-  checkLines, fortuneMessage, CAT_IDS, GRADES_KO, SIPSIN
+  checkLines, fortuneMessage, rankCats, CAT_IDS, GRADES_KO, SIPSIN
 } from "../server/lib/fortune-text.mjs";
 
 let pass = 0;
@@ -135,6 +135,40 @@ check("生まれた時刻が分からない人にも出る", () => {
   const f = fortuneFor({ ...ME, birth_time: null }, "2026-08-04");
   assert(f && Number.isFinite(f.scores.total), "出ませんでした");
   return "hour = null";
+});
+
+check("top / bottom は同点でも決定的（지시서⑪ §2-2）", () => {
+  /* sort の比較関数だけだと同点の順序は保証されない ── 同じ人に
+     2 回計算して別の부적が出る。CAT_IDS の並びが 2 次基準。 */
+  const tie = { total: 80, money: 60, love: 60, work: 60, health: 60, study: 60 };
+  const a = rankCats(tie);
+  for (let i = 0; i < 10; i++) {
+    const b = rankCats({ ...tie });
+    assert(b.top === a.top && b.bottom === a.bottom, "同点で答えが揺れます");
+  }
+  assert(a.top === "money" && a.bottom === "study",
+    `全同点の答えが CAT_IDS 順ではありません: ${a.top}/${a.bottom}`);
+  assert(rankCats({ total: 1 }).bottom === null, "total だけで bottom が出ました");
+  return "全同点 → top=money / bottom=study（CAT_IDS 순）";
+});
+
+check("本文の「いちばん低い項目」と부적の願いが常に一致 ── 判定は 1 か所", () => {
+  /* fortuneMessage も부적（push-daily の amuletSection）も rankCats を
+     読む。sort がこのファイルに 1 つしか無いことまで見る ── 2 つ目の
+     並べ替えが生えた日が、本文と부적が割れる日。 */
+  const src = fs.readFileSync("server/lib/fortune-text.mjs", "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+  assert((src.match(/\.sort\(/g) || []).length === 1,
+    "fortune-text.mjs に並べ替えが 2 つ以上あります");
+  const f = fortuneFor(ME, "2026-08-04");
+  const { bottom } = rankCats(f.scores);
+  const lines = { cats: Object.fromEntries(CAT_IDS.map((id) =>
+      [id, Object.fromEntries(GRADES_KO.map((g) => [g, { kr: `${id}-kr`, ja: `${id}-ja` }]))])),
+    sipsin: Object.fromEntries(SIPSIN.map((s) => [s, { kr: "k", ja: "j" }])) };
+  const m = fortuneMessage(f, lines);
+  assert(m.text.includes(`${bottom}-kr`),
+    `本文に bottom（${bottom}）の文章が出ていません`);
+  return `bottom=${bottom} が本文と一致`;
 });
 
 check("gender は運勢を変えない（'N' 追加が結果に触れない・지시서⑩）", () => {

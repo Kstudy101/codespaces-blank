@@ -1441,7 +1441,8 @@ tasks 는 하나의 셸에서 이어 돌므로 export 가 뒤 행에도 미침.
   verify-amulet.mjs          28  kanji.json ↔ 부적 한자의 한국음·훈음 12자
   verify-birth.mjs           17  sessionStorage 만 씀 / 이름이 안 섞임 /
                                  절기표와 같은 1930〜2030
-  verify-pages.mjs           14  9페이지를 가로로 늘어놓고 대조
+  verify-pages.mjs           15  9페이지를 가로로 늘어놓고 대조 +
+                                 부적 ?cat= 은 KINDS 대조 후에만
   verify-server.mjs          84  DB 없이 SQL 을 읽음 — JST 경계·결제 재전송·
                                  배치 이중기동·보유일수를 안 깎는 약속·
                                  코스 ENUM 과 migrations 대조
@@ -1458,7 +1459,8 @@ tasks 는 하나의 셸에서 이어 돌므로 export 가 뒤 행에도 미침.
   verify-render.mjs          44  index.html 의 조사 규칙을 실소스에서 읽어 대조 +
                                  저녁이 아침의 재전송이 아닌 것 +
                                  문제 Flex — altText 에 답 금지·공통부 공유
-  verify-push.mjs            51  확보→송신 순서를 가짜 send 로 들여다봄 +
+  verify-push.mjs            56  확보→송신 순서를 가짜 send 로 들여다봄 +
+                                 부적 — 운세 뒤 Flex·cat만·5통 상한·폴백 +
                                  코스 미선택 시 날을 안 깎는 것 + 운세가 3통째 +
                                  장애 아침의 재조준 — 확보 없이 같은 날 재송신 +
                                  기한 예고 — 체험 중 억제·구매자 유지
@@ -1468,7 +1470,8 @@ tasks 는 하나의 셸에서 이어 돌므로 export 가 뒤 행에도 미침.
                                  upsell 비간섭·미소비 +
                                  문제만 1통·답은 눌러서 — answer 분기의
                                  무기록·무소비(소스)·track 변조 무시·폴백
-  verify-fortune-server.mjs  17  서버 운세 = 사이트 운세 +
+  verify-fortune-server.mjs  19  서버 운세 = 사이트 운세 +
+                                 top/bottom 동점 결정론·본문=부적 일치 +
                                  문안 30칸+십신 10 결번·철자 +
                                  gender 는 운세 불변 (N 포함)
   verify-billing.mjs         67  선불 횟수권 — 잔여는 entitled - used /
@@ -1484,7 +1487,7 @@ tasks 는 하나의 셸에서 이어 돌므로 export 가 뒤 행에도 미침.
                                  570통 전수 대조 / step① 이 사이트로 안
                                  돌려보냄 / postback data 의 이름 불신
   -----------------------  ----
-  합계                      638
+  합계                      646
 
   루트에 package.json 이 없으므로 의존 패키지가 없습니다 —
   각 스크립트가 vm 으로 대상 .js 를 그대로 읽어 실행합니다.

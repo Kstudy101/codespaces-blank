@@ -687,6 +687,90 @@ const FAKE_LINES = {
   sipsin: Object.fromEntries(SIPSIN.map((s) => [s, { kr: `${s}-kr`, ja: `${s}-ja` }]))
 };
 
+console.log("\n[きょうの부적]  ボタンを押すまで作られない（지시서⑪）");
+
+const { amuletSection, amuletInvite } = await import("../server/db/push-daily.mjs");
+const { fortuneFor } = await import("../server/lib/fortune.mjs");
+const { rankCats } = await import("../server/lib/fortune-text.mjs");
+const { jstDate } = await import("../server/lib/jst.mjs");
+
+await check("運勢の後ろに부적 Flex ── 願いはその日いちばん低い項目", async () => {
+  const conn = fakeConn(READY);
+  let msgs = null;
+  const r = await deliverOne(conn, WITH_SAJU,
+    { send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES });
+  assert(/送信:4日目/.test(r), r);
+  const fi = msgs.findIndex((m) => m.type === "text" && /오늘의 운세/.test(m.text));
+  assert(fi >= 0, "運勢がありません");
+  const am = msgs[fi + 1];
+  assert(am && am.type === "flex", `運勢の次が부적ではありません: ${am && am.type}`);
+  assert(am.altText === "🔮 きょうの特別なお守り", am.altText);
+  /* altText に内容（どの項目か）を出さない（§4-4）。 */
+  assert(!/金運|恋愛|仕事|健康|学習|money|love|work|health|study/.test(am.altText),
+    `altText に내용이 새고 있습니다: ${am.altText}`);
+  /* 願いは rankCats.bottom そのもの ── 本文の「いちばん低い」と同じ関数。 */
+  const expected = rankCats(fortuneFor(WITH_SAJU, jstDate()).scores).bottom;
+  const uri = am.contents.footer.contents[0].action.uri;
+  assert(uri.endsWith(`/amulet?cat=${expected}`), `${uri}（bottom=${expected}）`);
+  assert(am.contents.footer.contents[0].action.type === "uri", "1 タップで開く uri ではありません");
+  return `cat=${expected}（bottom）・4 通目`;
+});
+
+await check("부적 URL には cat 以外を乗せない（생년월일・이름・id 금지）", async () => {
+  const m = amuletInvite("money");
+  const uri = m.contents.footer.contents[0].action.uri;
+  assert(/\/amulet\?cat=money$/.test(uri), uri);
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../server/db/push-daily.mjs", import.meta.url), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+  const fn = src.match(/export function amuletInvite[\s\S]*?\n}\n/)[0];
+  assert(/\/amulet\?cat=\$\{cat\}/.test(fn), "uri の組み立てが cat だけではありません");
+  assert(!/birth|name|u\.id|line_user_id/.test(fn), "부적 URL 에 개인정보가 실립니다");
+  return "cat だけ ── privacy 改定不要の根拠";
+});
+
+await check("운세가 없는 아침엔 부적도 없다（맥락 없는 카드 금지）", async () => {
+  /* USER 는 birth_date 없음 → fortuneSection null → 부적도 없음。 */
+  const conn = fakeConn(READY);
+  let msgs = null;
+  await deliverOne(conn, USER, { send: async (_t, m) => { msgs = m; return {}; } });
+  assert(!msgs.some((m) => m.type === "flex"), "運勢なしで부적만 갔습니다");
+  return "運勢が前提";
+});
+
+await check("부적 조립이 던져도 아침은 그대로 나간다（§4-5 폴백）", async () => {
+  const conn = fakeConn(READY);
+  let msgs = null;
+  const r = await deliverOne(conn, WITH_SAJU, {
+    send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES,
+    amulet: () => { throw new Error("わざと壊す"); }
+  });
+  assert(/送信:4日目/.test(r), r);
+  assert(msgs.some((m) => /오늘의 운세/.test(m.text || "")), "運勢まで消えました");
+  assert(!msgs.some((m) => m.type === "flex"), "壊れた부적이 실렸습니다");
+  return "운세・본문 정상、부적만 조용히 빠짐";
+});
+
+await check("예고와 절목이 겹친 아침(5통)은 부적이 쉰다 ── LINE 상한", async () => {
+  /* 본문2+운세1+예고1+절목1 = 5。부적을 더하면 6 → push 전체가 400。 */
+  const conn = fakeConn({ ...READY,
+    "FROM content_templates": [{ ...TPL[0], day_number: 30,
+      quiz: JSON.stringify({ question: "?", choices: ["a", "b", "c"], answer: 1 }) }],
+    "FROM quiz_checkpoints": [{ day_number: 30 }],
+    "FROM purchases": [{ id: 1 }]
+  });
+  const { EXPIRING_AT } = await import("../server/lib/handlers/checkout.mjs");
+  const u = { ...WITH_SAJU, current_day: 29, days_used: 29,
+              days_entitled: 29 + EXPIRING_AT + 1 };
+  let msgs = null;
+  const r = await deliverOne(conn, u,
+    { send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES });
+  assert(/送信:30日目/.test(r), r);
+  assert(msgs.length === 5, `${msgs.length} 通（上限 5 のはず）`);
+  assert(!msgs.some((m) => m.type === "flex"), "6 通目の부적이 실렸습니다");
+  return "5 通のまま ── 부적은 그 아침만 쉼";
+});
+
 await check("確かめた生年月日の人には、運勢が付く", async () => {
   const m = fortuneSection(WITH_SAJU, TPL[0], { load: () => FAKE_LINES });
   assert(m && m.type === "text", JSON.stringify(m));
@@ -738,10 +822,11 @@ await check("運勢は 3 通目（レッスンの後ろ）", async () => {
   let msgs = null;
   await deliverOne(conn, WITH_SAJU,
     { send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES });
-  assert(msgs.length === 3, `${msgs.length} 通でした`);
+  assert(msgs.length === 4, `${msgs.length} 通でした（本文 2 + 運勢 + 부적）`);
   assert(/日目/.test(msgs[0].text), `1 通目が本文ではありません: ${msgs[0].text.slice(0, 30)}`);
   assert(/총운/.test(msgs[2].text), `3 通目が運勢ではありません: ${msgs[2].text.slice(0, 30)}`);
-  return "文法・単語・運勢";
+  assert(msgs[3].type === "flex", `4 通目が부적ではありません（지시서⑪）: ${msgs[3].type}`);
+  return "文法・単語・運勢・부적";
 });
 
 await check("その日の一言（fortune_bridge）は、原稿があるときだけ出る", async () => {

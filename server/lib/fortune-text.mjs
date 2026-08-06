@@ -148,6 +148,24 @@ export function resetCache() { cached = undefined; }
 
    韓国語を先、日本語を後。運勢そのものが教材になる
    （plan-fortune-daily.md §4）ので、先に韓国語を読ませる。 */
+/* ---- 高い項目・低い項目の判定 ── ここ 1 か所だけ --------------------
+   運勢本文（fortuneMessage）と、その日いちばん弱い所を補う부적
+   （지시서⑪ ── bottom がそのまま願い cat になる）が同じ答えを見る。
+   二か所に持つと、直した日に本文の「いちばん低い」と부적の願いが
+   割れて、読んだ人にはただの故障に見える。
+
+   同点は CAT_IDS の並びを 2 次基準にして**決定的**に選ぶ ── sort の
+   比較関数だけだと同点の順序は実装依存で、同じ人に 2 回計算して
+   別の答えが出うる（지시서⑪ §2-2 が指摘した潜在欠陥）。total は
+   全体なので候補から外す ── 부적の願いとしても具体でなくなる。 */
+export function rankCats(scores) {
+  const others = CAT_IDS.filter((id) => id !== "total" && scores?.[id] !== undefined);
+  if (!others.length) return { top: null, bottom: null };
+  const sorted = [...others].sort((a, b) =>
+    (scores[b] - scores[a]) || (CAT_IDS.indexOf(a) - CAT_IDS.indexOf(b)));
+  return { top: sorted[0], bottom: sorted[sorted.length - 1] };
+}
+
 export function fortuneMessage(fortune, lines, { bridge = null } = {}) {
   if (!fortune || !lines) return null;
 
@@ -175,12 +193,10 @@ export function fortuneMessage(fortune, lines, { bridge = null } = {}) {
   const sip = god && god.stem ? lines.sipsin[god.stem] : null;
   if (sip) out.push("", sip.kr, sip.ja);
 
-  /* 3. 高い項目と低い項目。total は全体なので外す。 */
-  const others = CAT_IDS.filter((id) => id !== "total" && scores[id] !== undefined);
-  if (others.length) {
-    const sorted = [...others].sort((a, b) => scores[b] - scores[a]);
-    const top = sorted[0];
-    const bottom = sorted[sorted.length - 1];
+  /* 3. 高い項目と低い項目。total は全体なので外す。
+     判定は rankCats **1 か所**（下）── 부적（지시서⑪）と共有。 */
+  const { top, bottom } = rankCats(scores);
+  if (top) {
 
     for (const id of top === bottom ? [top] : [top, bottom]) {
       const cell = pick(id);
@@ -190,7 +206,8 @@ export function fortuneMessage(fortune, lines, { bridge = null } = {}) {
     }
 
     /* 4. 残りは等級だけ。 */
-    const rest = others.filter((id) => id !== top && id !== bottom);
+    const rest = CAT_IDS.filter((id) =>
+      id !== "total" && scores[id] !== undefined && id !== top && id !== bottom);
     if (rest.length) {
       out.push("", rest.map((id) => `${CAT_LABELS[id].ko} ${grades[id].ko}`).join("　"));
     }

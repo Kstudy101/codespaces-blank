@@ -45,7 +45,7 @@ import { renderDay, renderReviewQuiz, renderCheckpointQuiz, nameMissingNotice } 
 import { TOTAL_DAYS } from "../lib/repo/learning.mjs";
 import { blockingStep, messageForStep } from "../lib/onboarding.mjs";
 import { fortuneFor } from "../lib/fortune.mjs";
-import { loadLines, fortuneMessage } from "../lib/fortune-text.mjs";
+import { loadLines, fortuneMessage, rankCats } from "../lib/fortune-text.mjs";
 import { EXPIRING_AT, expiringNotice, completionNotice, upsellNotice } from "../lib/handlers/checkout.mjs";
 
 /* ---- 引数 --------------------------------------------------------- */
@@ -237,6 +237,60 @@ export function fortuneSection(u, template, { date = DATE, load = loadLines } = 
 }
 
 
+/* ---- きょうの부적（지시서⑪）----------------------------------------
+   運勢の後ろに Flex 1 通。押すまで何も作られない ── ボタンの uri が
+   サイトの부적 페이지（/amulet?cat=…）를 열고, 그 자리에서 한 장이
+   그려진다. cat 은 그날 **가장 낮은** 운세 항목（rankCats.bottom ──
+   본문의 「いちばん低い」와 같은 함수라 어긋날 수 없다）。
+
+   부적이 매일 바뀌는 것은 입력(cat)이 바뀌기 때문이지, 부적이
+   날짜를 보기 때문이 아니다 ── amulet.js 는 날짜를 모른 채로 남고,
+   같은 링크를 나중에 열면 같은 한 장（그날의 부적의 재현）。
+
+   URL 에 싣는 것은 cat 뿐 ── 생년월일・이름・id 는 싣지 않는다
+   （개인정보 없음 → privacy 개정 불요）。매일 배부（대표 확정 A）。
+   눌렀는지는 기록하지 않는다（무측정 원칙）。 */
+const AMULET_SITE = () => process.env.SITE_URL || "https://www.kstudy101.jp";
+
+export function amuletInvite(cat) {
+  return {
+    type: "flex",
+    /* altText 는 내용(어느 항목인지)을 알리지 않는다（⑨ §4-1 과 같은
+       규칙・문면은 2026-08-06 대표 확정）。 */
+    altText: "🔮 きょうの特別なお守り",
+    contents: {
+      type: "bubble",
+      body: { type: "box", layout: "vertical", contents: [
+        { type: "text", wrap: true, size: "sm",
+          text: "今日の運勢を補う「お守り」をご用意しました。\n不足している運気を整えます。" }
+      ] },
+      footer: { type: "box", layout: "vertical", contents: [
+        { type: "button", style: "primary", height: "sm",
+          action: { type: "uri", label: "お守りを受け取る",
+                    uri: `${AMULET_SITE()}/amulet?cat=${cat}` } }
+      ] }
+    }
+  };
+}
+
+/* 組めなければ黙って抜く（운세 fortuneSection 과 같은 태도・⑪ §4-5）──
+   부적은 덤이고, 이것 때문에 아침이 통째로 멈추는 쪽이 무겁다。 */
+export function amuletSection(u, { date = DATE } = {}) {
+  try {
+    const f = fortuneFor(u, date);
+    const { bottom } = rankCats(f?.scores || {});
+    if (!bottom) return null;
+    return amuletInvite(bottom);
+  } catch (e) {
+    if (!fortuneSkips.has("부적")) {
+      fortuneSkips.add("부적");
+      console.error(`  ! お守りカードを組めません（今日は付けません）: ${e.message}`);
+    }
+    return null;
+  }
+}
+
+
 /* ---- 始める前に訊くこと --------------------------------------------
    名前とコースは、決まらないとその日の中身が作れない。
 
@@ -280,7 +334,10 @@ async function askOnboarding(conn, u, step, { send = pushMessage } = {}) {
    それは本物の LINE に送ってみても確かめられない ── 送る前に
    日が確保されているかどうかは、送る側から見えない。
    偽の send を渡して、呼ばれた時点の DB を覗く。 */
-export async function deliverOne(conn, u, { send = pushMessage, load = loadLines, inspect = null } = {}) {
+/* amulet を差し替えられるのは検査のため ── 부적 조립이 던져도
+   운세・본문이 그대로 나가는 것（⑪ §4-5）을 일부러 깨서 확인한다。 */
+export async function deliverOne(conn, u,
+  { send = pushMessage, load = loadLines, inspect = null, amulet = amuletSection } = {}) {
   const today = Number(u.current_day) || 0;
   const next  = today + 1;
 
@@ -323,7 +380,14 @@ export async function deliverOne(conn, u, { send = pushMessage, load = loadLines
       let messages = renderDay(tpl, u);
       if (messages !== null) {
         const fortune = fortuneSection(u, tpl, { load });
-        if (fortune) messages = [...messages, fortune];
+        if (fortune) {
+          messages = [...messages, fortune];
+          /* 부적도 통상의 아침과 같게（운세가 붙은 재송신에만）。
+             조립이 던져도 재송신은 그대로（§4-5）。 */
+          let am = null;
+          try { am = amulet(u); } catch { /* 부적만 조용히 빠짐 */ }
+          if (am) messages = [...messages, am];
+        }
         if (DRY || DISABLED) return `${DRY ? "予定" : "停止中"}:再送信${today}日目`;
         try {
           await send(u.line_user_id, messages,
@@ -544,6 +608,26 @@ export async function deliverOne(conn, u, { send = pushMessage, load = loadLines
     }
   }
 
+  /* ---- きょうの부적（지시서⑪）── 운세 바로 뒤에 끼운다 --------------
+     운세가 붙은 아침에만（부적의 cat 이 운세 본문의 「いちばん低い」
+     그 자체라, 본문 없이 오면 맥락이 없다）。LINE 의 한 push 는
+     5 통까지 ── 예고와 절목이 겹친 드문 아침(이미 5통)은 부적이
+     쉰다。전체가 400 으로 떨어져 아무것도 안 가는 것보다 낫다。
+     quickReply 를 쓰지 않는 것도 같은 이유의 이웃 ── 뒤 메시지가
+     지우기 때문（⑨ 와 같은 판단으로 Flex・uri 버튼）。 */
+  if (fortune && messages.length < 5) {
+    /* 조립이 던져도 아침은 그대로（§4-5）── amuletSection 내부에도
+       try 가 있지만, 불변식은 부르는 쪽이 진다。 */
+    let am = null;
+    try { am = amulet(u); } catch (e) {
+      console.error(`  ! お守りカードを組めません（今日は付けません）: ${e.message}`);
+    }
+    if (am) {
+      const at = messages.indexOf(fortune) + 1;
+      messages = [...messages.slice(0, at), am, ...messages.slice(at)];
+    }
+  }
+
   /* 下見でも、組み上がった文面は見せられるようにする（--user の
      実動作検証で「どのクイズが選ばれたか」を送らずに確かめる）。
      stdout の検収であって応答の記録ではない ── 無保存(B)にはかからない。 */
@@ -633,7 +717,8 @@ async function main() {
     const inspect = (messages, next) => {
       console.log(`  ${next} 日目として組んだ ${messages.length} 通:`);
       for (const m of messages) {
-        console.log(`  ── ${m.text.split("\n")[0]}`);
+        /* Flex（부적 등）は text が無い ── altText で見せる。 */
+        console.log(`  ── ${String(m.text || m.altText || m.type).split("\n")[0]}`);
         for (const item of m.quickReply?.items ?? []) {
           console.log(`       [${item.action.label}] data=${item.action.data}`);
         }

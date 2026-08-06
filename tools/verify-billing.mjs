@@ -302,6 +302,65 @@ await acheck("知らない track / package は DB に届く前に弾く", async 
 
 
 /* ================================================================== */
+head("[税区分]  Managed Payments は tax_code が無いと 400（実測 2026-08-06）");
+
+/* 実際に createCheckoutSession を呼び、飛んでいく form を受け口で
+   捕まえて見る ── ソースの文字列だけを見ると、書いてはあるが
+   組み立てで落ちている形（typo・別の変数）を通してしまう。
+   宛先は STRIPE_API_BASE で差し替えられる（本番では設定しない）。 */
+await acheck("createCheckoutSession は product_data[tax_code] を必ず載せる", async () => {
+  const { createCheckoutSession, TAX_CODE } = await import("../server/lib/stripe.mjs");
+  const http = await import("node:http");
+
+  let captured = null;
+  const srv = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      captured = body;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ id: "cs_test_1", url: "https://checkout.stripe.example/pay" }));
+    });
+  });
+  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+
+  const KEYS = ["STRIPE_API_BASE", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"];
+  const saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
+  process.env.STRIPE_API_BASE = `http://127.0.0.1:${srv.address().port}`;
+  process.env.STRIPE_SECRET_KEY = "sk_test_x";
+  process.env.STRIPE_WEBHOOK_SECRET = "whsec_x";
+  try {
+    await createCheckoutSession({
+      userId: 7, track: "beginner", packageType: "7days",
+      days: 7, price: 980, productName: "初級（초급） 7日分",
+      successUrl: "https://example.jp/thanks", cancelUrl: "https://example.jp/"
+    });
+    assert(captured, "リクエストが届いていません");
+    const form = new URLSearchParams(captured);
+    const sent = form.get("line_items[0][price_data][product_data][tax_code]");
+    assert(sent !== null, "tax_code が form にありません（Managed Payments は 400 を返します）");
+    assert(sent.trim() !== "", "tax_code が空文字列です");
+    assert(sent === TAX_CODE, `定数とずれています: ${sent} ≠ ${TAX_CODE}`);
+    return `tax_code=${sent}`;
+  } finally {
+    srv.close();
+    for (const k of KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  }
+});
+
+check("税区分は名前のある定数（環境変数にしない）", () => {
+  const src = stripComments(read("server/lib/stripe.mjs"));
+  assert(/export const TAX_CODE = "txcd_[0-9]+"/.test(src), "TAX_CODE 定数がありません");
+  assert(!/process\.env\.[A-Z_]*TAX/.test(src),
+    "税区分を環境変数から読んでいます ── 画面から検討なしで替えられます（指示書 §1-3）");
+  return "コードに固定";
+});
+
+
+/* ================================================================== */
 head("[コース]  1 つを買っても、他のコースの残りは消えない");
 
 check("保有日数はコース別の表に持つ", () => {

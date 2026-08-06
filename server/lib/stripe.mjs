@@ -33,6 +33,31 @@ import { loadEnv, requireEnv } from "./env.mjs";
    起動したら app.mjs が止める。 */
 const apiBase = () => process.env.STRIPE_API_BASE || "https://api.stripe.com";
 
+/* ---- 税区分（Managed Payments 必須）--------------------------------
+   この Stripe アカウントは Managed Payments ── Stripe が販売者
+   （merchant of record）として立ち、税の計算も Stripe が行う。
+   そのため line_items の商品に tax_code が無いと checkout/sessions が
+   400 を返す（実測 2026-08-06: "Product tax code is required for
+   Managed Payments"）。決済がそこで止まる。
+
+   txcd_20060058 = Training Services - Self-study Web-based。
+   docs.stripe.com/tax/tax-codes の実文（2026-08-06 確認）:
+   「Self Study web based training, not instructor led. This does not
+   include downloads or streaming of video replays.」── この講座は
+   講師の介在が無い自習型の配信で、映像の配布も無いので、本文にも
+   除外条項にも合う。txcd_20060358（On demand Online Courses -
+   written material）は「SaaS プラットフォーム経由のアクセス」が
+   前提で、LINE へ押し送るこちらの形と合わない。録画型 2 種
+   （txcd_20060158/258）は音声・映像、txcd_20060044/45 は講師つき、
+   txcd_20060052 は伝統的教育機関 ── いずれも該当しない。
+
+   環境変数にはしない ── 税区分は頻繁に変わる値ではなく、変わる
+   ときは検討が要る。画面から静かに替えられる形にすると、検討なしで
+   替わる（PACKAGES をコードに置いたのと同じ理由）。
+   ★ これは税務判断を含む。商品の性質が変わる日（映像を足す・
+   講師を付ける）は、このコードも見直すこと。 */
+export const TAX_CODE = "txcd_20060058";
+
 export function stripeConfig() {
   loadEnv();
   return requireEnv(["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"]);
@@ -59,6 +84,8 @@ export async function createCheckoutSession({
     "line_items[0][price_data][currency]": "jpy",
     "line_items[0][price_data][unit_amount]": String(Math.trunc(price)),
     "line_items[0][price_data][product_data][name]": productName,
+    /* Managed Payments では必須（上の TAX_CODE の注記）。 */
+    "line_items[0][price_data][product_data][tax_code]": TAX_CODE,
 
     /* 誰が何を買ったかは、webhook でこれだけが頼り。セッション id から
        引き直す往復を増やさないために載せる。

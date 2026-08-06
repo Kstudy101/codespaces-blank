@@ -277,6 +277,22 @@ check("id が 1 ページに 2 つ以上ない", () => {
   return "重複なし";
 });
 
+check("amulet.html の ?cat= は KINDS で照合してから使う（지시서⑪）", () => {
+  /* LINE の부적 버튼이 실어 오는 유일한 파라미터。知らない値を
+     Amulet.of へ渡すと throw ── 照合に落ちたら「無かったこと」にして
+     従来の画面。パラメータ無しの既定（total）は変えない ──
+     サイトから直接来る人のほうがずっと多い。 */
+  const a = src["amulet.html"];
+  assert(/URLSearchParams\(location\.search\)\.get\('cat'\)/.test(a), "?cat の受け口がありません");
+  assert(/Amulet\.KINDS\.some\(k => k\.cat === urlCat\)/.test(a),
+    "KINDS で照合していません ── 知らない値が Amulet.of へ行くと throw します");
+  assert(/let cat  = 'total'/.test(a), "パラメータ無しの既定（total）が変わっています");
+  const guard = a.indexOf("Amulet.KINDS.some");
+  const firstRender = a.indexOf("\nrender();");
+  assert(guard > 0 && firstRender > guard, "照合より先に描いています");
+  return "照合 → 既定 total → render の順";
+});
+
 console.log(`\n${failed ? "✗" : "✓"} ${passed + failed} 項目中 ${passed} 件成功`
   + (failed ? ` / ${failed} 件失敗` : "") + `　（${pages.length} ページ）`);
 process.exit(failed ? 1 : 0);

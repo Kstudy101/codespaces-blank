@@ -3,7 +3,8 @@
 작성: 2026-08-07 / 조사: [research-content-ci.md](research-content-ci.md)  
 **승인: 작업지시서 ⑮** (2026-08-06 대표, 기준 `c0952b3`)
 
-> **상태: 단계 A·B·§7·템플릿 C 구현 중/완료. private repo 생성·Secrets·실기 시험은 대표.**
+> **상태: 단계 A·B·§7 코드 완료. 대표가 자동 seed 확인 완료 (2026-08-07).**  
+> private repo·Secrets·실기(§9 4〜6)는 필요 시 이어가면 됨.
 
 관련: STATUS A0·A1·D1 / [plan-upload-content](plan-upload-content.md) / [plan-deploy-auto](plan-deploy-auto.md)  
 템플릿: [content-repo-template/](content-repo-template/)

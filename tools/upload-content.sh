@@ -98,8 +98,27 @@ EOF
   exit 1
 fi
 chmod 600 "$CONF" 2>/dev/null || true
-# shellcheck source=/dev/null
-. "$CONF"
+# conf を source しない。生成パスワードに { } & が混ざると
+# bash が brace / バックグラウンドと読み、別の文字列が FTP_PASS に入る
+# （2026-08-07: PASS のあとに 421 timeout で発覚）。行ごと代入する。
+FTP_HOST=""; FTP_USER=""; FTP_PASS=""; FTP_DIR=""
+while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in
+    ''|\#*) continue ;;
+  esac
+  key=${line%%=*}; val=${line#*=}
+  # 両端の対応する引用符を 1 組だけ外す
+  case "$val" in
+    \'*\') val=${val:1:${#val}-2} ;;
+    \"*\") val=${val:1:${#val}-2} ;;
+  esac
+  case "$key" in
+    FTP_HOST) FTP_HOST=$val ;;
+    FTP_USER) FTP_USER=$val ;;
+    FTP_PASS) FTP_PASS=$val ;;
+    FTP_DIR)  FTP_DIR=$val ;;
+  esac
+done < "$CONF"
 
 # 足りないものは 1 つ目で止めず、まとめて名前で言う（deploy-server.sh と同じ）。
 missing=()

@@ -1246,6 +1246,17 @@ check("資格情報の置き場はリポジトリの外", () => {
   return "~/.config/kstudy101/";
 });
 
+check("FTP conf を bash source しない（生成パスワードの { & を壊さない）", () => {
+  /* 2026-08-07: FTP_PASS={…&…} を . conf すると brace/& で別文字になり、
+     AUTH TLS のあと PASS → 421 timeout になった。行ごと代入する。 */
+  const body = shellBody();
+  assert(!/\.\s+"\$CONF"/.test(body) && !/\.\s+\$CONF\b/.test(body),
+    "conf を source（. \$CONF）しています");
+  assert(/while IFS= read/.test(body) && /FTP_PASS\)/.test(body),
+    "行ごとの FTP_PASS 代入がありません");
+  return "行ごと代入";
+});
+
 check("上げたあと、向こうの大きさを読み直して突き合わせる", () => {
   const src = shellBody();
   assert(/--head/.test(src), "--head による読み直しがありません");

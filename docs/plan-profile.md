@@ -4,7 +4,7 @@
 
 작성: 2026-08-05 / 근거: [research-onboarding-gap.md](research-onboarding-gap.md) / 기준 커밋: §2 수정 커밋 뒤
 
-> **상태: 배포·라이브 확인 대기 (2026-08-07).** migration `006` · `/profile` · LINE 「情報を変更」.
+> **상태: 배포 완료 (2026-08-07, `518c060`), 라이브 확인 대기.**
 > A4(gender 대운) 결정은 B1과 독립 — §6-5.
 
 ---

@@ -241,7 +241,9 @@ quiz 가 0건인 동안은 아무에게도 안 보일 뿐입니다 (Fallback).
 3. `[x]` verify-quiz 신설 (12항목), 기존 17종 회귀 확인 — 전부 PASS
 4. `[x]` 관문 목록 4곳 갱신 — 실측 합계 18종 521항목 (README·overview 의 낡은 16종 표기도 같이 정정)
 5. `[ ]` 커밋·push → cPanel 재배포 (Update from Remote → Deploy, 판정은 restart.txt)
-6. `[ ]` 백필 (별건, 원고 준비되는 대로)
+6. `[x]` 백필 — **초급 1〜50** 48문 추가 + 기존 절목 30/50/75 2문 = **57문** (2026-08-08).
+   `gen-review-quiz.mjs` → `merge-quiz.mjs --write` → `seed-content.mjs --check` ✓.
+   서버 반영은 **D1c** (D0 아님). 중·고급 복습 풀(1〜50)은 별건.
 
 ## 5. 트레이드오프
 

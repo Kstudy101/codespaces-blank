@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-08 (C2 배포·A3·C3 완료)
+최종 갱신: 2026-08-08 (D3 초급 퀴즈·E 라이브 지시서)
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -21,7 +21,7 @@
   private repo → FTPS → UAPI Deploy → `.cpanel.yml` seed 전 경로 가동 ([plan-content-ci](docs/plan-content-ci.md))
 
 **권장 진행 순서 (한 줄).**
-C4 실판매 → B1 라이브 → D3 퀴즈 → E 조건 도래 시 라이브 확인.
+C4 실판매 → B1 라이브 → D3 서버 seed(D1c) → E 조건 도래 시 라이브 확인.
 
 **B3 (2026-08-07 확인).** maintain §3 `#3 beginner 持っている=3 / 台帳=0` —
 migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼으나 **`trial_track` 은
@@ -56,7 +56,7 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **D3** | 퀴즈 원고 (`quiz` 열 백필) | 대표 | [plan-quiz](docs/plan-quiz.md) · [plan-quiz-checkpoint](docs/plan-quiz-checkpoint.md) |
+| **D3** | 퀴즈 원고 **서버 반영** (로컬 초급 57문 ✓) | 대표 | [plan-quiz](docs/plan-quiz.md) · D1c FTPS→seed |
 
 ### E. 라이브 미검증 (코드·관문 통과, 실조건 대기)
 
@@ -64,10 +64,10 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **E1** | 복습 퀴즈 (3의 배수 날) | 조건대기 | 테스트 계정 통로 통과. 실사용자 주기 |
-| **E2** | 절목 퀴즈 | 조건대기 | 30/50/75 `quiz` 입고 후 · [plan-quiz-checkpoint](docs/plan-quiz-checkpoint.md) |
-| **E3** | 기한 예고 | 조건대기 | 잔여 2일 시점 |
-| **E4** | 다중 이용자 페이지네이션 | 조건대기 | 500명 초과 시 |
+| **E1** | 복습 퀴즈 (3의 배수 날) | 조건대기 | [live-check-quiz-review.md](docs/live-check-quiz-review.md) · D3 seed 후 |
+| **E2** | 절목 퀴즈 | 조건대기 | [live-check-quiz-checkpoint.md](docs/live-check-quiz-checkpoint.md) · D3 seed 후 |
+| **E3** | 기한 예고 | 조건대기 | [live-check-expiring.md](docs/live-check-expiring.md) · 잔여 2일 |
+| **E4** | 다중 이용자 페이지네이션 | 조건대기 | [live-check-pagination.md](docs/live-check-pagination.md) · 500명+ |
 
 ### F. 끝남 / 잠김 (혼동 방지)
 
@@ -83,6 +83,9 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
   **A3 Stripe 테스트** (2026-08-08 대표 확인),
   **C2 tokushoho.html** — 사이트 배포 (2026-08-08),
   **C3 리치メニュー** — LINE 등록 (2026-08-08, `richmenu-ad029399fabcc322b8050f8d92974678`)
+- **중지·종결**: **D0** — 로컬 `server/content/` 24JSON(초·중·고 303일) ChemiCloud **수동 FTPS·seed** (2026-08-08 대표 결정).
+  로컬 `seed-content.mjs --check` ✓ (`beginner-01.json` 제거 후). **서버 반영 안 함·재개 예정 없음.**
+  원고 반영은 **D1c** (private repo → FTPS → deploy → `.cpanel.yml` seed) 경로만 유지.
 - **잠김(미완 아님)**: 실판매 모드 — C4 판단 전까지 `SALES_MODE` 는 test 유지
 - **옛 계획**: [plan-p4-content.md](docs/plan-p4-content.md) — 렌더러·배치·원고 입고 전부 가동 중 (2026-08-07)
 
@@ -284,7 +287,7 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | | 비고 |
 |---|---|
 | **특정상거래法 표기 페이지** | `tokushoho.html` 미작성 — [plan-tokushoho.md](docs/plan-tokushoho.md) (C2) |
-| **퀴즈 원고** | `quiz` 열 백필 전까지 복습·절목 퀴즈는 조용히 빠짐 ([docs/plan-quiz.md](docs/plan-quiz.md) §3-8, D3) |
+| **퀴즈 원고 (서버)** | 로컬 초급 57문 ✓ — **D1c seed** 전까지 프로덕션은 절목 9문만 또는 0 ([plan-quiz](docs/plan-quiz.md) §3-8) |
 
 > **2026-08-07 해소:** 101일 원고·`fortune-lines.json` 은 **서버 `content/` 에 입고 완료**
 > (저장소에는 없음 — 유료물). push 시 private repo 워크플로가 FTPS → deploy → seed 까지 자동 실행.
@@ -310,6 +313,10 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | [docs/plan-deploy-server.md](docs/plan-deploy-server.md) | 배신 서버 배포 절차와 결과 (2026-08-04) |
 | [docs/plan-deploy-hang.md](docs/plan-deploy-hang.md) | 배포 중 npm ci 사고의 경위와 수정 |
 | [docs/live-check-line-onboarding.md](docs/live-check-line-onboarding.md) | 코스 선택 온보딩 라이브 검증 (A2) |
+| [docs/live-check-quiz-review.md](docs/live-check-quiz-review.md) | 복습 퀴즈 라이브 (E1) |
+| [docs/live-check-quiz-checkpoint.md](docs/live-check-quiz-checkpoint.md) | 절목 퀴즈 라이브 (E2) |
+| [docs/live-check-expiring.md](docs/live-check-expiring.md) | 기한 예고 (E3) |
+| [docs/live-check-pagination.md](docs/live-check-pagination.md) | 500명+ 배치 (E4) |
 | [docs/plan-profile.md](docs/plan-profile.md) | 프로필 편집 — 배포 완료, 라이브 대기 (B1) |
 | [docs/plan-tokushoho.md](docs/plan-tokushoho.md) | 特定商取引法 표기 — 승인·문안 대기 (C2) |
 | [docs/plan-side-menu.md](docs/plan-side-menu.md) | 사이드 메뉴 개편 — 완료 (B2) |

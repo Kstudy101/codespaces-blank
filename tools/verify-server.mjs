@@ -932,6 +932,38 @@ await acheck("quiz 無し再入稿で既存 quiz を消さない（指示書⑮ 
   return "IF(VALUES(quiz) IS NULL, quiz, VALUES(quiz))";
 });
 
+await acheck("quiz のある原稿で再入稿すれば、ちゃんと差し替わる（지시서⑯ §3-2）", async () => {
+  /* 保全側だけを見ていると、「触らない」が行きすぎて**更新もされない**
+     形（quiz = quiz）に書き換わっても緑のままになる。差し替えの側も
+     見て、はじめて IF 式が両向きに効いていることになる。 */
+  const conn = fakeConn(() => ({ affectedRows: 2 }));
+  const q = { question: "「食べます」は？", choices: ["먹어요", "먹습니다"], answer: 1 };
+  await learning.upsertTemplate(conn, {
+    track: "beginner", dayNumber: 3, grammarPoint: "-아요/어요", quiz: q
+  });
+  /* params は (track, day_number, semester, …, requires_name_slot, quiz)。
+     最後が JSON で渡っていれば VALUES(quiz) は非 NULL ── IF は
+     VALUES(quiz) の側を選ぶ。 */
+  const last = conn.calls[0].params[9];
+  assert(typeof last === "string" && JSON.parse(last).answer === 1,
+    `quiz が JSON で渡っていません: ${JSON.stringify(last)}`);
+  /* 「触らない」だけの式に退化していないか。 */
+  assert(/IS NULL\s*,\s*quiz\s*,\s*VALUES\s*\(\s*quiz\s*\)/i.test(conn.calls[0].sql),
+    "VALUES(quiz) 側の枝がありません（更新されなくなります）");
+  return "非 NULL なら差し替わる";
+});
+
+check("seed-content が「保全した件数」を黙らずに出す（지시서⑯ §3-2）", () => {
+  /* 静かに消えるのが事故の本質だったので、静かに守るのも避ける ──
+     守った件数が出ていなければ、守れているかを誰も確かめられない。
+     seed は DB に触るので、ここは呼ばずにソースで見る。 */
+  const src = stripComments(read("server/db/seed-content.mjs"));
+  assert(/listQuizKeys/.test(src), "listQuizKeys を呼んでいません（保全件数を数えられません）");
+  assert(/preserved\s*\+\+/.test(src), "保全件数を数えていません");
+  assert(/console\.log\([^\n]*preserved/.test(src), "保全件数を出力していません");
+  return "数えて、出す";
+});
+
 await acheck("listQuizKeys は quiz のある日だけを返す（保全ログ用）", async () => {
   const conn = fakeConn(() => [
     { track: "beginner", day_number: 30 },

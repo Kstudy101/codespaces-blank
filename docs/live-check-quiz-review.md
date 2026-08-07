@@ -8,7 +8,8 @@
 ## 전제
 
 - `push-daily.mjs` 배포 완료 (복습·절목 분리, 절목일·기한예고일 스킵)
-- 초급 `content_templates` 에 day 1〜50 중 **57문** (`quiz IS NOT NULL`) — 로컬 `--check` ✓
+- **3코스** day 1〜50 + 절목 75 각 **51문** (`quiz IS NOT NULL`) — 로컬 `--check` ✓
+- 합계 **153문** (복습 pool 48일×3 + 절목 30/50/75×3)
 - 서버 DB 반영: **D1c** (private repo → FTPS → deploy → seed). D0 수동 경로는 사용하지 않음
 - 테스트 계정으로 통로 검증은 **2026-08-05 완료** (`push-daily --user=<id>`)
 
@@ -51,5 +52,5 @@ SELECT quiz_pass_log FROM learning_progress WHERE user_id = <ID>;
 ## §5. 보고
 
 - §1〜§4 통과/실패 · 실패 시 캡처·일차
-- 서버 seed 후 `quiz` 건수 (초급 57문 목표)
+- 서버 seed 후 `quiz` 건수: **코스당 51문 · 합계 153문** 목표
 - 배포 커밋 해시

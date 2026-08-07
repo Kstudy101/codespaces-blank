@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-08 (D3 초급 퀴즈·E 라이브 지시서)
+최종 갱신: 2026-08-08 (D3 3코스 퀴즈·E 라이브 지시서)
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -56,7 +56,7 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **D3** | 퀴즈 원고 **서버 반영** (로컬 초급 57문 ✓) | 대표 | [plan-quiz](docs/plan-quiz.md) · D1c FTPS→seed |
+| **D3** | 퀴즈 원고 **서버 seed** (로컬 3코스×51문=153 ✓) | 대표 | [plan-quiz](docs/plan-quiz.md) · D1c FTPS→seed |
 
 ### E. 라이브 미검증 (코드·관문 통과, 실조건 대기)
 
@@ -287,7 +287,7 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | | 비고 |
 |---|---|
 | **특정상거래法 표기 페이지** | `tokushoho.html` 미작성 — [plan-tokushoho.md](docs/plan-tokushoho.md) (C2) |
-| **퀴즈 원고 (서버)** | 로컬 초급 57문 ✓ — **D1c seed** 전까지 프로덕션은 절목 9문만 또는 0 ([plan-quiz](docs/plan-quiz.md) §3-8) |
+| **퀴즈 원고 (서버)** | 로컬 **153문** (3코스×51) ✓ — **D1c seed** 전까지 프로덕션 미반영 ([plan-quiz](docs/plan-quiz.md) §4-6) |
 
 > **2026-08-07 해소:** 101일 원고·`fortune-lines.json` 은 **서버 `content/` 에 입고 완료**
 > (저장소에는 없음 — 유료물). push 시 private repo 워크플로가 FTPS → deploy → seed 까지 자동 실행.

@@ -32,7 +32,7 @@
    配信の下見（push-daily --dry-run）と同じ考え方。
    ================================================================== */
 import { getPool, closePool } from "../lib/db.mjs";
-import { links, pushlogs, billing, entitlements } from "../lib/repo/index.mjs";
+import { links, pushlogs, billing, entitlements, oauthStates } from "../lib/repo/index.mjs";
 import { jstDateTime } from "../lib/jst.mjs";
 
 const DRY = process.argv.includes("--dry-run");
@@ -49,6 +49,11 @@ const expired = DRY
   ? await links.countExpired(pool, { now })
   : await links.purgeExpired(pool, { now });
 console.log(`  pending_links: 期限切れ ${expired} 件${DRY ? "（対象のみ）" : "を削除"}`);
+
+const oauthExpired = DRY
+  ? await oauthStates.countExpired(pool, { now })
+  : await oauthStates.purgeExpired(pool, { now });
+console.log(`  oauth_states: 期限切れ ${oauthExpired} 件${DRY ? "（対象のみ）" : "を削除"}`);
 
 /* ---- 2. 古い配信ログ ------------------------------------------------ */
 const oldLogs = DRY

@@ -4,15 +4,18 @@
      node server/app.js          （cPanel も同じ入口を使う）
      PORT=3000 node server/app.js
 
-   経路は 5 つだけ。
+   経路は 8 つ。
 
      POST /line/webhook      LINE からの通知
      POST /line/link/start   ウェブの占い結果を預かる（P3）
-     GET  /line/callback     LINE Login の戻り先（P3）
+     GET  /line/callback     LINE Login の戻り先（P3 / プロフィール編集）
+     GET  /profile/start     プロフィール編集のログイン開始
+     GET  /profile           編集フォーム
+     POST /profile           保存
      POST /stripe/webhook    入金の通知（migrations/002）
      GET  /health            生きているか（cPanel と外形監視から）
 
-   フレームワークを入れないのは、経路が 5 つしか無いため。
+   フレームワークを入れないのは、経路が 8 つしか無いため。
    Express を足すと依存が 60 個ほど増え、検証に install が要る
    範囲が広がる（README「検証は設置なしで走る」）。
 
@@ -30,7 +33,13 @@ import { getPool, withTransaction } from "./lib/db.mjs";
 import { verifyLineSignature } from "./lib/signature.mjs";
 import { handleWebhookBody } from "./lib/webhook.mjs";
 import { startLink, completeLink } from "./lib/handlers/link.mjs";
+import {
+  startProfileEdit, completeProfileEdit, loadProfileForm, saveProfile, gatePage
+} from "./lib/handlers/profile.mjs";
 import { resultPage } from "./lib/pages.mjs";
+import { hashState, looksLikeState } from "./lib/token.mjs";
+import * as oauthStates from "./lib/repo/oauth-states.mjs";
+import { readCookie, verify as verifySession } from "./lib/session.mjs";
 import { jstDateTime } from "./lib/jst.mjs";
 import { verifyStripeSignature, readCheckoutEvent } from "./lib/stripe.mjs";
 import { creditFromStripe, missingLegalConfig, salesMode } from "./lib/handlers/checkout.mjs";
@@ -210,29 +219,55 @@ async function onLinkStart(req, res) {
 }
 
 /* ---- P3: LINE から戻ってくる ---------------------------------------
-   ここはブラウザが直接開くので、返すのは JSON ではなく画面。 */
+   ここはブラウザが直接開くので、返すのは JSON ではなく画面。
+   purpose=edit の state はプロフィール編集へ分岐（plan-profile）。 */
 async function onCallback(req, res, url) {
   if (req.method !== "GET") return send(res, 405, "GET のみ");
 
-  const html = (status, page) => send(res, status, page, {
+  const html = (status, page, extra = {}) => send(res, status, page, {
     "Content-Type": "text/html; charset=utf-8",
-    /* 認証結果の画面。戻るボタンで再表示されないようにする。 */
-    "Cache-Control": "no-store, must-revalidate"
+    "Cache-Control": "no-store, must-revalidate",
+    ...extra
   });
+
+  const params = {
+    code: url.searchParams.get("code"),
+    state: url.searchParams.get("state"),
+    error: url.searchParams.get("error"),
+    errorDescription: url.searchParams.get("error_description")
+  };
 
   try {
     const pool = await getPool();
-    const r = await completeLink(pool, {
-      code: url.searchParams.get("code"),
-      state: url.searchParams.get("state"),
-      error: url.searchParams.get("error"),
-      errorDescription: url.searchParams.get("error_description")
-    });
+
+    if (!params.error && looksLikeState(params.state)) {
+      const purpose = await oauthStates.peek(pool, hashState(params.state),
+        { now: jstDateTime() });
+      if (purpose === "edit") {
+        const r = await completeProfileEdit(pool, params);
+        if (!r.ok) {
+          log("profile callback 失敗:", r.kind);
+          const kind = r.kind === "declined" ? "declined"
+            : (r.kind === "onboarding_incomplete" ? "onboarding_incomplete" : "expired");
+          if (kind === "onboarding_incomplete") {
+            return html(403, gatePage("onboarding_incomplete"));
+          }
+          return html(kind === "declined" ? 200 : 400,
+            resultPage({ ok: false, kind: kind === "declined" ? "declined" : "expired" }));
+        }
+        log("profile callback 完了 userId session issued");
+        return send(res, 302, "", {
+          Location: r.redirect,
+          "Set-Cookie": r.setCookie,
+          "Cache-Control": "no-store"
+        });
+      }
+    }
+
+    const r = await completeLink(pool, params);
 
     if (!r.ok) {
       log("callback 失敗:", r.kind, r.reason);
-      /* 400 を返すのは、やり直せば直るものだから。
-         利用者にはどれだったかを言わない（token.mjs の注釈）。 */
       return html(r.kind === "declined" ? 200 : 400, resultPage(r));
     }
 
@@ -240,15 +275,66 @@ async function onCallback(req, res, url) {
       userId: r.userId, friend: r.friend, hasName: !!r.nameKr
     }));
     if (r.friend === false) {
-      /* 友だちでないだけなら追加を促せばよい。だが設置直後に
-         これが必ず出るなら、Login と Messaging API のチャネルが
-         別プロバイダーである可能性が高い（lib/linelogin.mjs）。 */
       logErr("push できない相手です。友だち未追加か、チャネルのプロバイダー違い:", r.lineUserId);
     }
     return html(200, resultPage(r));
   } catch (e) {
     logErr("callback 失敗", e && e.stack ? e.stack : e);
     return html(500, resultPage({ ok: false, kind: "server_error" }));
+  }
+}
+
+async function onProfileStart(req, res) {
+  if (req.method !== "GET") return send(res, 405, "GET のみ");
+  try {
+    const pool = await getPool();
+    const r = await startProfileEdit(pool);
+    return send(res, 302, "", { Location: r.authorizeUrl, "Cache-Control": "no-store" });
+  } catch (e) {
+    logErr("profile/start 失敗", e && e.stack ? e.stack : e);
+    return send(res, 500, "内部エラー");
+  }
+}
+
+function profileHtml(res, status, page, cookies = {}) {
+  send(res, status, page, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store, must-revalidate",
+    ...cookies
+  });
+}
+
+async function onProfile(req, res, rawBody) {
+  const sess = verifySession(readCookie(req));
+  if (!sess) {
+    return profileHtml(res, 403, gatePage("auth"));
+  }
+
+  try {
+    const pool = await getPool();
+    if (req.method === "GET") {
+      const r = await loadProfileForm(pool, sess.userId);
+      if (!r.ok) {
+        return profileHtml(res, 403, gatePage(r.kind === "onboarding_incomplete"
+          ? "onboarding_incomplete" : "auth"));
+      }
+      return profileHtml(res, 200, r.html);
+    }
+
+    if (req.method === "POST") {
+      const r = await saveProfile(pool, sess.userId, rawBody);
+      if (!r.ok) {
+        if (r.html) return profileHtml(res, 400, r.html);
+        return profileHtml(res, 403, gatePage("auth"));
+      }
+      return profileHtml(res, 200, r.html,
+        r.clearCookie ? { "Set-Cookie": r.clearCookie } : {});
+    }
+
+    return send(res, 405, "GET / POST のみ");
+  } catch (e) {
+    logErr("profile 失敗", e && e.stack ? e.stack : e);
+    return send(res, 500, "内部エラー");
   }
 }
 
@@ -320,7 +406,7 @@ async function onHealth(req, res) {
   }
 }
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
 
   if (url.pathname === PATH_WEBHOOK)  return void onWebhook(req, res);
@@ -328,6 +414,15 @@ const server = http.createServer((req, res) => {
   if (url.pathname === PATH_CALLBACK) return void onCallback(req, res, url);
   if (url.pathname === PATH_STRIPE)   return void onStripeWebhook(req, res);
   if (url.pathname === "/health")     return void onHealth(req, res);
+  if (url.pathname === "/profile/start") return void onProfileStart(req, res);
+  if (url.pathname === "/profile") {
+    let raw = null;
+    if (req.method === "POST") {
+      try { raw = (await readRawBody(req)).toString("utf8"); }
+      catch (e) { return send(res, e.statusCode || 400, "本文を読めません"); }
+    }
+    return void onProfile(req, res, raw);
+  }
 
   send(res, 404, "not found");
 });
@@ -377,6 +472,7 @@ server.listen(PORT, () => {
   log(`  callback   ${PATH_CALLBACK}`);
   log(`  stripe     ${PATH_STRIPE}`);
   log(`  health     /health`);
+  log(`  profile    /profile/start → /profile`);
   log(`  許可オリジン ${ALLOWED_ORIGINS.join(" / ")}`);
 
   /* 売る用意が整っているか。足りなければ価格表そのものを出さない

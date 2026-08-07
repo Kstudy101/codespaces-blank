@@ -223,10 +223,10 @@ check("体験 3 日間の終わりは開始 +2 日", () => {
 /* ================================================================== */
 head("[スキーマ]  作れてしまうが、あとで直せないもの");
 
-check("9 つの表が全部ある", () => {
+check("10 つの表が全部ある", () => {
   const want = ["users", "saju_profiles", "purchases", "subscriptions",
                 "learning_progress", "content_templates", "push_logs", "quiz_checkpoints",
-                "pending_links"];
+                "pending_links", "oauth_states"];
   const missing = want.filter((t) => !new RegExp(`CREATE TABLE IF NOT EXISTS ${t}\\b`).test(SCHEMA));
   assert(!missing.length, `足りません: ${missing.join(", ")}`);
   return `${want.length} 表`;
@@ -238,12 +238,12 @@ check("9 つの表が全部ある", () => {
    JOIN したときだけ照合順序の衝突で落ちる。 */
 check("全部 utf8mb4 ── 既定の latin1 では日本語も韓国語も入らない", () => {
   const creates = SCHEMA.match(/CREATE TABLE IF NOT EXISTS \w+[\s\S]*?ENGINE=\w+[^;]*/g) || [];
-  assert(creates.length === 10, `CREATE が ${creates.length} 件しか読めません`);
+  assert(creates.length === 11, `CREATE が ${creates.length} 件しか読めません`);
   for (const c of creates) {
     const name = c.match(/CREATE TABLE IF NOT EXISTS (\w+)/)[1];
     assert(/CHARSET=utf8mb4/.test(c), `${name} が utf8mb4 ではありません`);
   }
-  return "10 表とも";
+  return "11 表とも";
 });
 
 check("users.status に 'completed' がある（計画書 5-5 が使う）", () => {
@@ -292,10 +292,10 @@ check("節目は 30 / 50 / 75。101 は入れない（修了メッセージな�
 /* ================================================================== */
 head("[.sql の分割]  ENUM('7days',...) の途中で切らない");
 
-check("schema.sql が 11 文に割れる（表 10 + 初期値 1）", () => {
+check("schema.sql が 12 文に割れる（表 11 + 初期値 1）", () => {
   const st = splitStatements(SCHEMA);
-  assert(st.length === 11, `${st.length} 文になりました:\n      ${st.map((s) => s.slice(0, 50)).join("\n      ")}`);
-  return "11 文";
+  assert(st.length === 12, `${st.length} 文になりました:\n      ${st.map((s) => s.slice(0, 50)).join("\n      ")}`);
+  return "12 文";
 });
 
 check("どの文も注釈だけで終わっていない", () => {

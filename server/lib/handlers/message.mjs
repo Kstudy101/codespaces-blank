@@ -22,12 +22,15 @@ import { users, learning, entitlements } from "../repo/index.mjs";
 import { replyMessage } from "../line.mjs";
 import { nextStep, messageForStep, confirmName, readingRetry } from "../onboarding.mjs";
 import { kanaNameToHangul } from "../kana2hangul.mjs";
+import { profileEligible, profileStartUrl } from "./profile.mjs";
 import { askCourse, notReady, salesAllowedFor, salesMode, missingLegalConfig,
          sellableTracks } from "./checkout.mjs";
 
 /* 受け取る文面は日本語。ひらがな・カタカナ・漢字が混ざるので
    単語の一致で見る（形態素解析は入れない）。 */
-const ASK_STATUS = ["何日", "なんにち", "今日", "きょう", "残り", "のこり", "進捗", "ステータス"];
+/* 「進み具合」はリッチメニューの displayText と同じ語 ── 押した
+   吹き出しを見て、そのまま打つ人が出る（richmenu.mjs）。 */
+const ASK_STATUS = ["何日", "なんにち", "今日", "きょう", "残り", "のこり", "進捗", "ステータス", "進み具合"];
 const ASK_STOP   = ["解約", "退会", "やめたい", "停止", "配信停止", "キャンセル"];
 
 /* まだ始まっていない人が、始めるための言葉。
@@ -44,6 +47,9 @@ const ASK_SETUP  = ["コース", "こーす", "初級", "中級", "上級", "設
    入口になる（2026-08-06 指示書 §0 の実測）。 */
 export const ASK_PLANS = ["受講料", "じゅこうりょう", "料金", "値段", "いくら",
                           "購入", "買い", "買いたい", "申し込", "支払"];
+
+/* 登録情報の変更（plan-profile §2 — リッチメニューに載せない入口） */
+export const ASK_PROFILE = ["情報を変更", "情報変更", "登録情報", "プロフィール", "変更したい"];
 
 const hit = (text, words) => words.some((w) => text.includes(w));
 
@@ -156,6 +162,30 @@ export async function handleMessage(conn, event, { send = replyMessage } = {}) {
     }
     if (!tracks.length) return { userId: user.id, replied: true, blocked: "原稿不足" };
     return { userId: user.id, replied: true, plans: true, tracks };
+  }
+
+  /* ---- 登録情報の変更 -----------------------------------------------
+     オンボーディング完了者だけ Web フォームへ。未完了は LINE の段で
+     直す（plan-profile §0）。 */
+  if (hit(text, ASK_PROFILE) && !hit(text, ASK_STOP)) {
+    const saju = await users.getSajuProfile(conn, user.id);
+    const replyMsg = profileEligible(user, saju)
+      ? { type: "text",
+          text: "登録情報の変更は、下のボタンから行えます。",
+          quickReply: { items: [{
+            type: "action",
+            action: { type: "uri", label: "情報を変更", uri: profileStartUrl() }
+          }] } }
+      : { type: "text",
+          text: "まだ登録が完了していません。上の案内に従って、コース選択まで進めてください。" };
+    if (replyToken && !isVerifyToken(replyToken)) {
+      try {
+        await send(replyToken, [replyMsg]);
+      } catch (e) {
+        return { userId: user.id, replied: false, error: e.message };
+      }
+    }
+    return { userId: user.id, replied: true, profile: profileEligible(user, saju) };
   }
 
   /* 始める前の 3 つ（名前・生年月日・コース）が残っていれば、

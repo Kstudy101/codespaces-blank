@@ -52,6 +52,7 @@ const EXPECTED = [
   "learning_progress", "content_templates", "push_logs", "quiz_checkpoints",
   /* P3 で足した。ウェブの占い結果を、LINE 認証から戻るまで預かる表。 */
   "pending_links",
+  "oauth_states",
   /* 002 で足した。前払いの回数券をコース別に持つ。 */
   "course_entitlements", "lapse_log",
   /* 何を流したか。無いと migrations が毎回頭から流れ直す。 */

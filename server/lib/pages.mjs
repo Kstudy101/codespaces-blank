@@ -60,6 +60,12 @@ const SHELL = (title, body) => `<!doctype html>
           font-weight:700; }
   a.plain { color:var(--sub); font-size:.85rem; }
   hr { border:0; border-top:1px solid var(--line); margin:1.25rem 0; }
+  label { display:block; margin:.75rem 0 .25rem; font-size:.85rem; color:var(--sub); }
+  input, select { width:100%; padding:.55rem .65rem; border:1px solid var(--line);
+                  border-radius:8px; font-size:1rem; }
+  .err { color:var(--accent); font-size:.9rem; }
+  .hint { font-size:.8rem; color:var(--sub); }
+  button.btn { border:0; cursor:pointer; width:100%; }
 </style>
 </head>
 <body><main>${body}</main></body>
@@ -67,31 +73,15 @@ const SHELL = (title, body) => `<!doctype html>
 
 export function resultPage(r) {
   if (r && r.ok) {
-    /* 名前が未確定なら、この行ごと出さない ── 空欄や「あなた」を
-       名前の場所に置くと、名前の行そのものが誤りに見える
-       （2026-08-05 指示書 §1-C：「null」を画面に出さない）。 */
     const nameLine = r.nameKr
       ? `<p>韓国語でのお名前は <span class="name">${escapeHtml(r.nameKr)}</span> です。</p>`
       : "";
 
-    /* 文面は 2026-08-06 指示書 C2。売り状態と無関係に真である文だけを
-       置く ── コース選択は販売ゲートの外（§2）なので、SALES_MODE=closed
-       でも「コースをお選びいただけます」は事実。
-
-       「はじめての方は」の条件句は削らない。この画面は再連携でも
-       出るので、条件なしに「無料でお試し」と書くと、体験を使い
-       終えた人への嘘になる。
-
-       名前・生年月日の確認質問には触れない ── 訊くことが無い人にも
-       出る画面なので、書けば 7-6 の嘘の警告を作り直すことになる。 */
     const promise = `
           <p>お選びいただくと、その場で 1 日目がとどきます。</p>
           <p>はじめての方は ${TRIAL_DAYS} 日間、無料でお試しいただけます。</p>`;
 
     if (r.friend === false) {
-      /* 引き継ぎは終わっているが、まだ友だちではない。
-         もう一歩あることを隠さない ── 「完了しました」とだけ出して
-         何も届かないと、こちらの不具合に見える。 */
       return SHELL("あと一歩", `
         <div class="card ok">
           <div class="mark">◎</div>
@@ -126,8 +116,6 @@ export function resultPage(r) {
       </div>`);
   }
 
-  /* 期限切れ・使用済み・形が違う state。どれも同じ言い方にする。
-     どこで弾かれたかを伝えると、state を総当たりする側の手がかりになる。 */
   const expired = kind === "expired" || kind === "bad_state" || kind === "bad_code";
 
   return SHELL(expired ? "有効期限が切れました" : "うまくいきませんでした", `
@@ -138,5 +126,79 @@ export function resultPage(r) {
           ? "連携用のリンクは 30 分で切れます。お手数ですが、占いのページからもう一度お試しください。"
           : "しばらく時間をおいて、占いのページからもう一度お試しください。"}</p>
       <p>診断結果はまだ引き継がれていません。</p>
+    </div>`);
+}
+
+/* ---- プロフィール編集（plan-profile）-------------------------------- */
+
+export function profileFormPage({
+  nameReading, nameKr, birthDate, birthTime, timeUnknown,
+  gender, cityId, cities, siteUrl, error = null
+}) {
+  const cityOpts = cities.map((c) =>
+    `<option value="${escapeHtml(c.id)}"${c.id === cityId ? " selected" : ""}>${escapeHtml(c.ja)}</option>`
+  ).join("");
+
+  const errLine = error ? `<p class="err">${escapeHtml(error)}</p>` : "";
+  const krHint = nameKr
+    ? `<p class="hint">現在の韓国語表記: ${escapeHtml(nameKr)}</p>` : "";
+
+  return SHELL("登録情報の変更", `
+    <div class="card">
+      <h1>登録情報の変更</h1>
+      <p>変更は LINE のトークにもお知らせします。</p>
+      ${errLine}
+      <form method="post" action="/profile">
+        <label for="name_reading">お名前（かな）</label>
+        <input id="name_reading" name="name_reading" maxlength="50"
+               value="${escapeHtml(nameReading)}" autocomplete="name">
+        ${krHint}
+        <label for="birth_date">生年月日</label>
+        <input id="birth_date" name="birth_date" type="date"
+               value="${escapeHtml(birthDate)}" required>
+        <label for="birth_time">生まれた時刻</label>
+        <input id="birth_time" name="birth_time" type="time"
+               value="${escapeHtml(birthTime)}"${timeUnknown ? " disabled" : ""}>
+        <label><input type="checkbox" name="time_unknown" value="1"${timeUnknown ? " checked" : ""}
+               onclick="document.getElementById('birth_time').disabled=this.checked">
+          わからない</label>
+        <label for="gender">性別</label>
+        <select id="gender" name="gender">
+          <option value="M"${gender === "M" ? " selected" : ""}>男性</option>
+          <option value="F"${gender === "F" ? " selected" : ""}>女性</option>
+          <option value="N"${gender === "N" ? " selected" : ""}>答えない</option>
+          <option value="U"${gender === "U" ? " selected" : ""}>未回答</option>
+        </select>
+        <label for="city_id">出生地</label>
+        <select id="city_id" name="city_id" required>${cityOpts}</select>
+        <button class="btn" type="submit">保存する</button>
+      </form>
+      <p class="hint" style="margin-top:1rem"><a class="plain" href="${escapeHtml(siteUrl)}">サイトへ戻る</a></p>
+    </div>`);
+}
+
+export function profileDonePage({ addFriendUrl }) {
+  const url = addFriendUrl || ADD_FRIEND_URL();
+  return SHELL("保存しました", `
+    <div class="card ok">
+      <div class="mark">◎</div>
+      <h1>保存しました</h1>
+      <p>LINE のトークにもお知らせしました。</p>
+      <a class="btn" href="${escapeHtml(url)}">LINE を開く</a>
+    </div>`);
+}
+
+export function profileGatePage(kind) {
+  const msg = kind === "onboarding_incomplete"
+    ? "まだ登録が完了していません。LINE のトークで案内に従ってください。"
+    : kind === "auth"
+    ? "ログインの有効期限が切れました。もう一度お試しください。"
+    : "入力内容を確認してください。";
+  return SHELL("変更できません", `
+    <div class="card ng">
+      <div class="mark">×</div>
+      <h1>変更できません</h1>
+      <p>${escapeHtml(msg)}</p>
+      <a class="btn" href="/profile/start">もう一度ログイン</a>
     </div>`);
 }

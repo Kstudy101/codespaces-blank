@@ -20,6 +20,7 @@ export * as pushlogs from "./pushlogs.mjs";
 /* links だけは利用者に紐づかない。ウェブで四柱が出た時点では
    まだ LINE の誰かが分からないので、揃うまでの預かり場所（P3）。 */
 export * as links from "./links.mjs";
+export * as oauthStates from "./oauth-states.mjs";
 
 /* 前払いの回数券（migrations/002）。billing が「払った台帳」なのに対し、
    こちらは「いま何日ぶん持っているか」。分けたのは寿命が違うため ──

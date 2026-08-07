@@ -487,6 +487,22 @@ await acheck("心当たりの無い文面には返さない（通知を増やさ
   return "既読のまま";
 });
 
+/* リッチメニューの［進み具合］は displayText で同じ語を吹き出しに
+   残す ── それを見て、そのまま打つ人が必ず出る（ASK_PLANS の
+   「受講料」と同じ理屈）。打った語が既読のまま沈むのを塞ぐ。 */
+await acheck("リッチメニューの語「進み具合」を、そのまま打っても既読のままにしない", async () => {
+  assert(/displayText:\s*"進み具合"/.test(read("server/lib/richmenu.mjs")),
+    "richmenu.mjs の displayText が「進み具合」ではなくなっています ── この検査の語も揃えてください");
+  const conn = fakeConn({ "FROM users": USER_ROW });
+  const { handleMessage } = await import("../server/lib/handlers/message.mjs");
+  const r = await handleMessage(conn,
+    { source: { userId: "U_test" }, replyToken: "t",
+      message: { type: "text", text: "進み具合" } },
+    { send: async () => ({}) });
+  assert(r.replied === true, JSON.stringify(r));
+  return r.onboarding ? "始める前 → 次の質問" : "状況を返す";
+});
+
 
 /* ================================================================== */
 head("[受講料]  テキストで訊いても、リッチメニューと同じ門・同じ応答");
@@ -575,6 +591,47 @@ await acheck("ASK_PLANS の全語が同じ分岐へ（販売停止 → 全語 no
     }
     return `${ASK_PLANS.length} 語とも門へ`;
   }));
+
+/* ================================================================== */
+head("[プロフィール]  「情報を変更」→ Web フォームへの入口（plan-profile）");
+
+const { ASK_PROFILE } = await import("../server/lib/handlers/message.mjs");
+const { profileStartUrl } = await import("../server/lib/handlers/profile.mjs");
+
+await acheck("オンボーディング完了者は profile/start へ誘導", async () => {
+  const { r, sent } = await askPlans("情報を変更", {
+    "FROM saju_profiles": [{ user_id: 7, birth_date: "1990-01-01",
+      birth_confirmed: 1, gender: "U", ohaeng_main: "목",
+      raw_result_json: { city: "tokyo" } }]
+  });
+  assert(r.profile === true, JSON.stringify(r));
+  const uri = sent[0]?.quickReply?.items?.[0]?.action?.uri;
+  assert(uri === profileStartUrl(), `URI: ${uri}`);
+  return profileStartUrl();
+});
+
+await acheck("未完了者は Web へ誘導しない", async () => {
+  const { r, sent } = await askPlans("情報を変更", {
+    "FROM saju_profiles": [{ user_id: 7, birth_date: "1990-01-01",
+      birth_confirmed: 0, gender: "U" }]
+  });
+  assert(r.profile === false, JSON.stringify(r));
+  assert(!sent[0]?.quickReply, "未完了なのにリンク");
+  assert(/完了していません/.test(sent[0].text), sent[0].text);
+  return "案内のみ";
+});
+
+await acheck("ASK_PROFILE の語が同じ分岐へ", async () => {
+  for (const w of ASK_PROFILE) {
+    const { r } = await askPlans(w, {
+      "FROM saju_profiles": [{ user_id: 7, birth_date: "1990-01-01",
+        birth_confirmed: 1, gender: "U", ohaeng_main: "목",
+        raw_result_json: { city: "tokyo" } }]
+    });
+    assert(r.profile === true, `「${w}」: ${JSON.stringify(r)}`);
+  }
+  return `${ASK_PROFILE.length} 語`;
+});
 
 await acheck("残りの返事に「（全 101 日）」を付けない（지시서⑧ §3）", async () => {
   /* 진행 상황 화면에는 잔여만. 전량(全 101 日)은 파는 화면(가격표)

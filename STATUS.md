@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-07 (D 콘텐츠 입고·자동 업로드 완료 반영) / 기준 커밋: `e544921`
+최종 갱신: 2026-08-07 (A2·A5·B1 반영)
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -14,41 +14,35 @@
 - LINE 배신 서버(`server/`)는 **ChemiCloud 에 배포 완료** (최신 2026-08-05, `14b57f4`) —
   마이그레이션은 이제 **적용 이력(schema_migrations)** 을 가진다. 배포마다
   001부터 재실행되던 폭탄(2회차에 errno 1054 로 배포 정지)은 `8b12063` 로 종식
-- 결제(선불 횟수권)는 **코드 완성, 의도적으로 잠겨 있음** — §3
+- 결제(선불 횟수권) — **코드 완성, A5 env 입력 완료** (2026-08-07). C2·C3·A3 후 오픈
 - 관문(자동 검증) **19종 전부 통과** + smoke 29항목 (migrate 2회 연속 검사 포함)
 - 사이드 메뉴 개편([docs/plan-side-menu.md](docs/plan-side-menu.md)) — **구현·관문 완료** (B2)
 - 콘텐츠 입고·자동 업로드 — **서버 반영 완료** (D1·D1b·D1c·D2, 2026-08-07 대표 확인).
   private repo → FTPS → UAPI Deploy → `.cpanel.yml` seed 전 경로 가동 ([plan-content-ci](docs/plan-content-ci.md))
 
 **권장 진행 순서 (한 줄).**
-A2 온보딩 라이브 → (병행) A4 profile 결정 / A5 결제값 → A3 Stripe
-→ B1 profile 구현 → C 결제 오픈 → D3 퀴즈 원고 → E 조건 도래 시 라이브 확인.
+A3 Stripe → B1 배포·라이브 확인 → C2 tokushoho + C3 리치메뉴 → C4 실판매 → D3 퀴즈 → E 조건 도래 시 라이브 확인.
 
 열 공통: **ID** / **작업** / **담당**(`대표`·`개발`·`조건대기`) / **근거**.
 
-### A. 지금 당장 (대표 실기·결정) — 코드보다 먼저
+### A. 지금 당장 (대표 실기·결정)
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **A2** | 코스 선택 온보딩 라이브 검증 | 대표 | [docs/live-check-line-onboarding.md](docs/live-check-line-onboarding.md). `SALES_MODE` 미설정 |
-| **A3** | Stripe 검증 (테스트 키·`SALES_MODE=test`·`SALES_TEST_USERS` → 3케이스) | 대표 | [docs/plan-journey.md](docs/plan-journey.md) §4. 코드 배포 완료 (`e1f3c9f`) |
-| **A4** | gender 를 대운에 반영할지 **1건만** — (가)전면/(나)LINE만/(다)현행유지 | 대표 | [docs/plan-profile.md](docs/plan-profile.md) **§6 결정 자료**. privacy 문안은 `c11242f` 로 이미 게시됨. **「반영」은 스위치가 아니라 대운 신규 구현** (§6-2) |
-| **A5** | 결제 오픈용 값 3개 (`TOKUSHOHO_URL` / `REFUND_POLICY` / `RICHMENU_IMAGE`) | 대표 | 없으면 가격표 안 열림 — 아래 §3 |
+| **A3** | Stripe 검증 (테스트 키·`SALES_MODE=test`·`SALES_TEST_USERS` → 3케이스) | 대표 | [docs/plan-journey.md](docs/plan-journey.md) §4 |
+| **B1** | 프로필 편집 라이브 검증 | 대표 | [docs/live-check-profile.md](docs/live-check-profile.md). **배포 후** |
 
-### B. 승인·전제 후 개발
+### B. 개발 (남은 것)
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **B1** | 프로필 편집 (`/profile` 서버 렌더) | 개발 | [docs/plan-profile.md](docs/plan-profile.md). **A4 와 독립 — 지금 착수 가능** (§6-5. gender 정비는 `005` 로 완료). 계획 승인은 필요 |
-| **B2** | 사이드 메뉴 개편 — **완료** | 개발 | [docs/plan-side-menu.md](docs/plan-side-menu.md). `verify-pages` 15/15 |
-| **B3** | maintain 드리프트 (#3 beginner 3/0) 원인 확인 | 개발 | 라이브 검증 수동 투입분 가능성. 확인만 |
+| **B3** | maintain 드리프트 (#3 beginner 3/0) 원인 확인 | 개발 | 확인만 |
 
-### C. 결제 오픈 (의도적 잠금 해제) — A5 이후
+### C. 결제 오픈 — A5·C1 완료, A3·C2·C3·C4 남음
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **C1** | cPanel env 에 A5 값 3개 투입 | 대표 | §3 |
-| **C2** | `tokushoho.html` 작성 | 개발 | §6. A5·법무 문안 확정 후 |
+| **C2** | `tokushoho.html` 작성 (A5 URL이 사이트를 가리키면) | 개발 | §6 |
 | **C3** | 리치메뉴 등록 (`setup-richmenu.mjs`) | 대표 | §3 · `RICHMENU_IMAGE` |
 | **C4** | Stripe 테스트(A3) 후 실판매 모드 판단 | 대표 | A3 · [plan-journey](docs/plan-journey.md) §4 |
 
@@ -74,8 +68,12 @@ A2 온보딩 라이브 → (병행) A4 profile 결정 / A5 결제값 → A3 Stri
 - **끝남**: 코스 선택 흐름, outage-billing 설계 2건, cron 3행, morning/evening 실발송, 관문 19종, 사이드 메뉴(B2),
   원고 업로드 도구([plan-upload-content](docs/plan-upload-content.md)),
   원고 FTP 계정·탈출 시험(A0), 본편 원고·운세 JSON 서버 반영(A1·D1·D2),
-  초급 51〜101 착수점·검증 도구(D1b), 원고 CI 자동화(D1c — private repo → FTPS → deploy → seed)
-- **잠김(미완 아님)**: 결제 동선 — A5 전까지 건드리지 않음
+  초급 51〜101 착수점·검증 도구(D1b), 원고 CI 자동화(D1c — private repo → FTPS → deploy → seed),
+  **A2 코스 선택 온보딩 라이브** (2026-08-07 대표 확인),
+  **A5 결제 env 3값 + C1 cPanel 투입** (2026-08-07),
+  **프로필 편집 B1 코드** (`/profile/start` → Login → `/profile` — migration `006`, LINE 「情報を変更」),
+  **A4 gender 대운 — (다) 현행 유지(저장만)** (2026-08-07 대표 결정)
+- **잠김(미완 아님)**: 실판매 모드 — A3·C4 전까지 `SALES_MODE` 는 test 또는 closed 유지
 - **옛 계획**: [plan-p4-content.md](docs/plan-p4-content.md) — 렌더러·배치·원고 입고 전부 가동 중 (2026-08-07)
 
 > 참고: 2026-08-05 보류였던 plan-outage-billing 의 설계 2건은 **2026-08-06

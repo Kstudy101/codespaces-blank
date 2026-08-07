@@ -24,6 +24,7 @@
    通すので、どちらが先でも 2 人にならない。
    ================================================================== */
 import { users, links, pushlogs } from "../repo/index.mjs";
+import * as oauthStates from "../repo/oauth-states.mjs";
 import { newState, hashState, looksLikeState } from "../token.mjs";
 import { authorizeUrl, exchangeCode, loginProfile, revoke } from "../linelogin.mjs";
 import { getProfile, pushMessage, isUnreachable } from "../line.mjs";
@@ -115,6 +116,7 @@ export async function startLink(conn, input) {
   const now = jstDateTime();
   const expiresAt = jstDateTime(new Date(Date.now() + links.TTL_MINUTES * 60_000));
 
+  await oauthStates.create(conn, hashState(state), "link", { now, expiresAt });
   await links.create(conn, hashState(state), profile, { now, expiresAt });
 
   return {
@@ -196,11 +198,16 @@ export async function completeLink(conn, { code, state, error, errorDescription 
     return { ok: false, kind: "bad_code", reason: "code がありません" };
   }
 
+  const now = jstDateTime();
+  const purpose = await oauthStates.consume(conn, hashState(state), { now });
+  if (purpose && purpose !== "link") {
+    return { ok: false, kind: "expired", reason: "state の用途が一致しません" };
+  }
+
   /* 預かりものを取り出す。取れなければ、期限切れか、二度目か、
      こちらが出したものではない。どれも「もう一度やり直し」なので
      利用者への言い方は同じにする（どれだったかは教えない ──
      教えると、state を総当たりする側に手がかりを渡すことになる）。 */
-  const now = jstDateTime();
   const pending = await links.consume(conn, hashState(state), { now });
   if (!pending) {
     return { ok: false, kind: "expired", reason: "期限切れか、すでに使われた state です" };

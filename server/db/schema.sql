@@ -266,6 +266,15 @@ CREATE TABLE IF NOT EXISTS pending_links (
   KEY ix_pending_expires (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS oauth_states (
+  state_hash  CHAR(64) NOT NULL PRIMARY KEY,
+  purpose     ENUM('link','edit') NOT NULL,
+  created_at  DATETIME NOT NULL,
+  expires_at  DATETIME NOT NULL,
+  consumed_at DATETIME NULL,
+  KEY ix_oauth_expires (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 -- ---- 流した migration の記録 ----------------------------------------
 --

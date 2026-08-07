@@ -14,7 +14,7 @@ canonical / og:url / og:image / twitter:image / sitemap.xml / robots.txt、
 """
 import re, sys, os, pathlib
 
-TARGETS = ["index.html", "privacy.html", "contact.html", "tips.html",
+TARGETS = ["index.html", "privacy.html", "contact.html", "tokushoho.html", "tips.html",
            "words.html", "omikuji.html", "gilbang.html", "amulet.html",
            "404.html", "sitemap.xml", "robots.txt"]
 
@@ -67,7 +67,7 @@ def main():
         # 部分文字列として含む場合、ホスト名だけの比較では必ず誤検知する。
         if f"https://{old_host}/" in s or s.rstrip().endswith(f"https://{old_host}"):
             bad.append(f"{f}: 旧ホストが残存")
-    for f in ["index.html", "privacy.html", "contact.html", "tips.html"]:
+    for f in ["index.html", "privacy.html", "contact.html", "tokushoho.html", "tips.html"]:
         s = open(f, encoding="utf-8").read()
         for k in KEEP:
             host = k.split("/")[0]

@@ -541,7 +541,7 @@ jobs:
           }
 
           echo "拡張子なしURL（Apache は既定で解決しない。移行の要）"
-          for p in / /privacy /contact /tips /words /omikuji /gilbang /amulet; do check "$p" 200; done
+          for p in / /privacy /contact /tokushoho /tips /words /omikuji /gilbang /amulet; do check "$p" 200; done
 
           echo "実ファイル"
           for p in /kanji.json /ogp.png /ads.txt /sitemap.xml /robots.txt; do check "$p" 200; done

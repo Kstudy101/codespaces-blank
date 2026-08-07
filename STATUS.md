@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-07 (B1 배포·B3·C2 계획)
+최종 갱신: 2026-08-08 (C2 배포·A3·C3 완료)
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -14,14 +14,14 @@
 - LINE 배신 서버(`server/`)는 **ChemiCloud 에 배포 완료** (최신 2026-08-07, `518c060` — B1 프로필 편집) —
   마이그레이션은 이제 **적용 이력(schema_migrations)** 을 가진다. 배포마다
   001부터 재실행되던 폭탄(2회차에 errno 1054 로 배포 정지)은 `8b12063` 로 종식
-- 결제(선불 횟수권) — **코드 완성, A5 env 입력 완료** (2026-08-07). C2·C3·A3 후 오픈
+- 결제(선불 횟수권) — **A3 Stripe 테스트 완료** (2026-08-08). C2·C3 완료. **C4 실판매 판단**만 남음
 - 관문(자동 검증) **19종 전부 통과** + smoke 29항목 (migrate 2회 연속 검사 포함)
 - 사이드 메뉴 개편([docs/plan-side-menu.md](docs/plan-side-menu.md)) — **구현·관문 완료** (B2)
 - 콘텐츠 입고·자동 업로드 — **서버 반영 완료** (D1·D1b·D1c·D2, 2026-08-07 대표 확인).
   private repo → FTPS → UAPI Deploy → `.cpanel.yml` seed 전 경로 가동 ([plan-content-ci](docs/plan-content-ci.md))
 
 **권장 진행 순서 (한 줄).**
-A3 Stripe ∥ B1 라이브 → C2 tokushoho + C3 리치메뉴 → C4 실판매 → D3 퀴즈 → E 조건 도래 시 라이브 확인.
+C4 실판매 → B1 라이브 → D3 퀴즈 → E 조건 도래 시 라이브 확인.
 
 **B3 (2026-08-07 확인).** maintain §3 `#3 beginner 持っている=3 / 台帳=0` —
 migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼으나 **`trial_track` 은
@@ -37,22 +37,20 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **A3** | Stripe 검증 (테스트 키·`SALES_MODE=test`·`SALES_TEST_USERS` → 3케이스) | 대표 | [docs/plan-journey.md](docs/plan-journey.md) §4 |
+| **C4** | 실판매 모드 (`SALES_MODE=open`) 판단·투입 | 대표 | [live-check-c4-sales-open.md](docs/live-check-c4-sales-open.md). A3 완료 |
 | **B1** | 프로필 편집 라이브 검증 | 대표 | [docs/live-check-profile.md](docs/live-check-profile.md). `/profile/start` → **302** 확인됨 |
 
 ### B. 개발 (남은 것)
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **C2** | `tokushoho.html` — §1 표기 문안 확정·승인 후 구현 | 개발 | [docs/plan-tokushoho.md](docs/plan-tokushoho.md). 사이트 URL이면 **404** |
+| — | (현재 없음) | — | — |
 
-### C. 결제 오픈 — A5·C1 완료, A3·C2·C3·C4 남음
+### C. 결제 오픈 — C4만 남음
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **C2** | `tokushoho.html` | 개발 | [plan-tokushoho](docs/plan-tokushoho.md) §1 문안·승인 |
-| **C3** | 리치메뉴 등록 (`setup-richmenu.mjs`) | 대표 | §3 · `RICHMENU_IMAGE` |
-| **C4** | Stripe 테스트(A3) 후 실판매 모드 판단 | 대표 | A3 · [plan-journey](docs/plan-journey.md) §4 |
+| **C4** | A3 완료 후 `SALES_MODE=open` 판단 | 대표 | [live-check-c4](docs/live-check-c4-sales-open.md) · [plan-journey](docs/plan-journey.md) §4 |
 
 ### D. 콘텐츠 입고 — 퀴즈만 남음
 
@@ -81,8 +79,11 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
   **A5 결제 env 3값 + C1 cPanel 투입** (2026-08-07),
   **프로필 편집 B1** — 코드·배포 (`518c060`, `/profile/start` 302, migration `006`, LINE 「情報を変更」),
   **B3 maintain 드리프트 beginner 3/0** — migration 002 `trial_track` 미백필 legacy (§0 아래),
-  **A4 gender 대운 — (다) 현행 유지(저장만)** (2026-08-07 대표 결정)
-- **잠김(미완 아님)**: 실판매 모드 — A3·C4 전까지 `SALES_MODE` 는 test 또는 closed 유지
+  **A4 gender 대운 — (다) 현행 유지(저장만)** (2026-08-07 대표 결정),
+  **A3 Stripe 테스트** (2026-08-08 대표 확인),
+  **C2 tokushoho.html** — 사이트 배포 (2026-08-08),
+  **C3 리치メニュー** — LINE 등록 (2026-08-08, `richmenu-ad029399fabcc322b8050f8d92974678`)
+- **잠김(미완 아님)**: 실판매 모드 — C4 판단 전까지 `SALES_MODE` 는 test 유지
 - **옛 계획**: [plan-p4-content.md](docs/plan-p4-content.md) — 렌더러·배치·원고 입고 전부 가동 중 (2026-08-07)
 
 > 참고: 2026-08-05 보류였던 plan-outage-billing 의 설계 2건은 **2026-08-06
@@ -138,16 +139,16 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
 
 ---
 
-## 3. 결제 오픈 — env 입력 완료 (2026-08-07), A3·C2·C3·C4 남음
+## 3. 결제 오픈 — A3·C2·C3 완료 (2026-08-08), C4만 남음
 
-A5·C1 로 아래 3값은 cPanel에 입력됨. `SALES_MODE` 는 **closed 또는 test** 유지
-(A3·C4 전까지 실판매 잠김).
+A5·C1 env 입력 · A3 Stripe 테스트 · C2 `/tokushoho` · C3 리치メニュー 완료.
+`SALES_MODE` 는 **test** 유지 — C4 에서 `open` 판단.
 
 | 환경변수 | 역할 | 비고 |
 |---|---|---|
-| `TOKUSHOHO_URL` | 특정상거래법 표기 URL | 사이트 URL이면 [C2](docs/plan-tokushoho.md) 필요 — `/tokushoho` **404** |
-| `REFUND_POLICY` | 환불 규정 1줄 | 가격표·tokushoho 와 동일 문구 |
-| `RICHMENU_IMAGE` | 리치메뉴 2500×1686 | C3 등록 대기 |
+| `TOKUSHOHO_URL` | 특정상거래법 표기 URL | `https://www.kstudy101.jp/tokushoho` (C2 배포 후 200 확인) |
+| `REFUND_POLICY` | 환불 규정 1줄 | tokushoho §返品·キャンセル 과 동일 문구 |
+| `RICHMENU_IMAGE` | 리치メニュー 2500×1686 | `server/assets/richmenu.jpg` (등록 완료) |
 
 **리치메뉴 이미지가 필요한 이유** — LINE은 「이미지 1장 + 누를 수 있는 좌표」로
 메뉴를 만듭니다. 글자를 따로 보내는 방법이 없어서, 글자도 이미지 안에 그려야 합니다.

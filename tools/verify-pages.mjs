@@ -32,6 +32,7 @@ const EXPECT = {
   "index.html":   { url: "/",         index: true,  ads: true  },
   "privacy.html": { url: "/privacy",  index: true,  ads: true  },
   "contact.html": { url: "/contact",  index: true,  ads: true  },
+  "tokushoho.html": { url: "/tokushoho", index: true, ads: true },
   "tips.html":    { url: "/tips",     index: true,  ads: true  },
   "omikuji.html": { url: "/omikuji",  index: true,  ads: true  },
   "gilbang.html": { url: "/gilbang",  index: true,  ads: true  },

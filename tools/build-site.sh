@@ -21,6 +21,7 @@ PUBLIC=(
   index.html
   privacy.html
   contact.html
+  tokushoho.html
   tips.html
   words.html
   omikuji.html
@@ -82,7 +83,7 @@ for html in "$OUT"/*.html; do
 done
 
 # 2) canonical が全ページにあるか
-for html in "$OUT"/index.html "$OUT"/privacy.html "$OUT"/contact.html "$OUT"/tips.html "$OUT"/words.html "$OUT"/omikuji.html "$OUT"/gilbang.html "$OUT"/amulet.html; do
+for html in "$OUT"/index.html "$OUT"/privacy.html "$OUT"/contact.html "$OUT"/tokushoho.html "$OUT"/tips.html "$OUT"/words.html "$OUT"/omikuji.html "$OUT"/gilbang.html "$OUT"/amulet.html; do
   grep -q 'rel="canonical"' "$html" || { echo "✗ $(basename "$html"): canonical がありません" >&2; fail=1; }
 done
 

@@ -249,14 +249,10 @@ check("gender は 4 種以外を受けない（'N' = 答えないと答えた・
   return "M / F / U / N 以外は U";
 });
 
-check("サイトは今も gender:'U'（未質問）を送る ── 'N' に変えない", () => {
-  /* サイトは性別を訊かない。訊いていないのに「答えない」を名乗ると、
-     事実でないものが DB に刻まれる（지시서⑩ §2-1）。 */
+check("サイトは gender を送らない（지시서⑱で⑩の『U を送る』検査を反転）", () => {
   const html = read("index.html");
-  assert(/key:'gender',\s*label:null,\s*value:'U'/.test(html.replace(/\s+/g, " ")) ||
-         /gender'?,?\s*.*value:'U'/.test(html),
-    "index.html が gender:'U' を送っていません");
-  return "사이트 = 미질문(U) 그대로";
+  assert(!/key:'gender'/.test(html), "index.html が gender を送っています");
+  return "전송 항목에서 소멸";
 });
 
 check("時刻は HH:MM も HH:MM:SS も受け、それ以外は捨てる", () => {
@@ -614,16 +610,13 @@ check("LINE の項は、保存するものを 1 つずつ挙げている", () =>
      両方を要る。前に一度、第1項の「保存しない」が第2項の実装と
      食い違ったまま公開されかけた（docs/research.md §0.2）ので、
      ここは緩めずに 2 本にしておく。 */
-  /* 2026-08-05 改定: LINE のトークで訊く道が開く（plan-line-onboarding）。
-     見るべき事実が 3 つに増えた ── どれか 1 つでも欠けると、
-     読んだ人の理解と実装がまた食い違う。 */
-  assert(/トークでおたずねした際にお答えいただいた場合のみ保存/.test(PRIVACY),
-    "「答えた場合のみ保存」が書かれていません");
-  assert(/未回答/.test(PRIVACY),
-    "連携時・無回答時に何が入るか（『未回答』）が書かれていません");
-  assert(/保存のみで、運勢の計算には用いていません/.test(PRIVACY),
-    "「保存のみ・計算未使用」が書かれていません（大運反映は保留中の決定）");
-  return "7 種を名指し + 性別 3 事実";
+  /* 2026-08-07 改定（지시서⑱）: 性別は集めない ── 目的（大運の計算に
+     将来用いる）が消えたので、質問・送信・保存・記載の 4 つとも消した。
+     ここは「性別の記載が**無い**こと」へ反転 ── 集めていないのに
+     ポリシーに残っていれば、方針とコードの食い違いの 5 回目になる。 */
+  assert(!/性別/.test(PRIVACY), "性別の記載が残っています（もう集めていません）");
+  assert(!/大運/.test(PRIVACY), "大運の説明が残っています");
+  return "7 種を名指し・性別の記載 0";
 });
 
 check("カードは既定で伏せてある", () => {
@@ -647,20 +640,19 @@ const BIRTH_NO_HOUR = { y: 1995, m: 4, d: 12, hour: null, city: "tokyo" };
 
 const linkFields = new Function("state", "Saju", `${linkSrc[0]}; return linkFields;`)(STATE, SAJU);
 
-check("送る値は、すべて画面に出す名前を持っている（gender を除く）", () => {
-  for (const f of linkFields(BIRTH)) {
+check("送る値は、すべて画面に出す名前を持っている ── gender は送らない", () => {
+  /* 性別は集めない（지시서⑱）。⑩까지는 「보내되 화면에 안 냄」의
+     예외 1건이 있었다 ── 예외째로 삭제. 서버 normalizeProfile 은
+     gender 누락을 기본값 'U'(未質問)로 채우므로 안 보내면 된다. */
+  const fields = linkFields(BIRTH);
+  assert(!fields.some((f) => f.key === "gender"),
+    "gender を送っています ── 目的の消えた個人情報を送る道は⑱で閉じました");
+  for (const f of fields) {
     if (f.value === null || f.value === undefined) continue;
-    if (f.key === "gender") {
-      /* 訊いていないので固定値。画面に出さない代わりに、
-         中身が 'U'（未回答）であることをここで縛る。 */
-      assert(f.value === "U", `gender が ${f.value} です。この画面は性別を訊いていません`);
-      assert(f.label === null, "訊いていないものを画面に出しています");
-      continue;
-    }
     assert(f.label, `${f.key} を送るのに、画面に出す名前がありません`);
     assert(f.shown, `${f.key} を送るのに、画面に出す値がありません`);
   }
-  return `${linkFields(BIRTH).length} 項目`;
+  return `${fields.length} 項目・例外 0`;
 });
 
 check("生年月日は YYYY-MM-DD。日時つきの文字列を作らない", () => {
@@ -752,10 +744,11 @@ check("部分状態 5 種で、次の質問が正しく導かれる", () => {
        birth_date: "1990-01-01", birth_time: null, birth_confirmed: false,
        ohaeng_main: null, raw_result_json: null, track: null },
       "btime", "直接流入：日付まで（時刻は未質問）"],
+    /* 性別は訊かない（⑱）── 出生地まで済めば要約確認へ直行。 */
     [{ name_source: "line", name_kr: "타로", name_kanji: null, display_name: "h",
        birth_date: "1990-01-01", birth_time: null, birth_confirmed: false,
        ohaeng_main: null, raw_result_json: { city: "tokyo" }, gender: "U", track: null },
-      "bgender", "直接流入：時刻わからない＋出生地まで（NULL は再質問しない）"],
+      "birth", "直接流入：時刻わからない＋出生地まで → 要約確認"],
     [{ name_source: "line", name_kr: "타로", name_kanji: null, display_name: "h",
        birth_date: "1990-01-01", birth_time: "09:00:00", birth_confirmed: false,
        ohaeng_main: null, raw_result_json: { city: "seoul" }, gender: "F", track: null },
@@ -1035,12 +1028,8 @@ const CHAIN = {
               birth_confirmed: 0, ohaeng_main: null, raw_result_json: null } }),
     answers: [pb(`action=bcity&id=${CITY0}`)]
   },
-  bgender: {
-    base: () => ({ user: { ...CU, name_source: "line", name_kr: "다나카" },
-      saju: { birth_date: "1990-04-12", birth_time: "12:00:00", gender: "U",
-              birth_confirmed: 0, ohaeng_main: null, raw_result_json: { city: CITY0 } } }),
-    answers: [pb("action=bgender&v=M"), pb("action=bgender&v=F"), pb("action=bgender&v=U")]
-  },
+  /* bgender 段は削除（지시서⑱）── 도시를 답하면 그대로 요약 확인
+     (birth)로 간다. bplace 의 전환 검사가 그 연결을 실측한다. */
   birth: {
     base: () => ({ user: { ...CU, name_source: "web", name_kanji: "田中", name_kr: "다나카" },
       saju: { birth_date: "1990-04-12", birth_time: null, gender: "U",
@@ -1212,6 +1201,21 @@ await acheck("ONBOARD_COLUMNS を全経路が運ぶ ── 欠けは undefined �
 
 /* ================================================================== */
 head("[直接流入の 4 段]  判別子を守る・data を信じない（리뷰 수정 5）");
+
+check("オンボーディングはどこでも性別を訊かない（지시서⑱）", () => {
+  /* privacy の目的（大運の計算に将来用いる）が消えたので、目的の
+     無い個人情報を受け取らない。質問・保存の両方が無いことを見る ──
+     古いボタンの bgender postback は**受けるが保存しない**（黙殺すると
+     無反応になるため followUp で受け止める）。 */
+  const ob = stripComments(read("server/lib/onboarding.mjs"));
+  assert(!/askGender/.test(ob), "askGender が残っています");
+  assert(!/"bgender"/.test(ob), "STEPS / PENDING に bgender が残っています");
+  assert(!/性別を教えて/.test(read("server/lib/onboarding.mjs")), "性別の質問文面が残っています");
+  const pb2 = stripComments(read("server/lib/handlers/postback.mjs"));
+  const bg = pb2.match(/if \(action === "bgender"\)[\s\S]*?\n  }/)[0];
+  assert(!/saveSaju|gender:/.test(bg), "bgender が保存しています ── 書く経路は 1 本も残さない");
+  return "訊かない・書かない（古いボタンは followUp で受け止め）";
+});
 
 check("チェーンの途中で ohaeng_main を書く経路が無い（不変式）", () => {
   /* ohaeng_main の空白が「サイト診断を通っていない」の判別子。

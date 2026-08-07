@@ -792,11 +792,12 @@ await acheck("gender の ENUM は 4 種（005）── コードの白リスト�
   const schemaEnum = SCHEMA.match(/gender\s+ENUM\(([^)]*)\)/)[1];
   assert(!schemaEnum.includes("'N'"),
     "schema.sql を直接書き換えています（既にデータのある表には効きません）");
-  const pb = read("server/lib/handlers/postback.mjs");
-  assert(pb.includes(`["M", "F", "U", "N"]`), "postback の白リストが 4 種ではありません");
+  /* ⑱ 이후 postback 은 gender 를 아예 저장하지 않는다（verify-onboarding
+     이 감시）── 화이트리스트 대조는 남은 유일한 쓰기 인접부인 link 만。
+     005 는 본번 기왕력（이미 적용된 ENUM 확장）으로서 남는다。 */
   const link = read("server/lib/handlers/link.mjs");
-  assert(link.includes(`["M", "F", "U", "N"]`), "link の白リストが 4 種ではありません");
-  return "005 = M / F / U / N = 白リスト 2 か所";
+  assert(link.includes(`["M", "F", "U", "N"]`), "link の白リストが ENUM と揃っていません");
+  return "005（기왕력）= link 白リスト";
 });
 
 await acheck("users.setStatus も ENUM の外を拒む", async () => {

@@ -2,7 +2,7 @@
 
 작성: 2026-08-03 / 선행: [research.md](research.md) · [plan-fortune-content.md](plan-fortune-content.md) §11
 
-> 이 문서는 **계획**입니다. 승인 전까지 콘텐츠도 코드도 쓰지 않습니다.
+> **상태: 완료 (2026-08-07).** P4-a 렌더러 · P4-b 배치 · P4-c 원고 입고 · 자동 업로드 CI 전부 가동 중.
 
 ---
 

@@ -320,24 +320,20 @@ export async function handlePostback(conn, event,
     return { userId: user.id, action, city: city.id, replied };
   }
 
+  /* ---- bgender は受けるが、保存しない（지시서⑱）--------------------
+     性別はもう訊かない ── 段ごと削除。ただし既に送った古い画面の
+     ボタン（data は変えられない）が押されることはあるので、黙殺せず
+     followUp（いまの段の質問）で受け止める。保存はしない ── privacy
+     から性別の項目を消したので、書く経路を 1 本も残さない。 */
   if (action === "bgender") {
-    /* 「答えない」は 'N' で保存する（migrations/005・지시서⑩）。
-       'U' は「まだ訊いていない」の既定値なので、答えとして書くと
-       状態が変わらず、同じ質問が永遠に出る ── 実際に出ていた。
-       v=U を受けるのは、既に送った古いボタン（data は変えられない）
-       のため ── 意味は同じ「答えない」なので 'N' に写す。 */
-    const raw = ["M", "F", "U", "N"].includes(params.v) ? params.v : null;
-    if (!raw) return { skipped: `性別が読めません: ${params.v}`, userId: user.id };
-    const v = raw === "U" ? "N" : raw;
-    await saveSaju({ gender: v });
     const replied = await reply(token, [await followUp(conn, user.id)], send);
-    return { userId: user.id, action, gender: v, replied };
+    return { userId: user.id, action, dropped: "性別は受け取らない", replied };
   }
 
   /* 「直したい」で選んだ項目の質問をもう一度。答えの保存は各段の
      ハンドラがやり、そのあとの followUp が要約確認へ自然に戻す。 */
   if (action === "fix") {
-    const s = ["reading", "bdate", "btime", "bplace", "bgender"].includes(params.s)
+    const s = ["reading", "bdate", "btime", "bplace"].includes(params.s)
       ? params.s : null;
     if (!s) return { skipped: `直す対象が読めません: ${params.s}`, userId: user.id };
     if (s === "reading") {

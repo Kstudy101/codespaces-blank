@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-07 (우선순위·담당·근거 A〜F 재구성) / 기준 커밋: `e544921`
+최종 갱신: 2026-08-07 (D 콘텐츠 입고·자동 업로드 완료 반영) / 기준 커밋: `e544921`
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -17,10 +17,12 @@
 - 결제(선불 횟수권)는 **코드 완성, 의도적으로 잠겨 있음** — §3
 - 관문(자동 검증) **19종 전부 통과** + smoke 29항목 (migrate 2회 연속 검사 포함)
 - 사이드 메뉴 개편([docs/plan-side-menu.md](docs/plan-side-menu.md)) — **구현·관문 완료** (B2)
+- 콘텐츠 입고·자동 업로드 — **서버 반영 완료** (D1·D1b·D1c·D2, 2026-08-07 대표 확인).
+  private repo → FTPS → UAPI Deploy → `.cpanel.yml` seed 전 경로 가동 ([plan-content-ci](docs/plan-content-ci.md))
 
 **권장 진행 순서 (한 줄).**
-A1 원고 배치 → A2 온보딩 라이브 → (병행) A4 profile 결정 / A5 결제값 → A3 Stripe
-→ B1 profile 구현 → C 결제 오픈 → D 본원고·퀴즈 입고 → E 조건 도래 시 라이브 확인.
+A2 온보딩 라이브 → (병행) A4 profile 결정 / A5 결제값 → A3 Stripe
+→ B1 profile 구현 → C 결제 오픈 → D3 퀴즈 원고 → E 조건 도래 시 라이브 확인.
 
 열 공통: **ID** / **작업** / **담당**(`대표`·`개발`·`조건대기`) / **근거**.
 
@@ -28,9 +30,7 @@ A1 원고 배치 → A2 온보딩 라이브 → (병행) A4 profile 결정 / A5 
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **A0** | 원고 전용 FTP 계정 생성 + 탈출 시험 | 대표 | [plan-upload-content](docs/plan-upload-content.md) · **지시서⑮ §9-2**. A·B 코드는 공개 repo 에 반영됨 — 계정만 있으면 FTPS→`deploy-server` 로 seed 까지 |
-| **A1** | 중급·고급 1〜3일 + `fortune-lines.json` 서버 배치 | 대표 | A0 후 `bash tools/upload-content.sh …` (없으면 File Manager) → `seed --check` → dry-run 3통. 저장소에 원고 없음 |
-| **A2** | 코스 선택 온보딩 라이브 검증 | 대표 | [docs/live-check-line-onboarding.md](docs/live-check-line-onboarding.md). `SALES_MODE` 미설정. A1 후가 바람직 |
+| **A2** | 코스 선택 온보딩 라이브 검증 | 대표 | [docs/live-check-line-onboarding.md](docs/live-check-line-onboarding.md). `SALES_MODE` 미설정 |
 | **A3** | Stripe 검증 (테스트 키·`SALES_MODE=test`·`SALES_TEST_USERS` → 3케이스) | 대표 | [docs/plan-journey.md](docs/plan-journey.md) §4. 코드 배포 완료 (`e1f3c9f`) |
 | **A4** | gender 를 대운에 반영할지 **1건만** — (가)전면/(나)LINE만/(다)현행유지 | 대표 | [docs/plan-profile.md](docs/plan-profile.md) **§6 결정 자료**. privacy 문안은 `c11242f` 로 이미 게시됨. **「반영」은 스위치가 아니라 대운 신규 구현** (§6-2) |
 | **A5** | 결제 오픈용 값 3개 (`TOKUSHOHO_URL` / `REFUND_POLICY` / `RICHMENU_IMAGE`) | 대표 | 없으면 가격표 안 열림 — 아래 §3 |
@@ -52,14 +52,10 @@ A1 원고 배치 → A2 온보딩 라이브 → (병행) A4 profile 결정 / A5 
 | **C3** | 리치메뉴 등록 (`setup-richmenu.mjs`) | 대표 | §3 · `RICHMENU_IMAGE` |
 | **C4** | Stripe 테스트(A3) 후 실판매 모드 판단 | 대표 | A3 · [plan-journey](docs/plan-journey.md) §4 |
 
-### D. 콘텐츠 입고 (기능은 있으나 원고 부족)
+### D. 콘텐츠 입고 — 퀴즈만 남음
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **D1** | 중급·고급 101일 원고 (초급은 ~50일) | 대표 | A1은 체험용 1〜3일. 본편은 별도 |
-| **D1c** | 원고 배치·시드 자동화 (지시서⑮) | 대표+개발 | [plan-content-ci](docs/plan-content-ci.md). **A·B·§7 코드 완료**. private repo·Secrets·실기 = 대표 (§9 4〜6). 템플릿: `docs/content-repo-template/` |
-| **D1b** | 초급 51〜101 착수점(대조표·배정) | 개발 | [docs/plan-content-51-101.md](docs/plan-content-51-101.md) |
-| **D2** | `fortune-lines.json` | 대표 | A1에 포함. 없으면 운세만 조용히 빠짐 |
 | **D3** | 퀴즈 원고 (`quiz` 열 백필) | 대표 | [plan-quiz](docs/plan-quiz.md) · [plan-quiz-checkpoint](docs/plan-quiz-checkpoint.md) |
 
 ### E. 라이브 미검증 (코드·관문 통과, 실조건 대기)
@@ -76,9 +72,11 @@ A1 원고 배치 → A2 온보딩 라이브 → (병행) A4 profile 결정 / A5 
 ### F. 끝남 / 잠김 (혼동 방지)
 
 - **끝남**: 코스 선택 흐름, outage-billing 설계 2건, cron 3행, morning/evening 실발송, 관문 19종, 사이드 메뉴(B2),
-  원고 업로드 도구([plan-upload-content](docs/plan-upload-content.md) — 도구·관문 완료. 계정 생성·탈출 시험만 A0)
+  원고 업로드 도구([plan-upload-content](docs/plan-upload-content.md)),
+  원고 FTP 계정·탈출 시험(A0), 본편 원고·운세 JSON 서버 반영(A1·D1·D2),
+  초급 51〜101 착수점·검증 도구(D1b), 원고 CI 자동화(D1c — private repo → FTPS → deploy → seed)
 - **잠김(미완 아님)**: 결제 동선 — A5 전까지 건드리지 않음
-- **옛 계획**: [plan-p4-content.md](docs/plan-p4-content.md) 머리말은 「승인 전」이지만 렌더러·배치는 가동 중. 남은 것은 원고·운세 JSON(D)
+- **옛 계획**: [plan-p4-content.md](docs/plan-p4-content.md) — 렌더러·배치·원고 입고 전부 가동 중 (2026-08-07)
 
 > 참고: 2026-08-05 보류였던 plan-outage-billing 의 설계 2건은 **2026-08-06
 > 지시서로 승인·구현 완료** — 결제 트랜잭션·역방향 대조·재조준(아래 이력).
@@ -281,11 +279,11 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 
 | | 비고 |
 |---|---|
-| **101일 원고** | `server/content/` — 초급 약 50일치만 있고, 중급·고급은 0. 저장소에는 없음(유료물) |
-| **운세 문면** | `server/content/fortune-lines.json` — 6항목 × 5등급 = 30칸 + 십신 10. 없으면 운세만 조용히 빠짐 |
 | **특정상거래법 표기 페이지** | `tokushoho.html` 미작성 (§3 이 정해져야 씀) |
-| **퀴즈 원고** | `quiz` 열은 생겼으나(003) 원고 0건 — 백필 전까지 복습 퀴즈는 조용히 빠짐 ([docs/plan-quiz.md](docs/plan-quiz.md) §3-8) |
-| **절목 퀴즈의 원고** | 발신·채점 답장은 구현 완료 (2026-08-05, [docs/plan-quiz-checkpoint.md](docs/plan-quiz-checkpoint.md)). 30/50/75일차의 `quiz` 가 입고될 때까지 조용히 빠짐 |
+| **퀴즈 원고** | `quiz` 열 백필 전까지 복습·절목 퀴즈는 조용히 빠짐 ([docs/plan-quiz.md](docs/plan-quiz.md) §3-8, D3) |
+
+> **2026-08-07 해소:** 101일 원고·`fortune-lines.json` 은 **서버 `content/` 에 입고 완료**
+> (저장소에는 없음 — 유료물). push 시 private repo 워크플로가 FTPS → deploy → seed 까지 자동 실행.
 
 ---
 
@@ -303,13 +301,14 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | [docs/plan-audit-fixes.md](docs/plan-audit-fixes.md) | 전수 점검에서 나온 것의 수정 결과 |
 | [docs/plan-fortune-content.md](docs/plan-fortune-content.md) | 운세 콘텐츠 확장 (사이트 쪽) |
 | [docs/plan-fortune-daily.md](docs/plan-fortune-daily.md) | 운세 배신 |
-| [docs/plan-p4-content.md](docs/plan-p4-content.md) | 원고 입고 |
+| [docs/plan-p4-content.md](docs/plan-p4-content.md) | 원고 입고 — 완료 (2026-08-07) |
+| [docs/plan-content-ci.md](docs/plan-content-ci.md) | 원고 CI 자동화 — 완료 (D1c) |
 | [docs/plan-deploy-server.md](docs/plan-deploy-server.md) | 배신 서버 배포 절차와 결과 (2026-08-04) |
 | [docs/plan-deploy-hang.md](docs/plan-deploy-hang.md) | 배포 중 npm ci 사고의 경위와 수정 |
 | [docs/live-check-line-onboarding.md](docs/live-check-line-onboarding.md) | 코스 선택 온보딩 라이브 검증 (A2) |
 | [docs/plan-profile.md](docs/plan-profile.md) | 프로필 편집 — 승인 대기 (A4→B1) |
 | [docs/plan-side-menu.md](docs/plan-side-menu.md) | 사이드 메뉴 개편 — 완료 (B2) |
-| [docs/plan-content-51-101.md](docs/plan-content-51-101.md) | 초급 51〜101 착수점 (D1b) |
+| [docs/plan-content-51-101.md](docs/plan-content-51-101.md) | 초급 51〜101 착수점 — 완료 (D1b) |
 | [docs/system-overview.txt](docs/system-overview.txt) | 시스템 전반 |
 
 ---
@@ -350,6 +349,7 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 
 | 커밋 | 내용 |
 |---|---|
+| (STATUS) | **D 콘텐츠 입고 완료** — 본편 원고·`fortune-lines.json` 서버 반영, private repo CI(FTPS→deploy→seed) 가동 확인. A0·A1·D1·D1b·D1c·D2 → §F |
 | `0f94fee` | 원고 전용 FTP 계정과 `tools/upload-content.sh` (지시서⑬) — 전권 토큰 대신 `content/` 에 갇힌 계정 하나로. FTPS 강제·비밀번호 비노출·삭제 없음·크기 대조. `verify-server` +9 (84→93), 변이 시험 8종 전부 검출. [plan-upload-content](docs/plan-upload-content.md) |
 | (§2) | 코스 선택을 온보딩 말미에 — track 단계·trackpick(판매 게이트 밖)·즉시 1일차·체험 중 기한예고 억제·trial_end 신설(004)·askCourse pick 변형. C2 연동 안내 2건(7880092)과 같은 배포 |
 | `db20b17` | 아침 배치 장애 대응(승인 C=A+B) — failed 로 남은 확보 완료일을 advanceDay 없이 재조준(retryKey 동일) + `--not-after` 배송 창 상한. verify-push 48항목 (관문 580) |

@@ -3291,10 +3291,10 @@ function linkFields(b){
     { key:'rawResult',   label:'今日の診断結果',
       value:{ zodiac: state.zodiac || null, ohaeng: state.ohaengKo || null,
               city: b.city || null, hanjaEum: state.hanjaEum || null },
-      shown:`干支・五行・出生地（${city || '未選択'}）・漢字の読み` },
-    /* この画面は性別を訊いていない。訊いていないものは送らないので、
-       画面にも出さない（label を持たせない）。 */
-    { key:'gender',      label:null,               value:'U',        shown:null }
+      shown:`干支・五行・出生地（${city || '未選択'}）・漢字の読み` }
+    /* gender は送らない（지시서⑱・2026-08-07）。訊いていない値を
+       送る道自体を閉じた ── サーバー側は欠けを 'U'（未質問）で
+       受けるので、送らないことが正しい形。 */
   ];
 }
 

@@ -3,10 +3,9 @@
 작성: 2026-08-07 / 조사: [research-content-ci.md](research-content-ci.md)  
 **승인: 작업지시서 ⑮** (2026-08-06 대표, 기준 `c0952b3`)
 
-> **상태: 단계 A·B·§7 코드 완료. 대표가 자동 seed 확인 완료 (2026-08-07).**  
-> private repo·Secrets·실기(§9 4〜6)는 필요 시 이어가면 됨.
+> **상태: 완료 (2026-08-07).** 단계 A·B·§7 코드 + private repo·Secrets·실기(§9 4〜6) + 서버 seed 확인까지 끝.
 
-관련: STATUS A0·A1·D1 / [plan-upload-content](plan-upload-content.md) / [plan-deploy-auto](plan-deploy-auto.md)  
+관련: STATUS §F (A0·A1·D1·D1b·D1c·D2 완료) / [plan-upload-content](plan-upload-content.md) / [plan-deploy-auto](plan-deploy-auto.md)  
 템플릿: [content-repo-template/](content-repo-template/)
 
 ---
@@ -29,11 +28,11 @@
 | # | 담당 | 내용 | 상태 |
 |---|---|---|---|
 | 1 | 개발 | §3 quiz `IF(VALUES(quiz) IS NULL, …)` + 관문 + 보존 로그 | [x] |
-| 2 | 대표 | 지시서⑬ FTP 계정 (A0) | 대표 |
+| 2 | 대표 | 지시서⑬ FTP 계정 (A0) | [x] |
 | 3 | 개발 | §4 `.cpanel.yml` `--check` → seed, 빈 content 성공 | [x] |
-| 4 | 대표 | private repo + §6-2 Secrets 6개 | 대표 |
+| 4 | 대표 | private repo + §6-2 Secrets 6개 | [x] |
 | 5 | 개발 | §5-2 워크플로 템플릿 (`docs/content-repo-template/`) | [x] 템플릿 |
-| 6 | 대표 | 원고 1개로 전 경로 시험 (§10-3) | 대표 |
+| 6 | 대표 | 원고 1개로 전 경로 시험 (§10-3) | [x] |
 | — | 개발 | §7 바이트 검사 (`checkManuscriptBytes`) | [x] |
 | — | 개발 | `tools/trigger-chemi-deploy.sh` (cpanel.sh 만 사용) | [x] |
 

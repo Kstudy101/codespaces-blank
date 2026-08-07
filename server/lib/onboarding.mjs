@@ -57,7 +57,7 @@ import { listByUser } from "./repo/entitlements.mjs";
    済んだ人が「始める準備のできた人」で、その前に挟むと確認と順序が
    混ざる。 */
 export const STEPS = Object.freeze(
-  ["name", "reading", "bdate", "btime", "bplace", "bgender", "birth", "track"]);
+  ["name", "reading", "bdate", "btime", "bplace", "birth", "track"]);
 
 /* 出生地。fortune.mjs が読む唯一の場所（raw_result_json.city）。 */
 export function cityOf(u) {
@@ -136,8 +136,12 @@ const PENDING = Object.freeze({
   btime:   (u) => !u.ohaeng_main && !!u.birth_date
                   && u.birth_time === null && !timeUnknown(u) && !cityOf(u),
   bplace:  (u) => !u.ohaeng_main && !!u.birth_date && !cityOf(u),
-  bgender: (u) => !u.ohaeng_main && !!cityOf(u)
-                  && u.gender === "U" && !u.birth_confirmed,
+  /* 性別はもう訊かない（지시서⑱・2026-08-07）。privacy が掲げた目的
+     （大運の計算に将来用いる）が消えたので、目的の無い個人情報を
+     受け取り続けない。段ごと消えたので、⑩の「答えない」ループも
+     質問ごと消滅。gender 列は参照が多いので残す ── 書く経路が無い。
+     bplace の次は birth（要約確認）── 都市を選ぶと bplace が偽になり
+     birth が真になるので、繋ぎ直しは要らない（관문이 실측）。 */
 
   /* 2. 生年月日の確定。サイト経由は「ご本人のものですか」、
      直接流入は要約確認（全項目を 1 画面 ── 決定 2-2）。
@@ -555,34 +559,13 @@ export function askBirthCity(tzGroup, cityList) {
   };
 }
 
-export function askGender() {
-  return {
-    type: "text",
-    text: [
-      "性別を教えてください。",
-      "（現在は保存のみで、運勢の計算にはまだ使っていません。",
-      "　「答えない」も選べます）"
-    ].join("\n"),
-    quickReply: { items: [
-      { type: "action", action: { type: "postback", label: "男性",
-          data: "action=bgender&v=M", displayText: "男性" } },
-      { type: "action", action: { type: "postback", label: "女性",
-          data: "action=bgender&v=F", displayText: "女性" } },
-      /* 「答えない」は v=N（migrations/005）。'U' は「未質問」の既定値で、
-         答えとして保存すると状態が変わらず同じ質問が出続けた（지시서⑩）。
-         古いボタンの v=U は postback 側が 'N' に写して受ける。 */
-      { type: "action", action: { type: "postback", label: "答えない",
-          data: "action=bgender&v=N", displayText: "答えない" } }
-    ] }
-  };
-}
+/* askGender は削除（지시서⑱）── 訊かないので、訊く文面も持たない。 */
 
 /* 要約確認（決定 2-2）。直接流入の締め ── 全項目を 1 画面に並べ、
    「これで始めます」で birth_confirmed が立つ。項目ごとに再確認
    しない代わりの、唯一のまとめて見る場所。 */
 export function summaryConfirm(u = {}, cityList = []) {
   const city = cityList.find((c) => c.id === cityOf(u));
-  const g = { M: "男性", F: "女性", U: "答えない" }[u.gender] || "答えない";
   return {
     type: "text",
     text: [
@@ -592,7 +575,6 @@ export function summaryConfirm(u = {}, cityList = []) {
       `　生年月日　${String(u.birth_date || "").slice(0, 10)}`,
       `　時刻　　　${u.birth_time ? String(u.birth_time).slice(0, 5) : "わからない（三柱で占います）"}`,
       `　出生地　　${city ? city.ja : "（未選択）"}`,
-      `　性別　　　${g}`,
       "",
       "この内容で始めてよろしいですか？"
     ].join("\n"),
@@ -614,8 +596,7 @@ export function fixPicker() {
       { label: "名前", data: "action=fix&s=reading", displayText: "名前を直します" },
       { label: "生年月日", data: "action=fix&s=bdate", displayText: "生年月日を直します" },
       { label: "時刻", data: "action=fix&s=btime", displayText: "時刻を直します" },
-      { label: "出生地", data: "action=fix&s=bplace", displayText: "出生地を直します" },
-      { label: "性別", data: "action=fix&s=bgender", displayText: "性別を直します" }
+      { label: "出生地", data: "action=fix&s=bplace", displayText: "出生地を直します" }
     ])
   };
 }
@@ -643,7 +624,6 @@ export async function messageForStep(step, u = {}, conn = null) {
   if (step === "bdate")   return askBirthDate();
   if (step === "btime")   return askBirthTime();
   if (step === "bplace")  return askBirthPlace();
-  if (step === "bgender") return askGender();
   if (step === "birth") {
     /* サイト経由（ohaeng_main あり）は従来の「ご本人のものですか」。
        直接流入は要約確認 ── birth_confirmed の意味はどちらも同じ。

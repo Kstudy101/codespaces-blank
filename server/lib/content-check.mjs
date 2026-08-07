@@ -18,8 +18,11 @@
      ・単語が 3 語でない。2 通目の見た目がその日だけ崩れる
      ・四柱（{OHAENG}/{ZODIAC}）を本文に使う。LINE から直接来た人には
        値が無く、その日で講座が**永久に止まる**（PROBES の 3 人目）
-     ・説明（grammar_tip_kr）に差し込み口。renderDay は tip を
-       fillSlots に通さないので、{NAME_EUN} が文字のまま届く
+     ・説明（grammar_tip_kr）・単語（vocab_3）・運勢の一言（fortune_bridge）・
+       クイズ（quiz）に差し込み口。この 4 つは fillSlots を一度も通らず、
+       文字どおり画面に出る ── {NAME_EUN} も {OHAENG_GA} も同じ扱い
+       （2026-08-07 대표 승인。SQL3(A) の指摘で fortune_bridge/quiz の
+       OHAENG/ZODIAC が漏れていたことに気づいた）
 
    どれも 1 日ぶんを見ている限りは気づける。101 日を通しで
    見るのが難しいだけなので、機械に数えさせる。
@@ -146,8 +149,9 @@ export function checkDay(d, seen = new Set()) {
     voc.forEach((w, i) => {
       if (!w?.kr) at(`単語 ${i + 1}: kr がありません`);
       if (!w?.meaning) at(`単語 ${i + 1}: meaning（日本語）がありません`);
-      if (w?.kr && ANY_SLOT.test(w.kr)) at(`単語 ${i + 1}: 単語に差し込み口は使えません`);
-      ANY_SLOT.lastIndex = 0;
+      /* renderDay は vocab_3 を fillSlots に通さない（そのまま push）。
+         {NAME} も {OHAENG_GA} も同じく文字のまま届く。 */
+      if (w?.kr && ANY_BRACE.test(w.kr)) at(`単語 ${i + 1}: 単語に差し込み口は使えません`);
     });
   }
 
@@ -176,15 +180,19 @@ export function checkDay(d, seen = new Set()) {
      無くてよい。あるなら kr が要る（ja は訳なので任意）。
      ここに差し込み口を許さないのは、運勢の文は名前を主語に
      しないため ── 許すと「다나카는 재물운이…」のような、
-     占いの文としては不自然な形が入りうる。 */
+     占いの文としては不自然な形が入りうる。
+
+     ★ NAME だけでなく全部。fortuneSection（fortune-text.mjs）は
+     bridge.kr を fillSlots に通さず、そのまま文字列へ push する ──
+     {OHAENG_GA} と書いても値に置き換わらず、その 9 文字が利用者の
+     画面にそのまま出る（2026-08-07、SQL3(A) の指摘で発覚）。 */
   const fb = d.fortune_bridge;
   if (fb !== undefined && fb !== null) {
     if (typeof fb !== "object" || Array.isArray(fb)) {
       at("fortune_bridge は {kr, ja} の形にしてください");
     } else {
       if (!fb.kr) at("fortune_bridge に kr がありません");
-      if (fb.kr && ANY_SLOT.test(fb.kr)) at("fortune_bridge に差し込み口は使えません");
-      ANY_SLOT.lastIndex = 0;
+      if (fb.kr && ANY_BRACE.test(fb.kr)) at("fortune_bridge に差し込み口は使えません");
       if (fb.kr && ODD_CHAR.test(fb.kr)) at("fortune_bridge に見慣れない文字が混ざっています");
     }
   }
@@ -212,10 +220,12 @@ export function checkDay(d, seen = new Set()) {
           at(`quiz の answer が選択肢の範囲外です: ${JSON.stringify(qz.answer)}（0〜${qz.choices.length - 1}）`);
         }
       }
-      /* 差し込み口は許さない。クイズは全員に同じ文面で届く ──
-         名前入りにすると、正解の文字列が人ごとに変わって採点できない。 */
-      if (ANY_SLOT.test(JSON.stringify(qz))) at("quiz に差し込み口は使えません");
-      ANY_SLOT.lastIndex = 0;
+      /* 差し込み口は許さない（NAME だけでなく全部）。クイズは
+         renderReviewQuiz/renderCheckpointQuiz のどちらも fillSlots を
+         通さず、question/choices をそのまま送る ── {OHAENG_GA} を
+         書いても文字のまま届く。名前入りは別の理由でも不可: 正解の
+         文字列が人ごとに変わって採点できない。 */
+      if (ANY_BRACE.test(JSON.stringify(qz))) at("quiz に差し込み口は使えません");
     }
   }
 

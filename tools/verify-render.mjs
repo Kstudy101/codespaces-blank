@@ -599,5 +599,31 @@ check("説明に差し込み口が無ければ requires_name_slot は本文だ�
   return "本文だけを見る";
 });
 
+check("vocab_3・fortune_bridge・quiz の差し込み口禁止は NAME だけでなく全部（2026-08-07）", () => {
+  /* この 3 つは fillSlots を一度も通らない ── {NAME} も {OHAENG_GA} も
+     区別なく文字のまま画面に出る。SQL3(A) の指摘で、以前は {NAME}
+     だけを見ていて OHAENG/ZODIAC が漏れていたことに気づいた。 */
+  const base = { day_number: 60, grammar_point: "-마다", grammar_tip_kr: "〜ごとに。",
+    requires_name_slot: false,
+    dialogue_template: [{ kr: "안녕하세요.", ja: "こんにちは。" },
+                         { kr: "반가워요.", ja: "はじめまして。" }] };
+
+  const vocabBad = checkDay({ ...base,
+    vocab_3: [{ kr: "{OHAENG} 좋다", meaning: "良い" }, { kr: "봄", meaning: "春" }, { kr: "가을", meaning: "秋" }] });
+  assert(vocabBad.some((m) => m.includes("単語") && m.includes("差し込み口")), vocabBad.join(" / "));
+
+  const fbBad = checkDay({ ...base,
+    vocab_3: [{ kr: "봄", meaning: "春" }, { kr: "가을", meaning: "秋" }, { kr: "겨울", meaning: "冬" }],
+    fortune_bridge: { kr: "{ZODIAC_EUN} 기운이 좋아요." } });
+  assert(fbBad.some((m) => m.includes("fortune_bridge に差し込み口は使えません")), fbBad.join(" / "));
+
+  const quizBad = checkDay({ ...base,
+    vocab_3: [{ kr: "봄", meaning: "春" }, { kr: "가을", meaning: "秋" }, { kr: "겨울", meaning: "冬" }],
+    quiz: { question: "{OHAENG} 다음 조사는?", choices: ["이", "가"], answer: 0 } });
+  assert(quizBad.some((m) => m.includes("quiz に差し込み口は使えません")), quizBad.join(" / "));
+
+  return "vocab_3 / fortune_bridge / quiz 全部で検出";
+});
+
 console.log(`\n${fails.length ? "✗" : "✓"} ${pass + fails.length} 項目中 ${pass} 件成功`);
 if (fails.length) { fails.forEach((f) => console.log(`  ✗ ${f}`)); process.exit(1); }

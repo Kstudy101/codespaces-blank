@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-06 (착수 대기 4건 §3·§4 배포 후) / 기준 커밋: `db20b17`
+최종 갱신: 2026-08-07 (gender·대운 호환성 검토) / 기준 커밋: `e544921`
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -30,7 +30,12 @@
 3. **Stripe 검증** — 테스트 키·SALES_MODE=test·SALES_TEST_USERS 투입 후
    3케이스 (결제 경로 보강 3건은 2026-08-06 배포 완료 — 아래 이력)
 4. **plan-profile 의 전제 2건** — gender 대운 반영 ①/② + privacy 문안
-   ([docs/plan-profile.md](docs/plan-profile.md) 승인 대기)
+   ([docs/plan-profile.md](docs/plan-profile.md) 승인 대기).
+   **호환성 검토 완료** (2026-08-07): [docs/research-compat.md](docs/research-compat.md)
+   — 코드는 이미 ②(저장만), 대운 함수 자체가 없음(①=신규 구현).
+   privacy 초안은 `c11242f` 로 게시됐으나 005 이후
+   「答えない→未回答のまま」한 줄만 사실과 어긋남. plan-profile 의
+   「migration 004」는 옛것(004=trial_end, 005=gender N)
 5. **§3의 값 3개** (TOKUSHOHO_URL 등) — 그게 없으면 결제가 안 열립니다
 
 > 참고: 2026-08-05 보류였던 plan-outage-billing 의 설계 2건은 **2026-08-06
@@ -238,6 +243,7 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | [docs/research.md](docs/research.md) | 저장소 전체가 어떻게 동작하는가 (2026-08-03) |
 | [docs/research-audit.md](docs/research-audit.md) | 전수 점검 결과 (2026-08-04) |
 | [docs/research-line-flow.md](docs/research-line-flow.md) | LINE 연동 요구사항별 실기 검증 |
+| [docs/research-compat.md](docs/research-compat.md) | gender↔대운↔privacy↔웹/LINE 호환성 (2026-08-07) |
 | [docs/plan-billing.md](docs/plan-billing.md) | 선불 횟수권 설계·구현 결과 |
 | [docs/plan-audit-fixes.md](docs/plan-audit-fixes.md) | 전수 점검에서 나온 것의 수정 결과 |
 | [docs/plan-fortune-content.md](docs/plan-fortune-content.md) | 운세 콘텐츠 확장 (사이트 쪽) |

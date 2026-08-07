@@ -1,5 +1,7 @@
 # plan-quiz-checkpoint.md — 절목 퀴즈(30/50/75)의 발신
 
+> STATUS: **D3** (원고) · **E2** (절목 라이브) — [STATUS.md](../STATUS.md) §0.
+
 작성: 2026-08-05 / 근거: [research-quiz.md](research-quiz.md) + 본문 §1 / 기준 커밋: `dcbafe7`
 
 > **상태: 구현 완료 (2026-08-05).** §4는 대표님 승인으로 **(가)** 확정.

@@ -16,6 +16,10 @@
      ・requires_name_slot と中身の食い違い。true なのに名前を使って
        いない日は、名前の無い人へ無用な登録のお願いが飛ぶ
      ・単語が 3 語でない。2 通目の見た目がその日だけ崩れる
+     ・四柱（{OHAENG}/{ZODIAC}）を本文に使う。LINE から直接来た人には
+       値が無く、その日で講座が**永久に止まる**（PROBES の 3 人目）
+     ・説明（grammar_tip_kr）に差し込み口。renderDay は tip を
+       fillSlots に通さないので、{NAME_EUN} が文字のまま届く
 
    どれも 1 日ぶんを見ている限りは気づける。101 日を通しで
    見るのが難しいだけなので、機械に数えさせる。
@@ -26,6 +30,10 @@ const TOTAL_DAYS = 101;
 
 const ANY_SLOT = /\{(NAME(?:_[A-Z]+)?)\}/g;
 
+/* 名前だけでなく五行・干支も含めた「差し込み口らしきもの」全部。
+   g を付けない ── test() を続けて呼ぶので lastIndex を持たせない。 */
+const ANY_BRACE = /\{[A-Z_]+\}/;
+
 /* パッチムのある名前と無い名前。両方で組み立ててみる ──
    片方でしか試さないと、助詞の分岐の片側が一度も動かない。 */
 const PROBES = [
@@ -34,7 +42,31 @@ const PROBES = [
   { name_kr: "켄", name_reading: "けん",
     ohaeng_main: "목", raw_result_json: { zodiac: "닭" } },      /* 받침あり */
   { name_kr: "사쿠라", name_reading: "さくら",
-    ohaeng_main: "화", raw_result_json: { zodiac: "돼지" } }      /* 받침なし */
+    ohaeng_main: "화", raw_result_json: { zodiac: "돼지" } },     /* 받침なし */
+
+  /* ---- LINE から直接友だち追加した人（2026-08-07 대표 승인）----------
+     名前は在るが、四柱は**永久に**空。onboarding.mjs が ohaeng_main の
+     不在を「サイト診断を通っていない人」の判別そのものに使っているので、
+     この人に四柱が入る道はコードのどこにも無い。
+
+     この人で組み立てられない日を入れると、その人の講座はそこで
+     永久に止まる:
+
+       renderDay が null を返す
+         → push-daily はそれを「名前が無い人」と読む
+         → 日を進めない（同じ日に留まる）
+         → 「お名前を登録してください」を 2 回送って、あとは黙る
+
+     名前はもう在るので、言われたとおりにしても何も変わらない。
+     四柱はサイト診断からしか入らないが、案内はその話をしない ──
+     本人には出口が無い。配信は止まっていない（正常に案内を送った状態）
+     ので、問い合わせが来るまで誰も気づかない。
+
+     だから「初級では四柱を使わない」という規則ではなく、
+     **「四柱の無い人が読めない日は入稿できない」**として置く ──
+     規則なら人が忘れるが、これは 3 コースすべてに自動でかかる。 */
+  { name_kr: "유이", name_reading: "ゆい",
+    ohaeng_main: null, raw_result_json: {} }
 ];
 
 /* ハングル・ひらがな・カタカナ・漢字・記号のどれでもない文字を探す。
@@ -62,6 +94,21 @@ export function checkDay(d, seen = new Set()) {
 
   if (!d.grammar_point) at("grammar_point がありません");
   if (!d.grammar_tip_kr) at("grammar_tip_kr がありません");
+
+  /* --- 説明に差し込み口は使えない（2026-08-07 대표 승인）--------------
+     renderDay() は grammar_tip_kr を fillSlots に通さず、そのまま
+     積む。書くと {NAME_EUN} という文字列が利用者へそのまま届く。
+
+     下の「実際に組み立ててみる」でも落ちてはいた ── ただし
+     「差し込み口が残っています」としか言わないので、**どの欄か**が
+     分からない。51 日ぶん書き終えてから気づくと 51 日ぶん直すことに
+     なるので、欄の名前で止める。
+
+     直す先は fillSlots ではない。説明は全員に同じ文面で届くもの
+     （「同じ説明をもう一度読む」が成り立たなくなる）。 */
+  if (d.grammar_tip_kr && ANY_BRACE.test(String(d.grammar_tip_kr))) {
+    at("grammar_tip_kr に差し込み口は使えません（説明は全員に同じ文面で届きます）");
+  }
 
   /* --- 会話 --- */
   const dia = d.dialogue_template;
@@ -107,10 +154,14 @@ export function checkDay(d, seen = new Set()) {
   /* --- 名前を使うかどうかの申告と、中身が合っているか ---
      who（話者の札）は数えない。札は名前が無ければ「あなた」に
      なるので、その日を配れなくする理由にはならない。
-     本文（kr / ja）と説明だけを見る。 */
+
+     説明（grammar_tip_kr）も数えない ── 差し込み口を置けない欄に
+     なったので（上）、そこに名前が入ることはありえない。数えたままだと
+     tip に書いた日が「欄が違う」と「申告が違う」の 2 つで落ちて、
+     直す所がぼやける。本文（kr / ja）だけを見る。 */
   const bodyOnly = Array.isArray(dia)
     ? dia.map((r) => [r?.kr, r?.ja]) : [];
-  const usesName = JSON.stringify([bodyOnly, d.grammar_tip_kr]).includes("{NAME");
+  const usesName = JSON.stringify(bodyOnly).includes("{NAME");
   const declared = !!d.requires_name_slot;
   if (usesName && !declared) {
     at("名前を使っているのに requires_name_slot が false です");
@@ -181,7 +232,16 @@ export function checkDay(d, seen = new Set()) {
         at(`${probe.name_kr} の${label}で組み立てに失敗: ${e.message}`);
         continue;
       }
-      if (!msgs) { at(`${probe.name_kr} の${label}で組み立てられませんでした`); continue; }
+      if (!msgs) {
+        /* 名前は在るのに組めない ＝ 名前以外の差し込み口を使っている。
+           四柱の無い人（PROBES の 3 人目）には入る道が無いので、
+           その日は永久に止まる。理由を名指しで言う ── 「組み立てられ
+           ませんでした」だけだと、名前を入れ忘れたのかと読む。 */
+        const hint = probe.ohaeng_main ? ""
+          : "（{OHAENG}/{ZODIAC} を使っていませんか ── LINE から直接来た方には値がありません）";
+        at(`${probe.name_kr} の${label}で組み立てられませんでした${hint}`);
+        continue;
+      }
 
       const kr = probe.name_kr;
       for (const m of msgs) {

@@ -55,6 +55,8 @@
 
 ## §4 Stripe 테스트 — 착수 대기 (배포 순서)
 
+> STATUS: **A3** (실판매 판단은 **C4**) — [STATUS.md](../STATUS.md) §0.
+
 1. 이번 커밋(§1 가드) 배포 → `SALES_MODE` 미설정 = closed 확인 (실사용자 차단 실측)
 2. 대표: cPanel 환경변수에 `SALES_MODE=test` + `SALES_TEST_USERS=<대표 id>` + 테스트 키 2종
 3. 검증 경로: 가격표 → Checkout → 테스트 카드 → 웹훅 서명 → `creditPurchase` → 즉시 1일차

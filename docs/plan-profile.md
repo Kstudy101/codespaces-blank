@@ -1,5 +1,7 @@
 # plan-profile.md — 프로필 편집 페이지 + gender 신설 (지시서 §3·§4)
 
+> STATUS: **A4 → B1** — [STATUS.md](../STATUS.md) §0.
+
 작성: 2026-08-05 / 근거: [research-onboarding-gap.md](research-onboarding-gap.md) / 기준 커밋: §2 수정 커밋 뒤
 
 > **상태: 승인 대기.** 착수 전제 2건이 대표님 몫입니다:

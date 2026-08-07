@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-06 (착수 대기 4건 §3·§4 배포 후) / 기준 커밋: `db20b17`
+최종 갱신: 2026-08-07 (우선순위·담당·근거 A〜F 재구성) / 기준 커밋: `e544921`
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -16,41 +16,75 @@
   001부터 재실행되던 폭탄(2회차에 errno 1054 로 배포 정지)은 `8b12063` 로 종식
 - 결제(선불 횟수권)는 **코드 완성, 의도적으로 잠겨 있음** — §3
 - 관문(자동 검증) **19종 전부 통과** + smoke 29항목 (migrate 2회 연속 검사 포함)
+- 사이드 메뉴 개편([docs/plan-side-menu.md](docs/plan-side-menu.md)) — **구현·관문 완료** (B2)
 
-**다음에 할 일 (대표 대기).**
+**권장 진행 순서 (한 줄).**
+A1 원고 배치 → A2 온보딩 라이브 → (병행) A4 profile 결정 / A5 결제값 → A3 Stripe
+→ B1 profile 구현 → C 결제 오픈 → D 본원고·퀴즈 입고 → E 조건 도래 시 라이브 확인.
 
-1. **§1 원고 서버 배치** — 중급·고급 1〜3일 + fortune-lines.json 3파일
-   (로컬 검증 통과, File Manager 업로드 → `seed --check` → dry-run 3통은 대표 실기)
-2. **§2 코스 선택 흐름 — 구현·배포 완료 (2026-08-06 조건부 승인·수정 3건 반영)**.
-   온보딩 말미에 track 단계 — 코스를 고르면 판매 게이트 밖에서 무료 체험이
-   시작되고 즉시 1일차. 문면 2건(C2 연동 안내·C4 2일차 저녁 유도 A/B,
-   `trial_end` 타입) 포함, migrations/004 적용. **다음: 개정판
-   [docs/live-check-line-onboarding.md](docs/live-check-line-onboarding.md) 로
-   대표 라이브 검증** (SALES_MODE 미설정 그대로)
-3. **Stripe 검증** — 테스트 키·SALES_MODE=test·SALES_TEST_USERS 투입 후
-   3케이스 (결제 경로 보강 3건은 2026-08-06 배포 완료 — 아래 이력)
-4. **plan-profile 의 전제 2건** — gender 대운 반영 ①/② + privacy 문안
-   ([docs/plan-profile.md](docs/plan-profile.md) 승인 대기)
-5. **§3의 값 3개** (TOKUSHOHO_URL 등) — 그게 없으면 결제가 안 열립니다
+열 공통: **ID** / **작업** / **담당**(`대표`·`개발`·`조건대기`) / **근거**.
+
+### A. 지금 당장 (대표 실기·결정) — 코드보다 먼저
+
+| ID | 작업 | 담당 | 근거 |
+|---|---|---|---|
+| **A1** | 중급·고급 1〜3일 + `fortune-lines.json` 서버 배치 | 대표 | File Manager → `seed --check` → dry-run 3통. 저장소에 원고 없음 |
+| **A2** | 코스 선택 온보딩 라이브 검증 | 대표 | [docs/live-check-line-onboarding.md](docs/live-check-line-onboarding.md). `SALES_MODE` 미설정. A1 후가 바람직 |
+| **A3** | Stripe 검증 (테스트 키·`SALES_MODE=test`·`SALES_TEST_USERS` → 3케이스) | 대표 | [docs/plan-journey.md](docs/plan-journey.md) §4. 코드 배포 완료 (`e1f3c9f`) |
+| **A4** | plan-profile 전제 2건 — gender 대운 ①/② + privacy 문안 | 대표 | [docs/plan-profile.md](docs/plan-profile.md). 승인 전 코드 금지 |
+| **A5** | 결제 오픈용 값 3개 (`TOKUSHOHO_URL` / `REFUND_POLICY` / `RICHMENU_IMAGE`) | 대표 | 없으면 가격표 안 열림 — 아래 §3 |
+
+### B. 승인·전제 후 개발
+
+| ID | 작업 | 담당 | 근거 |
+|---|---|---|---|
+| **B1** | 프로필 편집 (`/profile` 서버 렌더 + gender 정비) | 개발 | [docs/plan-profile.md](docs/plan-profile.md). A4 승인 후 착수 |
+| **B2** | 사이드 메뉴 개편 — **완료** | 개발 | [docs/plan-side-menu.md](docs/plan-side-menu.md). `verify-pages` 15/15 |
+| **B3** | maintain 드리프트 (#3 beginner 3/0) 원인 확인 | 개발 | 라이브 검증 수동 투입분 가능성. 확인만 |
+
+### C. 결제 오픈 (의도적 잠금 해제) — A5 이후
+
+| ID | 작업 | 담당 | 근거 |
+|---|---|---|---|
+| **C1** | cPanel env 에 A5 값 3개 투입 | 대표 | §3 |
+| **C2** | `tokushoho.html` 작성 | 개발 | §6. A5·법무 문안 확정 후 |
+| **C3** | 리치메뉴 등록 (`setup-richmenu.mjs`) | 대표 | §3 · `RICHMENU_IMAGE` |
+| **C4** | Stripe 테스트(A3) 후 실판매 모드 판단 | 대표 | A3 · [plan-journey](docs/plan-journey.md) §4 |
+
+### D. 콘텐츠 입고 (기능은 있으나 원고 부족)
+
+| ID | 작업 | 담당 | 근거 |
+|---|---|---|---|
+| **D1** | 중급·고급 101일 원고 (초급은 ~50일) | 대표 | A1은 체험용 1〜3일. 본편은 별도 |
+| **D1b** | 초급 51〜101 착수점(대조표·배정) | 개발 | [docs/plan-content-51-101.md](docs/plan-content-51-101.md) |
+| **D2** | `fortune-lines.json` | 대표 | A1에 포함. 없으면 운세만 조용히 빠짐 |
+| **D3** | 퀴즈 원고 (`quiz` 열 백필) | 대표 | [plan-quiz](docs/plan-quiz.md) · [plan-quiz-checkpoint](docs/plan-quiz-checkpoint.md) |
+
+### E. 라이브 미검증 (코드·관문 통과, 실조건 대기)
+
+아침 7시·저녁 6시 실발송은 **대표 확인 완료 (2026-08-06).**
+
+| ID | 작업 | 담당 | 근거 |
+|---|---|---|---|
+| **E1** | 복습 퀴즈 (3의 배수 날) | 조건대기 | 테스트 계정 통로 통과. 실사용자 주기 |
+| **E2** | 절목 퀴즈 | 조건대기 | 30/50/75 `quiz` 입고 후 · [plan-quiz-checkpoint](docs/plan-quiz-checkpoint.md) |
+| **E3** | 기한 예고 | 조건대기 | 잔여 2일 시점 |
+| **E4** | 다중 이용자 페이지네이션 | 조건대기 | 500명 초과 시 |
+
+### F. 끝남 / 잠김 (혼동 방지)
+
+- **끝남**: 코스 선택 흐름, outage-billing 설계 2건, cron 3행, morning/evening 실발송, 관문 19종, 사이드 메뉴(B2)
+- **잠김(미완 아님)**: 결제 동선 — A5 전까지 건드리지 않음
+- **옛 계획**: [plan-p4-content.md](docs/plan-p4-content.md) 머리말은 「승인 전」이지만 렌더러·배치는 가동 중. 남은 것은 원고·운세 JSON(D)
 
 > 참고: 2026-08-05 보류였던 plan-outage-billing 의 설계 2건은 **2026-08-06
 > 지시서로 승인·구현 완료** — 결제 트랜잭션·역방향 대조·재조준(아래 이력).
-> maintain 의 드리프트 1건(#3 beginner 3/0)은 라이브 검증 수동 투입분일
-> 가능성이 높지만 확인 요망.
 
 > **해소됨 (2026-08-05, `52ac6cc`)**: 본번 crontab 에 morning/evening 이
 > 없던 문제 — 배포가 cron 3행(morning·evening 매시 / maintain 04:00 JST)을
-> 자동 등록하도록 전환했고, 배포 로그의 `crontab -l` 실측으로 3행 전부
+> 자동 등록하도록 전환했고, 배포 로그와 `crontab -l` 실측으로 3행 전부
 > 확인. 등록은 행 단위 멱등이라 중복되지 않는다. 이후 cron 은 화면이
 > 아니라 `.cpanel.yml` 이 정본이다.
-
-**아침 7시·저녁 6시 배신이 실사용자에게 정상 발송됨을 라이브 실측 (2026-08-06,
-대표 확인).** 이로써 크론 3행 실동작 / push-daily 판정 / push-evening 의 아침
-push_logs 추적 / JST 판정의 실서버 정합이 본번에서 증명됨.
-
-**아직 라이브 미검증 4항목** (코드·관문은 통과, 실발송 조건이 아직 안 옴):
-① 복습 퀴즈 — 3의 배수 날 ② 절목 퀴즈 — 30/50/75 quiz 원고 0건이라 침묵
-③ 기한 예고 — 잔여 2일 시점 ④ 다중 이용자 페이지네이션 (500명 초과 시)
 
 복습 퀴즈는 테스트 계정 라이브 검증 통과 (2026-08-05): 발신 판정·스킵
 3케이스·실발송·즉답·미학습 차단·DB 쓰기 0. 통로는 `push-daily --user=<id>`.
@@ -245,6 +279,10 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | [docs/plan-p4-content.md](docs/plan-p4-content.md) | 원고 입고 |
 | [docs/plan-deploy-server.md](docs/plan-deploy-server.md) | 배신 서버 배포 절차와 결과 (2026-08-04) |
 | [docs/plan-deploy-hang.md](docs/plan-deploy-hang.md) | 배포 중 npm ci 사고의 경위와 수정 |
+| [docs/live-check-line-onboarding.md](docs/live-check-line-onboarding.md) | 코스 선택 온보딩 라이브 검증 (A2) |
+| [docs/plan-profile.md](docs/plan-profile.md) | 프로필 편집 — 승인 대기 (A4→B1) |
+| [docs/plan-side-menu.md](docs/plan-side-menu.md) | 사이드 메뉴 개편 — 완료 (B2) |
+| [docs/plan-content-51-101.md](docs/plan-content-51-101.md) | 초급 51〜101 착수점 (D1b) |
 | [docs/system-overview.txt](docs/system-overview.txt) | 시스템 전반 |
 
 ---

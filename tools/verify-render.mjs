@@ -22,6 +22,10 @@ import {
   renderReviewAnswer, findMisplacedSlot, SLOTS, nameMissingNotice
 } from "../server/lib/render.mjs";
 import { semesterForDay, SEMESTERS, TOTAL_DAYS } from "../server/lib/repo/learning.mjs";
+/* 入稿の受け入れ条件。原稿そのものは公開リポジトリに無いが、
+   「四柱の無い人が読めない日は入れない」は差し込みの規則なので
+   この関門が見る（末尾）。 */
+import { checkDay } from "../server/lib/content-check.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -511,6 +515,88 @@ check("받침 の規則は朝と同じものを通る", () => {
     assert(!/\{[A-Z_]+\}/.test(m.text), `差し込み口が残っています: ${m.text}`);
   }
   return "켄이에요 / 아이예요";
+});
+
+/* ---- 原稿の受け入れ ── 四柱の無い人（2026-08-07 대표 승인）------------
+   ここは render そのものではなく「入稿できる形か」だが、この関門に
+   置く。守っているのが差し込みの規則そのものだからで、離すと
+   「render は通るのに配れない日」がどちらの関門からも落ちる。 */
+
+console.log("\n[原稿の受け入れ]  四柱の無い人（LINE 直接）が読めるか");
+
+const SAJU_TPL = {
+  day_number: 53,
+  grammar_point: "-와 / -과",
+  grammar_tip_kr: "どちらも〜と。書き言葉は -와/과。",
+  requires_name_slot: true,
+  dialogue_template: [
+    { kr: "{NAME_EUN} {OHAENG_GA} 좋아요.", ja: "{NAME_JP}は五行が良いです。" },
+    { kr: "저도 그래요.", ja: "わたしもそうです。" }
+  ],
+  vocab_3: [
+    { kr: "오행", meaning: "五行" },
+    { kr: "띠",   meaning: "干支" },
+    { kr: "같다", meaning: "同じだ" }
+  ]
+};
+
+check("四柱を使った日は入稿できない（その人の講座がそこで永久に止まる）", () => {
+  /* LINE から直接来た人に ohaeng_main が入る道はコードに無い。
+     入れると renderDay が null → push-daily が「名前が無い」と読んで
+     日を進めず、2 回促して黙る。名前はもう在るので出口が無い。 */
+  const bad = checkDay(SAJU_TPL);
+  assert(bad.length > 0, "{OHAENG} を使った日が通ってしまいました");
+  assert(bad.some((m) => m.includes("{OHAENG}")),
+    `理由が名指しされていません: ${bad.join(" / ")}`);
+  return bad.length + " 件";
+});
+
+check("四柱を使わない日は通る（誤検知しない）", () => {
+  /* 3 人目を足したせいで、名前だけの日まで落ちるようになっていないか。
+     ここが無いと「全部落ちる関門」でも合格に見える。 */
+  const ok = { ...SAJU_TPL, dialogue_template: [
+    { kr: "{NAME_EUN} 학생이에요.", ja: "{NAME_JP}は学生です。" },
+    { kr: "저도 그래요.",           ja: "わたしもそうです。" }
+  ] };
+  const bad = checkDay(ok);
+  assert(bad.length === 0, bad.join(" / "));
+  return "名前だけの日は通る";
+});
+
+check("説明（grammar_tip_kr）の差し込み口を欄の名前で止める", () => {
+  /* renderDay は tip を fillSlots に通さない。書くと {NAME_EUN} が
+     文字のまま届く。組み立ての検査でも落ちるが、どの欄かを言わないと
+     51 日ぶん書いてから気づくことになる。 */
+  const tip = { ...SAJU_TPL, requires_name_slot: false,
+    grammar_tip_kr: "{NAME_EUN} こう言います。",
+    dialogue_template: [
+      { kr: "안녕하세요.", ja: "こんにちは。" },
+      { kr: "저도 그래요.", ja: "わたしもそうです。" }
+    ] };
+  const bad = checkDay(tip);
+  assert(bad.some((m) => m.includes("grammar_tip_kr")),
+    `欄の名前が出ていません: ${bad.join(" / ")}`);
+  return "欄の名前で言う";
+});
+
+check("説明に差し込み口が無ければ requires_name_slot は本文だけで決まる", () => {
+  /* tip を数えたままだと、tip に書いた日が「欄が違う」と
+     「申告が違う」の 2 つで落ちて、直す所がぼやける。 */
+  const bodyOnly = { ...SAJU_TPL, requires_name_slot: false,
+    grammar_tip_kr: "どちらも〜と。",
+    dialogue_template: [
+      { kr: "안녕하세요.", ja: "こんにちは。" },
+      { kr: "저도 그래요.", ja: "わたしもそうです。" }
+    ] };
+  assert(checkDay(bodyOnly).length === 0, checkDay(bodyOnly).join(" / "));
+  /* 本文で使えば true が要る、は今までどおり。 */
+  const named = { ...bodyOnly, dialogue_template: [
+    { kr: "{NAME_EUN} 학생이에요.", ja: "{NAME_JP}は学生です。" },
+    { kr: "저도 그래요.",           ja: "わたしもそうです。" }
+  ] };
+  assert(checkDay(named).some((m) => m.includes("requires_name_slot")),
+    "本文で名前を使ったのに申告の食い違いを見ていません");
+  return "本文だけを見る";
 });
 
 console.log(`\n${fails.length ? "✗" : "✓"} ${pass + fails.length} 項目中 ${pass} 件成功`);

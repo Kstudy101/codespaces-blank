@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-06 (착수 대기 4건 §3·§4 배포 후) / 기준 커밋: `db20b17`
+최종 갱신: 2026-08-07 (컨텐츠 추가 구축 구상 — 승인 대기) / 기준 커밋: `db20b17`
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -19,6 +19,10 @@
 
 **다음에 할 일 (대표 대기).**
 
+0. **컨텐츠 추가 구축 구상** — [docs/research-content-add.md](docs/research-content-add.md) /
+   [docs/plan-content-add.md](docs/plan-content-add.md). CMS 대신
+   재고 리포트·로컬 일괄 검사·CONTENT_DIR 정렬(얇은 하네스) 권고.
+   **결정 3건·승인 전 코드 없음.** 본선 집필·입고는 아래 §1.
 1. **§1 원고 서버 배치** — 중급·고급 1〜3일 + fortune-lines.json 3파일
    (로컬 검증 통과, File Manager 업로드 → `seed --check` → dry-run 3통은 대표 실기)
 2. **§2 코스 선택 흐름 — 구현·배포 완료 (2026-08-06 조건부 승인·수정 3건 반영)**.
@@ -243,6 +247,8 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | [docs/plan-fortune-content.md](docs/plan-fortune-content.md) | 운세 콘텐츠 확장 (사이트 쪽) |
 | [docs/plan-fortune-daily.md](docs/plan-fortune-daily.md) | 운세 배신 |
 | [docs/plan-p4-content.md](docs/plan-p4-content.md) | 원고 입고 |
+| [docs/research-content-add.md](docs/research-content-add.md) | 컨텐츠 추가 경로 현황 (2026-08-07) |
+| [docs/plan-content-add.md](docs/plan-content-add.md) | 컨텐츠 추가 구축 구상 — 승인 대기 |
 | [docs/plan-deploy-server.md](docs/plan-deploy-server.md) | 배신 서버 배포 절차와 결과 (2026-08-04) |
 | [docs/plan-deploy-hang.md](docs/plan-deploy-hang.md) | 배포 중 npm ci 사고의 경위와 수정 |
 | [docs/system-overview.txt](docs/system-overview.txt) | 시스템 전반 |

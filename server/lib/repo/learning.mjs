@@ -308,11 +308,22 @@ export async function upsertTemplate(conn, {
        vocab_3            = VALUES(vocab_3),
        fortune_bridge     = VALUES(fortune_bridge),
        requires_name_slot = VALUES(requires_name_slot),
-       quiz               = VALUES(quiz)`,
+       /* quiz が無い原稿で再入稿すると VALUES(quiz)=NULL になり、
+          既存のクイズを黙って消していた（指示書⑮ §3）。
+          NULL のときは列を触らない。原稿に quiz があるときだけ更新。 */
+       quiz               = IF(VALUES(quiz) IS NULL, quiz, VALUES(quiz))`,
     [track, d, semesterForDay(d), grammarPoint, nn(grammarTipKr),
      toJson(dialogueTemplate), toJson(vocab3), toJson(fortuneBridge),
      requiresNameSlot ? 1 : 0, toJson(quiz)]);
   return getTemplate(conn, track, d);
+}
+
+/* 既に quiz が入っている日。seed が「保全した件数」を数えるため
+   （指示書⑮ §3 — 静かに消えるのが事故の本質だった）。 */
+export async function listQuizKeys(conn) {
+  const rows = await all(conn,
+    `SELECT track, day_number FROM content_templates WHERE quiz IS NOT NULL`);
+  return new Set(rows.map((r) => `${r.track}:${r.day_number}`));
 }
 
 /* quiz 列の形。壊れていれば null ── 送らないだけで、本編は届く。

@@ -56,7 +56,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { getPool, closePool } from "../lib/db.mjs";
 import { learning } from "../lib/repo/index.mjs";
-import { checkAll } from "../lib/content-check.mjs";
+import { checkAll, checkManuscriptBytes } from "../lib/content-check.mjs";
 
 const SERVER_DIR  = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CONTENT_DIR = path.join(SERVER_DIR, "content");
@@ -86,6 +86,8 @@ function load() {
   let list = files.map((f) => path.resolve(f));
   if (!list.length) {
     if (!existsSync(CONTENT_DIR)) {
+      /* 配備（.cpanel.yml）は content/ の有無でこちらを呼ばない。
+         手で --check したときにだけここに来る。 */
       console.error(`✗ ${CONTENT_DIR} がありません。`);
       console.error("  原稿は公開リポジトリに置いていないので、別に用意してください。");
       process.exit(1);
@@ -93,21 +95,46 @@ function load() {
     list = readdirSync(CONTENT_DIR).filter((f) => f.endsWith(".json"))
       .sort().map((f) => path.join(CONTENT_DIR, f));
   }
-  if (!list.length) { console.error("✗ 読める原稿がありません"); process.exit(1); }
+  /* 指示書⑮ §4-3: ファイル 0 件は配備失敗にしない（新規・コードだけの配備）。
+     漁ったときだけ 0 で終わる。名指しで渡したのに 0 なら失敗のまま。 */
+  if (!list.length) {
+    if (scanned) {
+      console.log("  原稿 JSON がありません — シードを飛ばします");
+      return null;
+    }
+    console.error("✗ 読める原稿がありません");
+    process.exit(1);
+  }
 
   const days = [];
   for (const f of list) {
+    const label = path.basename(f);
+    const buf = readFileSync(f);
     let parsed;
     try {
-      parsed = JSON.parse(readFileSync(f, "utf8"));
+      /* まず UTF-8 / mojibake だけ（本文は出さない）。原稿判定のあとで
+         ハングル・日本語の実在も見る（指示書⑮ §7）。 */
+      const encLight = checkManuscriptBytes(buf, label, { requireScripts: false });
+      if (encLight.length) {
+        console.error(`✗ ${encLight.length} 件（バイト検査）。1 件も入れていません。\n`);
+        for (const p of encLight) console.error(`  ・${p}`);
+        process.exit(1);
+      }
+      parsed = JSON.parse(buf.toString("utf8"));
     } catch (e) {
-      console.error(`✗ ${path.basename(f)} が JSON として読めません: ${e.message}`);
+      console.error(`✗ ${label} が JSON として読めません: ${e.message}`);
       process.exit(1);
     }
     const got = Array.isArray(parsed) ? parsed : parsed.days;
     if (!Array.isArray(got)) {
-      if (scanned) { console.log(`  ${path.basename(f)} — 原稿ではないので飛ばします`); continue; }
-      console.error(`✗ ${path.basename(f)}: days が配列ではありません`);
+      if (scanned) { console.log(`  ${label} — 原稿ではないので飛ばします`); continue; }
+      console.error(`✗ ${label}: days が配列ではありません`);
+      process.exit(1);
+    }
+    const encFull = checkManuscriptBytes(buf, label, { requireScripts: true });
+    if (encFull.length) {
+      console.error(`✗ ${encFull.length} 件（バイト検査）。1 件も入れていません。\n`);
+      for (const p of encFull) console.error(`  ・${p}`);
       process.exit(1);
     }
 
@@ -129,11 +156,16 @@ function load() {
 
 console.log("原稿を読みます");
 const days = load();
+if (days === null) {
+  /* content/ はあるが JSON が無い。配備は成功扱い（§4-3）。 */
+  process.exit(0);
+}
 
 /* ---- 検査。ここを通らなければ 1 件も入れない --------------------- */
 console.log("\n検査します");
 const { ok, problems, count } = checkAll(days);
 if (!ok) {
+  /* 失敗報告は日番号と事由まで。原稿本文は出さない（指示書⑮ §4-4）。 */
   console.error(`✗ ${problems.length} 件あります。1 件も入れていません。\n`);
   for (const p of problems) console.error(`  ・${p}`);
   process.exit(1);
@@ -166,8 +198,16 @@ if (CHECK) { console.log("\n--check なので、ここで終わります"); proc
 
 /* ---- 入れる ------------------------------------------------------- */
 const pool = await getPool();
+/* 指示書⑮ §3: quiz 無し再入稿で既存クイズを消さない。何件守ったかを
+   黙らず出す ── 静かに消えるのが事故の本質だった。 */
+const hadQuiz = await learning.listQuizKeys(pool);
+let preserved = 0;
 let done = 0;
 for (const d of days) {
+  const incoming = d.quiz ?? null;
+  const key = `${d.__track}:${d.day_number}`;
+  if (incoming == null && hadQuiz.has(key)) preserved++;
+
   await learning.upsertTemplate(pool, {
     track:            d.__track,
     dayNumber:        d.day_number,
@@ -179,12 +219,16 @@ for (const d of days) {
     /* semester は渡さない。upsertTemplate が day_number から決める ──
        原稿にも書くと、学期の切れ目が 2 か所に生まれる。 */
     requiresNameSlot: !!d.requires_name_slot,
-    /* 復習クイズ（任意、003）。形は content-check が入稿前に全部見る。 */
-    quiz:             d.quiz ?? null
+    /* 復習クイズ（任意、003）。形は content-check が入稿前に全部見る。
+       null のとき upsert は既存 quiz を触らない（IF … IS NULL）。 */
+    quiz:             incoming
   });
   done++;
 }
 console.log(`\n✓ ${done} 日ぶん入れました`);
+if (preserved > 0) {
+  console.log(`  既存のクイズ ${preserved} 件を保全しました（原稿に quiz が無かった日）`);
+}
 
 /* ---- 残りを数える -------------------------------------------------
    コース別に出す。合計で数えると、初級 101 日だけ揃った状態が

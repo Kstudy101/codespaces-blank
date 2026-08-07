@@ -25,7 +25,7 @@ import { semesterForDay, SEMESTERS, TOTAL_DAYS } from "../server/lib/repo/learni
 /* 入稿の受け入れ条件。原稿そのものは公開リポジトリに無いが、
    「四柱の無い人が読めない日は入れない」は差し込みの規則なので
    この関門が見る（末尾）。 */
-import { checkDay } from "../server/lib/content-check.mjs";
+import { checkDay, checkManuscriptBytes } from "../server/lib/content-check.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -623,6 +623,32 @@ check("vocab_3・fortune_bridge・quiz の差し込み口禁止は NAME だけ�
   assert(quizBad.some((m) => m.includes("quiz に差し込み口は使えません")), quizBad.join(" / "));
 
   return "vocab_3 / fortune_bridge / quiz 全部で検出";
+});
+
+check("バイト検査は Latin-1 誤読と BOM・壊れた UTF-8 を止める（指示書⑮ §7）", () => {
+  const ok = Buffer.from('{"days":[{"grammar_tip_kr":"こんにちは。안녕하세요."}]}', "utf8");
+  assert(checkManuscriptBytes(ok, "ok.json").length === 0, checkManuscriptBytes(ok, "ok.json").join(" / "));
+
+  const bom = Buffer.concat([Buffer.from([0xEF, 0xBB, 0xBF]), ok]);
+  assert(checkManuscriptBytes(bom, "bom.json").some((m) => m.includes("BOM")),
+    checkManuscriptBytes(bom, "bom.json").join(" / "));
+
+  /* ハングル UTF-8 を Latin-1 として解釈した典型: 안 → Ã¨Â */
+  const mojibake = Buffer.from('{"tip":"Ã¨ÂÂÃ¬ こんにちは"}', "utf8");
+  assert(checkManuscriptBytes(mojibake, "bad.json", { requireScripts: false })
+    .some((m) => m.includes("Latin-1")),
+    checkManuscriptBytes(mojibake, "bad.json", { requireScripts: false }).join(" / "));
+
+  /* 意図的に切ったマルチバイト（한글 의 첫 바이트만） */
+  const cut = Buffer.from([0xED]); /* EUC ではなく UTF-8 の途中 */
+  assert(checkManuscriptBytes(cut, "cut.json").some((m) => m.includes("UTF-8")),
+    checkManuscriptBytes(cut, "cut.json").join(" / "));
+
+  const noHangul = Buffer.from('{"days":[{"tip":"こんにちは。ひらがなだけ"}]}', "utf8");
+  assert(checkManuscriptBytes(noHangul, "ja-only.json").some((m) => m.includes("ハングル")),
+    checkManuscriptBytes(noHangul, "ja-only.json").join(" / "));
+
+  return "BOM / mojibake / 切断 / ハングル欠落を検出";
 });
 
 console.log(`\n${fails.length ? "✗" : "✓"} ${pass + fails.length} 項目中 ${pass} 件成功`);

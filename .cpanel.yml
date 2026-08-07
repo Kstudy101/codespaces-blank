@@ -84,13 +84,19 @@ deployment:
     # 新しいコードが古い表に向かって動き出すより、そのほうが安全。
     - /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node db/with-env.mjs db/migrate.mjs'
 
-    # --- 原稿を入れ直す -----------------------------------------
-    # content/ があるときだけ。upsertTemplate は何度流しても同じ
-    # 結果になるので、配置のたびに通してよい。
+    # --- 原稿を入れ直す（指示書⑮ §4）---------------------------
+    # migrate の次・再起動の前。原稿の無い状態でアプリが起きる時間を
+    # 作らない。
     #
-    # seed 側が全部検査してから 1 件目を入れる。20 日目で落ちて
-    # 19 日ぶんだけ入った状態が残る、が起きない。
-    - if [ -d "$APP/content" ]; then /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node db/with-env.mjs db/seed-content.mjs'; else echo "原稿がまだありません（content/ なし）"; fi
+    # ① --check → 0 件でなければ配備失敗。1 件も入れない。
+    # ② 本投入。upsert は何度流しても同じ結果。
+    #
+    # content/ が無い・JSON が 0 件でも配備は成功（§4-3）。
+    # 新規環境やコードだけの push で原稿の有無は無関係。
+    #
+    # 失敗ログは seed-content / content-check が「日番号と事由」まで
+    # 出す。本文は出さない（§4-4）。
+    - if [ ! -d "$APP/content" ]; then echo "原稿がまだありません（content/ なし）"; elif [ -z "$(ls -A "$APP/content"/*.json 2>/dev/null)" ]; then echo "原稿 JSON がありません — シードを飛ばします"; else /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node db/with-env.mjs db/seed-content.mjs --check' && /bin/bash -lc 'set -e; . "$ACT"; cd "$APP"; node db/with-env.mjs db/seed-content.mjs'; fi
 
     # --- 頼まれたときだけ、実物で一周する -----------------------
     # smoke は決済の再送・バッチの二重起動・退会の連鎖削除まで実際に

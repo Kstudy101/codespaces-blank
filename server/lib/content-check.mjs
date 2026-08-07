@@ -77,6 +77,51 @@ const PROBES = [
    引用符が紛れ込む。読めはするが、検索や置換のときにだけ効く。 */
 const ODD_CHAR = /[^\p{Script=Hangul}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}\p{ASCII}　-〿＀-￯\s]/u;
 
+/* ---- バイト水準（指示書⑮ §7）--------------------------------------
+   mojibake を捕らえたのは検証網ではなく人だった。当時の検査は
+   問題・正答・添字を見ても誤答選択肢の文字化けを見ていなかった。
+   機械に見えるもの（UTF-8 として壊れていないか・ハングルと日本語が
+   実在するか・Latin-1 誤読の痕跡）は機械に渡す。
+
+   返す配列は「ファイル名と理由」だけ。原稿本文をログに出さない
+   （指示書⑮ §4-4）。 */
+const HANGUL = /[\uAC00-\uD7A3]/;
+const JAPANESE = /[\u3040-\u30FF\u4E00-\u9FFF]/;
+/* UTF-8 を Latin-1/Windows-1252 で読み直したときに出やすい文字。
+   指示書の例（Ã ì å）に加え、ハングル壊れで頻出する Â も見る。 */
+const LATIN1_MOJIBAKE = /[ÃÂåìðñòôõùýþÿ]/;
+
+export function checkManuscriptBytes(buf, label = "原稿", {
+  /* 原稿日（days[]）だけ true。fortune-lines など形の違う JSON は
+     UTF-8 / mojibake だけ見て、ハングル必須は課さない。 */
+  requireScripts = true
+} = {}) {
+  const bad = [];
+  const at = (m) => bad.push(`${label}: ${m}`);
+  if (!Buffer.isBuffer(buf)) {
+    at("バイト列ではありません");
+    return bad;
+  }
+  if (buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) {
+    at("UTF-8 BOM が付いています（付けないでください）");
+  }
+  let text;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch {
+    at("UTF-8 として無効です（途中で切れたマルチバイトの可能性）");
+    return bad;
+  }
+  if (LATIN1_MOJIBAKE.test(text)) {
+    at("Latin-1 誤読の痕跡があります（Ã / Â / å / ì など）");
+  }
+  if (requireScripts) {
+    if (!HANGUL.test(text)) at("ハングル（AC00–D7A3）がありません");
+    if (!JAPANESE.test(text)) at("日本語（ひらがな・カタカナ・漢字）がありません");
+  }
+  return bad;
+}
+
 export function checkDay(d, seen = new Set()) {
   const bad = [];
   const at = (m) => bad.push(m);
@@ -308,4 +353,4 @@ export function checkAll(days, { expect = null, track = null } = {}) {
   return { ok: problems.length === 0, problems, count: seen.size };
 }
 
-export { PROBES, TOTAL_DAYS };
+export { PROBES, TOTAL_DAYS, HANGUL, JAPANESE, LATIN1_MOJIBAKE };

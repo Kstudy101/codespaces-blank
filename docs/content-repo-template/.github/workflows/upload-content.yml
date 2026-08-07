@@ -1,0 +1,100 @@
+# ===================================================================
+# upload-content.yml — 원고 private repo 전용 (지시서⑮ §5-2)
+#
+# 公開リポジトリには置かない。kstudy101-content 等の private へコピーする。
+# concurrency group は deploy-server と同じ名前（§5-3）。
+# ===================================================================
+name: upload-content
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "content/**"
+      - ".github/workflows/upload-content.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout manuscripts (this private repo)
+        uses: actions/checkout@v4
+
+      - name: Checkout engine (public — content-check / cpanel / upload)
+        uses: actions/checkout@v4
+        with:
+          repository: Kstudy101/codespaces-blank
+          path: engine
+
+      # ① 検査 — 規則は公開側の 1 冊だけ（§5-2① / §8）
+      - name: Content check (public rules)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(content/*.json)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "content/*.json がありません — 終了"
+            exit 0
+          fi
+          node engine/server/db/seed-content.mjs --check "${files[@]}"
+
+      # ② FTPS — 指示書⑬ の制限アカウント。平文禁止・パスワードは設定ファイル経由
+      - name: FTPS upload
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASS: ${{ secrets.FTP_PASS }}
+        run: |
+          set -euo pipefail
+          miss=0
+          for k in FTP_HOST FTP_USER FTP_PASS; do
+            [ -n "${!k}" ] || { echo "✗ Secret $k が空です"; miss=1; }
+          done
+          [ "$miss" -eq 0 ] || exit 1
+
+          umask 077
+          mkdir -p ~/.config/kstudy101
+          {
+            printf 'FTP_HOST=%s\n' "$FTP_HOST"
+            printf 'FTP_USER=%s\n' "$FTP_USER"
+            printf 'FTP_PASS=%s\n' "$FTP_PASS"
+            printf 'FTP_DIR=/\n'
+          } > ~/.config/kstudy101/ftp-content.conf
+          chmod 600 ~/.config/kstudy101/ftp-content.conf
+
+          shopt -s nullglob
+          for f in content/*.json; do
+            case "$f" in
+              *.json) ;;
+              *) echo "✗ .json 以外は送りません: $f"; exit 1 ;;
+            esac
+            bash engine/tools/upload-content.sh "$f"
+          done
+
+      # ③ 配備トリガー — UAPI をコピーせず cpanel.sh 経由（§5-2③）
+      - name: Trigger ChemiCloud deploy (→ .cpanel.yml seed)
+        env:
+          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
+          CPANEL_USER: ${{ secrets.CPANEL_USER }}
+          CPANEL_TOKEN: ${{ secrets.CPANEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          miss=0
+          for k in CPANEL_HOST CPANEL_USER CPANEL_TOKEN; do
+            [ -n "${!k}" ] || { echo "✗ Secret $k が空です"; miss=1; }
+          done
+          [ "$miss" -eq 0 ] || exit 1
+
+          umask 077
+          mkdir -p ~/.config/kstudy101
+          printf '%s\n' "CHEMI_USER=$CPANEL_USER" > ~/.config/kstudy101/chemicloud.conf
+          printf '%s' "$CPANEL_TOKEN" > ~/.config/kstudy101/cpanel.token
+          chmod 600 ~/.config/kstudy101/chemicloud.conf ~/.config/kstudy101/cpanel.token
+          export CPANEL_HOST
+          bash engine/tools/trigger-chemi-deploy.sh

@@ -28,7 +28,7 @@ A1 원고 배치 → A2 온보딩 라이브 → (병행) A4 profile 결정 / A5 
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **A0** | 원고 전용 FTP 계정 생성 + 탈출 시험 | 대표 | [docs/plan-upload-content.md](docs/plan-upload-content.md) §7-7. 도구·관문은 완료, **계정만 없으면 A1이 File Manager 수작업** |
+| **A0** | 원고 전용 FTP 계정 생성 + 탈출 시험 | 대표 | [plan-upload-content](docs/plan-upload-content.md) · **지시서⑮ §9-2**. A·B 코드는 공개 repo 에 반영됨 — 계정만 있으면 FTPS→`deploy-server` 로 seed 까지 |
 | **A1** | 중급·고급 1〜3일 + `fortune-lines.json` 서버 배치 | 대표 | A0 후 `bash tools/upload-content.sh …` (없으면 File Manager) → `seed --check` → dry-run 3통. 저장소에 원고 없음 |
 | **A2** | 코스 선택 온보딩 라이브 검증 | 대표 | [docs/live-check-line-onboarding.md](docs/live-check-line-onboarding.md). `SALES_MODE` 미설정. A1 후가 바람직 |
 | **A3** | Stripe 검증 (테스트 키·`SALES_MODE=test`·`SALES_TEST_USERS` → 3케이스) | 대표 | [docs/plan-journey.md](docs/plan-journey.md) §4. 코드 배포 완료 (`e1f3c9f`) |
@@ -57,6 +57,7 @@ A1 원고 배치 → A2 온보딩 라이브 → (병행) A4 profile 결정 / A5 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
 | **D1** | 중급·고급 101일 원고 (초급은 ~50일) | 대표 | A1은 체험용 1〜3일. 본편은 별도 |
+| **D1c** | 원고 배치·시드 자동화 (지시서⑮) | 대표+개발 | [plan-content-ci](docs/plan-content-ci.md). **A·B·§7 코드 완료**. private repo·Secrets·실기 = 대표 (§9 4〜6). 템플릿: `docs/content-repo-template/` |
 | **D1b** | 초급 51〜101 착수점(대조표·배정) | 개발 | [docs/plan-content-51-101.md](docs/plan-content-51-101.md) |
 | **D2** | `fortune-lines.json` | 대표 | A1에 포함. 없으면 운세만 조용히 빠짐 |
 | **D3** | 퀴즈 원고 (`quiz` 열 백필) | 대표 | [plan-quiz](docs/plan-quiz.md) · [plan-quiz-checkpoint](docs/plan-quiz-checkpoint.md) |

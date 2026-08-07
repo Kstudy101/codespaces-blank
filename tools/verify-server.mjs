@@ -916,6 +916,33 @@ await acheck("学期は day_number から決める（人に入れさせない）
   return "45 日目 → 2 学期";
 });
 
+await acheck("quiz 無し再入稿で既存 quiz を消さない（指示書⑮ §3）", async () => {
+  /* 初級 1〜15 のクイズが、quiz 欄の無い JSON 再シードで NULL に
+     消えた。エラーもログも無く、自動化すると無人で繰り返す。 */
+  const conn = fakeConn(() => ({ affectedRows: 2 }));
+  await learning.upsertTemplate(conn, {
+    track: "beginner", dayNumber: 3, grammarPoint: "-아요/어요", quiz: null
+  });
+  const sql = conn.calls[0].sql;
+  assert(/quiz\s*=\s*IF\s*\(\s*VALUES\s*\(\s*quiz\s*\)\s+IS NULL\s*,\s*quiz\s*,\s*VALUES\s*\(\s*quiz\s*\)\s*\)/i.test(sql),
+    `保全式がありません:\n${sql}`);
+  assert(!/quiz\s*=\s*VALUES\s*\(\s*quiz\s*\)\s*(,|$)/i.test(sql.replace(
+    /quiz\s*=\s*IF\s*\(\s*VALUES\s*\(\s*quiz\s*\)\s+IS NULL\s*,\s*quiz\s*,\s*VALUES\s*\(\s*quiz\s*\)\s*\)/i, "")),
+    "素の quiz = VALUES(quiz) が残っています");
+  return "IF(VALUES(quiz) IS NULL, quiz, VALUES(quiz))";
+});
+
+await acheck("listQuizKeys は quiz のある日だけを返す（保全ログ用）", async () => {
+  const conn = fakeConn(() => [
+    { track: "beginner", day_number: 30 },
+    { track: "intermediate", day_number: 50 }
+  ]);
+  const keys = await learning.listQuizKeys(conn);
+  assert(keys.has("beginner:30") && keys.has("intermediate:50"), [...keys].join(","));
+  assert(/quiz IS NOT NULL/i.test(conn.calls[0].sql), conn.calls[0].sql);
+  return "2 キー";
+});
+
 await acheck("コースは 3 つ。ENUM の外を DB へ通さない", async () => {
   const conn = fakeConn(() => ({ affectedRows: 1 }));
   assert(learning.TRACKS.length === 3, learning.TRACKS.join(", "));
@@ -1094,6 +1121,25 @@ check(".cpanel.yml の find 分岐（rsync の無い今の本番はこちら）�
     assert(line.includes(`! -name ${n}`), `find 分岐に ! -name ${n} がありません`);
   }
   return "消してから写す側も 7 つ除外";
+});
+
+check(".cpanel.yml は seed 前に --check し、空 content では成功する（指示書⑮ §4）", () => {
+  const yml = read(".cpanel.yml");
+  assert(/seed-content\.mjs --check/.test(yml), "--check がありません");
+  assert(/seed-content\.mjs(?! --check)/.test(yml)
+    || /seed-content\.mjs"/.test(yml)
+    || /seed-content\.mjs'/.test(yml),
+    "本投入の seed-content がありません");
+  /* --check だけ Dual で無いこと: 本投入行が別にある */
+  const seeds = [...yml.matchAll(/seed-content\.mjs(?: --check)?/g)].map((m) => m[0]);
+  assert(seeds.some((s) => s.includes("--check")), seeds.join(" | "));
+  assert(seeds.some((s) => s === "seed-content.mjs"),
+    `本投入がありません: ${seeds.join(" | ")}`);
+  assert(/原稿 JSON がありません|シードを飛ばします|content\/ なし/.test(yml),
+    "空 content の成功パスがありません");
+  /* 失敗時に本文を dump する向きのリダイレクトは置かない */
+  assert(!/cat .*content\//.test(yml), "content/ を cat しています");
+  return "--check → 投入 / 空は skip";
 });
 
 check("tools/deploy-server.sh の rsync も同一（手動経路）", () => {

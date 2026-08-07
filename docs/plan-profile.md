@@ -1,11 +1,11 @@
 # plan-profile.md — 프로필 편집 페이지 + gender 신설 (지시서 §3·§4)
 
-> STATUS: **A4 → B1** — [STATUS.md](../STATUS.md) §0.
+> STATUS: **B1 종결** — [STATUS.md](../STATUS.md) §F.
 
 작성: 2026-08-05 / 근거: [research-onboarding-gap.md](research-onboarding-gap.md) / 기준 커밋: §2 수정 커밋 뒤
 
-> **상태: 배포 완료 (2026-08-07, `518c060`), 라이브 확인 대기.**
-> A4(gender 대운) 결정은 B1과 독립 — §6-5.
+> **상태: 종결 (2026-08-08).** 배포 `518c060`, migration `006`, `/profile/start` 302.
+> 대표 확인 — 구현 완료로 B1 종결. A4(gender 대운)는 **(다) 저장만** — §6-6.
 
 ---
 
@@ -160,5 +160,5 @@ server/lib/fortune.mjs:101-104                     → 위 둘을 그대로 호�
 
 ```
 A4 = (다) 현행 유지(저장만)  ← 대표 결정
-B1 = 구현 완료 (배포·라이브 확인 대기)
+B1 = 종결 (2026-08-08, 구현·배포 확인)
 ```

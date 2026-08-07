@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-08 (D3 완료·세션 종결)
+최종 갱신: 2026-08-08 (B1·D3 종결)
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -21,7 +21,7 @@
   private repo → FTPS → UAPI Deploy → `.cpanel.yml` seed 전 경로 가동 ([plan-content-ci](docs/plan-content-ci.md))
 
 **권장 진행 순서 (한 줄).**
-C4 실판매 → B1 라이브 → E 조건 도래 시 라이브 확인.
+C4 실판매 → E 조건 도래 시 라이브 확인.
 
 **B3 (2026-08-07 확인).** maintain §3 `#3 beginner 持っている=3 / 台帳=0` —
 migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼으나 **`trial_track` 은
@@ -38,7 +38,6 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
 | **C4** | 실판매 모드 (`SALES_MODE=open`) 판단·투입 | 대표 | [live-check-c4-sales-open.md](docs/live-check-c4-sales-open.md). A3 완료 |
-| **B1** | 프로필 편집 라이브 검증 | 대표 | [docs/live-check-profile.md](docs/live-check-profile.md). `/profile/start` → **302** 확인됨 |
 
 ### B. 개발 (남은 것)
 
@@ -77,7 +76,8 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
   초급 51〜101 착수점·검증 도구(D1b), 원고 CI 자동화(D1c — private repo → FTPS → deploy → seed),
   **A2 코스 선택 온보딩 라이브** (2026-08-07 대표 확인),
   **A5 결제 env 3값 + C1 cPanel 투입** (2026-08-07),
-  **프로필 편집 B1** — 코드·배포 (`518c060`, `/profile/start` 302, migration `006`, LINE 「情報を変更」),
+  **프로필 편집 B1** — 구현·배포·종결 (`518c060`, migration `006`, `/profile/start` 302, LINE 「情報を変更」,
+  2026-08-08 대표 확인 — [plan-profile](docs/plan-profile.md)),
   **B3 maintain 드리프트 beginner 3/0** — migration 002 `trial_track` 미백필 legacy (§0 아래),
   **A4 gender 대운 — (다) 현행 유지(저장만)** (2026-08-07 대표 결정),
   **A3 Stripe 테스트** (2026-08-08 대표 확인),
@@ -317,7 +317,8 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | [docs/live-check-quiz-checkpoint.md](docs/live-check-quiz-checkpoint.md) | 절목 퀴즈 라이브 (E2) |
 | [docs/live-check-expiring.md](docs/live-check-expiring.md) | 기한 예고 (E3) |
 | [docs/live-check-pagination.md](docs/live-check-pagination.md) | 500명+ 배치 (E4) |
-| [docs/plan-profile.md](docs/plan-profile.md) | 프로필 편집 — 배포 완료, 라이브 대기 (B1) |
+| [docs/plan-profile.md](docs/plan-profile.md) | 프로필 편집 — 완료 (B1, 2026-08-08) |
+| [docs/live-check-profile.md](docs/live-check-profile.md) | 프로필 편집 참고 (B1 종결) |
 | [docs/plan-tokushoho.md](docs/plan-tokushoho.md) | 特定商取引法 표기 — 승인·문안 대기 (C2) |
 | [docs/plan-side-menu.md](docs/plan-side-menu.md) | 사이드 메뉴 개편 — 완료 (B2) |
 | [docs/plan-content-51-101.md](docs/plan-content-51-101.md) | 초급 51〜101 착수점 — 완료 (D1b) |

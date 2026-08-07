@@ -74,7 +74,8 @@ A1 원고 배치 → A2 온보딩 라이브 → (병행) A4 profile 결정 / A5 
 
 ### F. 끝남 / 잠김 (혼동 방지)
 
-- **끝남**: 코스 선택 흐름, outage-billing 설계 2건, cron 3행, morning/evening 실발송, 관문 19종, 사이드 메뉴(B2)
+- **끝남**: 코스 선택 흐름, outage-billing 설계 2건, cron 3행, morning/evening 실발송, 관문 19종, 사이드 메뉴(B2),
+  원고 업로드 도구([plan-upload-content](docs/plan-upload-content.md) — 도구·관문 완료. 계정 생성·탈출 시험만 A0)
 - **잠김(미완 아님)**: 결제 동선 — A5 전까지 건드리지 않음
 - **옛 계획**: [plan-p4-content.md](docs/plan-p4-content.md) 머리말은 「승인 전」이지만 렌더러·배치는 가동 중. 남은 것은 원고·운세 JSON(D)
 
@@ -348,7 +349,7 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 
 | 커밋 | 내용 |
 |---|---|
-| (지시서⑬) | 원고 전용 FTP 계정과 `tools/upload-content.sh` — 전권 토큰 대신 `content/` 에 갇힌 계정 하나로. FTPS 강제·비밀번호 비노출·삭제 없음·크기 대조. `verify-server` +9 (84→93). [plan-upload-content](docs/plan-upload-content.md) |
+| `0f94fee` | 원고 전용 FTP 계정과 `tools/upload-content.sh` (지시서⑬) — 전권 토큰 대신 `content/` 에 갇힌 계정 하나로. FTPS 강제·비밀번호 비노출·삭제 없음·크기 대조. `verify-server` +9 (84→93), 변이 시험 8종 전부 검출. [plan-upload-content](docs/plan-upload-content.md) |
 | (§2) | 코스 선택을 온보딩 말미에 — track 단계·trackpick(판매 게이트 밖)·즉시 1일차·체험 중 기한예고 억제·trial_end 신설(004)·askCourse pick 변형. C2 연동 안내 2건(7880092)과 같은 배포 |
 | `db20b17` | 아침 배치 장애 대응(승인 C=A+B) — failed 로 남은 확보 완료일을 advanceDay 없이 재조준(retryKey 동일) + `--not-after` 배송 창 상한. verify-push 48항목 (관문 580) |
 | `e1f3c9f` | 결제 경로 보강 3건 — creditPurchase·startTrial 을 트랜잭션(transact 주입)으로 / 역방향 대조 findMissingEntitlements(검출만, maintain 3.5절) / async_payment_succeeded 수용. verify-billing 56항목 |

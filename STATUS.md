@@ -32,14 +32,14 @@ A1 원고 배치 → A2 온보딩 라이브 → (병행) A4 profile 결정 / A5 
 | **A1** | 중급·고급 1〜3일 + `fortune-lines.json` 서버 배치 | 대표 | A0 후 `bash tools/upload-content.sh …` (없으면 File Manager) → `seed --check` → dry-run 3통. 저장소에 원고 없음 |
 | **A2** | 코스 선택 온보딩 라이브 검증 | 대표 | [docs/live-check-line-onboarding.md](docs/live-check-line-onboarding.md). `SALES_MODE` 미설정. A1 후가 바람직 |
 | **A3** | Stripe 검증 (테스트 키·`SALES_MODE=test`·`SALES_TEST_USERS` → 3케이스) | 대표 | [docs/plan-journey.md](docs/plan-journey.md) §4. 코드 배포 완료 (`e1f3c9f`) |
-| **A4** | plan-profile 전제 2건 — gender 대운 ①/② + privacy 문안 | 대표 | [docs/plan-profile.md](docs/plan-profile.md). 승인 전 코드 금지 |
+| **A4** | gender 를 대운에 반영할지 **1건만** — (가)전면/(나)LINE만/(다)현행유지 | 대표 | [docs/plan-profile.md](docs/plan-profile.md) **§6 결정 자료**. privacy 문안은 `c11242f` 로 이미 게시됨. **「반영」은 스위치가 아니라 대운 신규 구현** (§6-2) |
 | **A5** | 결제 오픈용 값 3개 (`TOKUSHOHO_URL` / `REFUND_POLICY` / `RICHMENU_IMAGE`) | 대표 | 없으면 가격표 안 열림 — 아래 §3 |
 
 ### B. 승인·전제 후 개발
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **B1** | 프로필 편집 (`/profile` 서버 렌더 + gender 정비) | 개발 | [docs/plan-profile.md](docs/plan-profile.md). A4 승인 후 착수 |
+| **B1** | 프로필 편집 (`/profile` 서버 렌더) | 개발 | [docs/plan-profile.md](docs/plan-profile.md). **A4 와 독립 — 지금 착수 가능** (§6-5. gender 정비는 `005` 로 완료). 계획 승인은 필요 |
 | **B2** | 사이드 메뉴 개편 — **완료** | 개발 | [docs/plan-side-menu.md](docs/plan-side-menu.md). `verify-pages` 15/15 |
 | **B3** | maintain 드리프트 (#3 beginner 3/0) 원인 확인 | 개발 | 라이브 검증 수동 투입분 가능성. 확인만 |
 

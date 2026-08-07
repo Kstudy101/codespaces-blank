@@ -792,8 +792,20 @@ await acheck("要約確認の答えに、コース選択が続く（無応答で
   assert(r.ok === true, JSON.stringify(r));
   assert(sent && sent.length === 1, "続きの 1 通がありません（最後の答えに無応答）");
   assert(/どのコースで始めますか/.test(sent[0].text), sent[0].text);
-  assert(/あとから変更できません/.test(sent[0].text),
-    "変更不可の案内が選択画面にありません（선택 후에 말하면 늦다）");
+  /* 選ぶ前に言うべき 3 つ（지시서⑯ §5-5-가）。文字列そのままではなく
+     事実で見る ── 文面は代表が磨く。ただし 3 つのどれが欠けても、
+     読んだ人の理解と実装が食い違う:
+
+       取り替え不可だけ … 持っている 2 コースの行き来まで諦める
+       行き来だけ       … 買ったコースを別物に替えられると読む
+       体験 1 回を言わない … 中級で試した人が初級を試せないことを
+                            選んだあとに知る（선택 후에 말하면 늦다） */
+  assert(/取り替えることはできません|あとから変更できません/.test(sent[0].text),
+    "取り替え不可の案内が選択画面にありません（선택 후에 말하면 늦다）");
+  assert(/1 回（1 コース）|1回（1コース）/.test(sent[0].text),
+    "無料体験が 1 回だけであることが選択画面にありません");
+  assert(/내 진도|進み具合/.test(sent[0].text),
+    "持っているコースの行き来がどこでできるかが書かれていません");
   const items = sent[0].quickReply?.items || [];
   assert(items.length === 1 && items[0].action.data === "action=trackpick&track=beginner",
     `原稿 0 のコースが選択肢に出ています: ${JSON.stringify(items.map((i) => i.action.data))}`);

@@ -28,7 +28,8 @@ A1 원고 배치 → A2 온보딩 라이브 → (병행) A4 profile 결정 / A5 
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **A1** | 중급·고급 1〜3일 + `fortune-lines.json` 서버 배치 | 대표 | File Manager → `seed --check` → dry-run 3통. 저장소에 원고 없음 |
+| **A0** | 원고 전용 FTP 계정 생성 + 탈출 시험 | 대표 | [docs/plan-upload-content.md](docs/plan-upload-content.md) §7-7. 도구·관문은 완료, **계정만 없으면 A1이 File Manager 수작업** |
+| **A1** | 중급·고급 1〜3일 + `fortune-lines.json` 서버 배치 | 대표 | A0 후 `bash tools/upload-content.sh …` (없으면 File Manager) → `seed --check` → dry-run 3통. 저장소에 원고 없음 |
 | **A2** | 코스 선택 온보딩 라이브 검증 | 대표 | [docs/live-check-line-onboarding.md](docs/live-check-line-onboarding.md). `SALES_MODE` 미설정. A1 후가 바람직 |
 | **A3** | Stripe 검증 (테스트 키·`SALES_MODE=test`·`SALES_TEST_USERS` → 3케이스) | 대표 | [docs/plan-journey.md](docs/plan-journey.md) §4. 코드 배포 완료 (`e1f3c9f`) |
 | **A4** | plan-profile 전제 2건 — gender 대운 ①/② + privacy 문안 | 대표 | [docs/plan-profile.md](docs/plan-profile.md). 승인 전 코드 금지 |
@@ -236,6 +237,30 @@ bash tools/deploy-server.sh            # 보내고 재기동
 cPanel → Setup Node.js App → Environment variables 가 유일한 출처입니다
 (`db/with-env.mjs` 가 거기서 읽어옵니다).
 
+### 5.1 원고를 올리는 길은 배포와 별개입니다
+
+배포 3경로는 `content/` 를 **제외**합니다(지우지 않기 위해). 그래서 원고는 따로 올립니다.
+
+```bash
+bash tools/upload-content.sh --dry-run server/content/beginner-51-60.json   # 무엇이 어디로
+bash tools/upload-content.sh server/content/beginner-51-60.json            # 보낸다
+bash tools/upload-content.sh --list                                        # 저쪽에 뭐가 있나
+```
+
+**cPanel API 토큰을 쓰지 않습니다** — 토큰엔 범위 제한이 없어 원고 1개를 위해 전권을 넘기게 됩니다.
+대신 **원고 전용 FTP 계정**(Directory 를 `kstudy101-line/content` 로 고정, Quota 50MB)을 씁니다.
+디렉터리 제한이 계정 자체에 붙으므로, 이 스크립트가 넓게 쓰이는 사고가 구조적으로 안 납니다.
+
+| 위치 | 내용 |
+|---|---|
+| `~/.config/kstudy101/ftp-content.conf` | `FTP_HOST` / `FTP_USER` / `FTP_PASS` / `FTP_DIR=/` (`chmod 600`) |
+
+FTPS 고정(평문 금지)·비밀번호는 명령행에 안 올림·**삭제 기능 없음**·올린 뒤 원격 크기 대조.
+이 약속들은 `verify-server` 의 `[原稿の送り口]` 9항목이 지킵니다.
+설계와 확인 절차는 [docs/plan-upload-content.md](docs/plan-upload-content.md).
+
+---
+
 두 경로 모두 **`content/` `.env` `tmp` `public` `stderr.log` 를 지키도록** 되어 있습니다.
 `server/content/`(101일 원고)는 **저장소에 없고 서버 위에만** 있으므로,
 여기가 뚫리면 유일한 사본이 사라집니다. 제외 목록 7개는 세 경로가 전부 동일해야 합니다.
@@ -323,6 +348,7 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 
 | 커밋 | 내용 |
 |---|---|
+| (지시서⑬) | 원고 전용 FTP 계정과 `tools/upload-content.sh` — 전권 토큰 대신 `content/` 에 갇힌 계정 하나로. FTPS 강제·비밀번호 비노출·삭제 없음·크기 대조. `verify-server` +9 (84→93). [plan-upload-content](docs/plan-upload-content.md) |
 | (§2) | 코스 선택을 온보딩 말미에 — track 단계·trackpick(판매 게이트 밖)·즉시 1일차·체험 중 기한예고 억제·trial_end 신설(004)·askCourse pick 변형. C2 연동 안내 2건(7880092)과 같은 배포 |
 | `db20b17` | 아침 배치 장애 대응(승인 C=A+B) — failed 로 남은 확보 완료일을 advanceDay 없이 재조준(retryKey 동일) + `--not-after` 배송 창 상한. verify-push 48항목 (관문 580) |
 | `e1f3c9f` | 결제 경로 보강 3건 — creditPurchase·startTrial 을 트랜잭션(transact 주입)으로 / 역방향 대조 findMissingEntitlements(검출만, maintain 3.5절) / async_payment_succeeded 수용. verify-billing 56항목 |

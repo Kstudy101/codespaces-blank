@@ -1107,6 +1107,107 @@ check("tools/deploy-server.sh の rsync も同一（手動経路）", () => {
   return "自動・画面・手動の三経路が同じ 7 つを守る";
 });
 
+
+/* ================================================================== */
+head("[原稿の送り口]  上げるだけの口が、上げるだけであり続ける");
+
+/* tools/upload-content.sh は、原稿を上げるためだけの FTP アカウント
+   （content@、Directory は content/ に固定）を通る。cPanel の API
+   トークンには範囲の指定が無いので、この一仕事のために全権を渡さない
+   ── という決めごとが指示書⑬ の要旨で、下はその決めごとを機械に
+   持たせたもの。
+
+   ここは全部ソース文字列の検査で、FTP へ繋がない。繋げる機体でしか
+   走らない検査は、走らない日に静かに緑になる。
+
+   ★ 検査の書き方の注意: 台本は bash なので注釈は # で始まる。
+   このファイルの stripComments は JS の注釈しか落とさないため、
+   注釈に語が出るだけで引っかかる検査は shellBody() を通す。
+   逆に「1 文字も書いてはいけない」
+   類い（--trace など）は注釈ごと見る ── 説明のつもりで貼った 1 行が、
+   あとで実行の側へ移ることがある。 */
+const upSrc = () => read("tools/upload-content.sh");
+const shellBody = () => upSrc().split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+
+check("原稿の送り口が存在する", () => {
+  const src = upSrc();
+  assert(/^#!\/usr\/bin\/env bash/.test(src), "tools/upload-content.sh が bash ではありません");
+  assert(/set -euo pipefail/.test(src), "set -euo pipefail がありません");
+  return `${src.split("\n").length} 行`;
+});
+
+check("--trace / -v の類いが 1 つも無い", () => {
+  /* 漏れたらパスワードを渡したのと同じことになる（指示書⑬ §2-2-3）。
+     注釈も含めて見る。 */
+  const src = upSrc();
+  for (const bad of ["--trace", "--trace-ascii", "--trace-time", "--verbose"]) {
+    assert(!src.includes(bad), `${bad} があります`);
+  }
+  assert(!/(^|\s)-v(\s|$)/m.test(src), "-v があります");
+  return "4 種 + -v";
+});
+
+check("パスワードが命令行の引数に出ない", () => {
+  const src = shellBody();
+  assert(!/--user\b/.test(src), "--user で渡しています（ps で他人から見えます）");
+  assert(!/(^|\s)-u\s/.test(src), "-u で渡しています（ps で他人から見えます）");
+  assert(/-K "\$CURLRC"/.test(src), "-K で curl の設定ファイルを渡していません");
+  assert(/umask 077/.test(src), "umask 077 がありません（設定ファイルが他人に読まれます）");
+  assert(/trap 'rm -f "\$CURLRC"' EXIT/.test(src), "設定ファイルを消す trap がありません");
+  return "-K + umask + trap";
+});
+
+check("パスワードは curl の設定ファイル以外へ行かない", () => {
+  /* $FTP_PASS が出てよいのは、設定ファイルへ書き出す 1 行だけ。
+     echo や画面へ回ると、履歴と端末の記録に平文で残る。 */
+  const bad = shellBody().split("\n")
+    .filter((l) => l.includes("$FTP_PASS") && !l.includes("$CURLRC"));
+  assert(bad.length === 0, `$FTP_PASS が別の所へ行っています: ${bad.join(" / ")}`);
+  return "書き出し 1 行だけ";
+});
+
+check("平文 FTP で繋がない ── curl 全部に --ssl-reqd", () => {
+  const calls = shellBody().match(/curl[^\n]*/g) || [];
+  assert(calls.length > 0, "curl の呼び出しが見つかりません");
+  for (const c of calls) {
+    assert(c.includes("--ssl-reqd"), `--ssl-reqd の無い curl: ${c.trim()}`);
+  }
+  /* 証明書の検証を切る道も塞ぐ。切ると平文を禁じた意味が消える。 */
+  assert(!/(^|\s)(-k|--insecure)(\s|$)/m.test(shellBody()), "証明書の検証を切っています");
+  return `curl ${calls.length} 箇所`;
+});
+
+check("消す道具が無い（DELE / --quote / rm）", () => {
+  const src = shellBody();
+  assert(!/\bDELE\b/.test(src), "DELE があります");
+  assert(!/(--quote|(^|\s)-Q(\s|$))/m.test(src), "--quote があります（任意の FTP 命令が撃てます）");
+  assert(!/\bcurl\b[^\n]*\brm\b/.test(src), "curl 経由の rm があります");
+  return "上げるだけ（消すのは File Manager で人が）";
+});
+
+check(".json 以外と .. を、こちら側でも止める", () => {
+  const src = shellBody();
+  assert(/\*\.json\)/.test(src), ".json の判定がありません");
+  assert(/\*\.\.\*\)/.test(src), ".. の判定がありません");
+  return "拡張子と経路";
+});
+
+check("資格情報の置き場はリポジトリの外", () => {
+  const src = upSrc();
+  assert(/~\/\.config\/kstudy101\/ftp-content\.conf/.test(src),
+    "既定の置き場が ~/.config/kstudy101/ftp-content.conf ではありません");
+  assert(!/^FTP_PASS=/m.test(shellBody()), "パスワードが台本に直書きされています");
+  return "~/.config/kstudy101/";
+});
+
+check("上げたあと、向こうの大きさを読み直して突き合わせる", () => {
+  const src = shellBody();
+  assert(/--head/.test(src), "--head による読み直しがありません");
+  assert(/content-length/i.test(src), "大きさの取り出しがありません");
+  assert(/\$REMOTE" != "\$LOCAL/.test(src), "手元と向こうを比べていません");
+  return "切れたまま上がったのを捕まえる";
+});
+
 console.log(`\n${failed ? "✗" : "✓"} ${passed + failed} 項目中 ${passed} 件成功`
   + (failed ? ` / ${failed} 件失敗` : ""));
 process.exit(failed ? 1 : 0);

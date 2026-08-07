@@ -110,6 +110,24 @@ export const coursePreparing = (track) => ({
 export const sellablePackages = (availableDays) =>
   Object.entries(PACKAGES).filter(([, p]) => p.days <= availableDays);
 
+/* 価格表を出せるコース（지시서⑯ §4）。絞らないと、原稿 3 日ぶんの
+   中級を選ばせてから価格表で「準備中」になる ── 押した人には理由が
+   無く、尋ねる方法も無い。
+
+   入口は 2 つある（リッチメニューの postback と、「受講料」と打つ道）。
+   両方がこの 1 つを通る ── 同じ問いに式を 2 本持つと、売れる日数を
+   変えた日に片方だけ古くなる。物差しは上の sellablePackages のまま。
+
+   受講中でも外さない（§4-2）── 追加購入が起きるのは、まさに受講中の
+   コースで残りが減ったときだから。除く理由は「原稿不足」だけにする。 */
+export async function sellableTracks(conn) {
+  const out = [];
+  for (const t of TRACKS) {
+    if (sellablePackages(await learning.countTemplates(conn, t)).length) out.push(t);
+  }
+  return out;
+}
+
 /* ---- 体験 2 日目の夕方の勧誘（2026-08-06 指示書 C4）------------------
    体験中・current_day = 2 の人へ、復習の後ろに 1 通。
    販売が閉じていても送る ── ただし文面を分ける。「買える」は
@@ -189,7 +207,11 @@ export function upsellNotice(track, { lastDay = 0 } = {}) {
 
    「あとから変更できません」の 1 行は両方に出す（문면 §7-나 확정）──
    買うときも選ぶときも、コースを替える唯一の道は追加購入で同じ。 */
-export function askCourse({ owned = [], pick = null } = {}) {
+/* 【only】価格表の入口（plans）が「売れるコースだけ」に絞るための口。
+   pick とは別にする ── pick は文面もボタンの data も trackpick 用に
+   替えてしまうので、絞り込みに借りると「受講料を見る」が
+   「このコースで始める」に化ける（지시서⑯ §4）。 */
+export function askCourse({ owned = [], pick = null, only = null } = {}) {
   /* 既に持っているコースには印を付ける。付けないと、買ったことを
      忘れて同じコースをもう一度買う ── 返金の手間になる。 */
   const mark = (t) => (owned.includes(t) ? "（受講中）" : "");
@@ -198,7 +220,7 @@ export function askCourse({ owned = [], pick = null } = {}) {
     intermediate: "文と文をつなぐ・敬語。あいさつができる方（TOPIK 3~4級レベル）",
     advanced:     "書き言葉・ニュースの韓国語。日常会話に困らない方（TOPIK 5~6級レベル）"
   };
-  const list = pick ? pick.tracks : TRACKS;
+  const list = pick ? pick.tracks : (only || TRACKS);
   return {
     type: "text",
     text: [
@@ -208,7 +230,14 @@ export function askCourse({ owned = [], pick = null } = {}) {
         `${TRACK_LABELS[t].ja}（${TRACK_LABELS[t].kr}）${mark(t)}`, DESC[t]
       ]),
       "",
-      "あとから変更できませんので、じっくりお選びください。"
+      /* 【지시서⑯ §5-5-가 초안 — 대표 확정 대기】
+         「変更できない」だけだと、両方できないように読める。
+         できないのは**取り替え**で、持っているコースのあいだの
+         行き来はできる ── その 2 つを分けて書く。
+         無料体験が 1 回だけなのも、選ぶ前に言う（選んだあとでは遅い）。 */
+      "無料でお試しいただけるのは、1 回（1 コース）までです。",
+      "お選びになったコースを別のコースに取り替えることはできません。",
+      "（複数のコースをお持ちの場合は、［내 진도］でお届け先を行き来できます）"
     ].join("\n"),
     quickReply: {
       items: list.map((t) => ({
@@ -438,6 +467,10 @@ export async function creditFromStripe(conn, ev,
 
   /* 2〜4 */
   const { progress } = await learning.ensureProgress(conn, user.id, ev.track);
+  /* 別コースを買うと届け先が移る（지시서⑯ §5-5-나）。移ったことは
+     boughtNotice が本人に言う ── 黙って移すと、前のコースが止まったのが
+     事故に見える。判定は setActiveTrack より**前**に取る。 */
+  const switched = !!user.active_track && user.active_track !== ev.track;
   await users.setActiveTrack(conn, user.id, ev.track);
   /* ブロックで unfollowed になっていた人が買い直すこともある。
      配信対象（trial / active）に戻す ── 戻さないと、払ったのに
@@ -453,7 +486,7 @@ export async function creditFromStripe(conn, ev,
   try {
     if (resumeNeeded) {
       await send(user.line_user_id, [
-        boughtNotice(ev.track, credited.daysGranted),
+        boughtNotice(ev.track, credited.daysGranted, { switched }),
         askResume(ev.track, Number(progress.current_day))
       ]);
       await pushlogs.logSent(conn, user.id, { pushType: "resume" });
@@ -461,7 +494,7 @@ export async function creditFromStripe(conn, ev,
                daysGranted: credited.daysGranted, asked: "resume" };
     }
 
-    await send(user.line_user_id, [boughtNotice(ev.track, credited.daysGranted)]);
+    await send(user.line_user_id, [boughtNotice(ev.track, credited.daysGranted, { switched })]);
   } catch (e) {
     /* 送信の失敗で入金を無かったことにしない。日数はもう積んである。 */
     await pushlogs.logFailed(conn, user.id,
@@ -487,14 +520,27 @@ export async function creditFromStripe(conn, ev,
 
 /* ---- ⑥ 続きから / 最初から ------------------------------------------- */
 
-export function boughtNotice(track, days) {
+/* switched = 買ったことで届け先のコースが移ったか（creditFromStripe が
+   setActiveTrack を通るため、別コースを買うと必ず移る）。
+
+   【지시서⑯ §5-5-나 초안 — 대표 확정 대기】移ったことを言わないと、
+   前のコースが止まったのが事故に見える。そして「前のぶんは消えて
+   いない」までを一緒に言う ── そこまで言って初めて、選択画面の
+   「取り替えられません」と辻褄が合う。 */
+export function boughtNotice(track, days, { switched = false } = {}) {
   const l = TRACK_LABELS[track];
   return {
     type: "text",
     text: [
       "お手続きが完了しました。ありがとうございます。",
       "",
-      `${l.ja}（${l.kr}） ${days} 日分をお預かりしました。`
+      `${l.ja}（${l.kr}） ${days} 日分をお預かりしました。`,
+      ...(switched ? [
+        "",
+        `きょうから、お届けは ${l.ja} に切り替わります。`,
+        "前のコースの残り日数と進みは、そのまま残っています。",
+        "［내 진도］からいつでもお戻りいただけます。"
+      ] : [])
     ].join("\n")
   };
 }
@@ -649,10 +695,76 @@ export async function statusMessage(conn, user) {
     return `${here}${l.ja}（${l.kr}）　${e.currentDay} / ${TOTAL_DAYS} 日目　残り ${Math.max(0, e.remaining)} 日`;
   });
 
+  /* 【切り替え】いま届いていないコースに残りがあるなら、そこへ戻す
+     ボタンを出す（지시서⑯ §5）。
+
+     出さないと、初級 20 日を残したまま中級を買った人は、中級を
+     使い切った時点で初級が宙に浮く ── 戻る道が「初級をもう一度買う」か
+     「ブロックして再追加」しか無かった（follow.mjs の firstWithRemaining が
+     唯一の自動復帰）。払ったものが返らない状態を、案内できる形にする。
+
+     残り 0 のコースは出さない（§5-4-5）── 押しても何も起きない
+     ボタンになる。買ったコースが 1 つだけの人にも出ない。 */
+  const switchable = owned.filter((e) => e.track !== user.active_track && e.remaining > 0);
+
   return {
     type: "text",
     text: ["いまの進み具合です。", "", ...lines,
-           "", "▶ が、いまお届けしているコースです。"].join("\n")
+           "", "▶ が、いまお届けしているコースです。",
+           ...(switchable.length ? ["", "残っているコースへ切り替えられます（進みはそのままです）。"] : [])
+          ].join("\n"),
+    ...(switchable.length ? { quickReply: { items: switchable.map((e) => ({
+      type: "action",
+      action: {
+        type: "postback",
+        label: `${TRACK_LABELS[e.track].ja}に切り替え`.slice(0, 20),
+        data: `action=switch&track=${e.track}`,
+        displayText: `${TRACK_LABELS[e.track].ja} に切り替えます`
+      }
+    })) } } : {})
+  };
+}
+
+/* 届け先のコースを、既に持っているコースの中で移す（지시서⑯ §5）。
+
+   日数は 1 日も動かさない ── advanceDay も days_used も触らない。
+   切り替えただけで 1 日減ったら、それは買ったぶんが消えたのと同じ
+   （残り = days_entitled - days_used。STATUS §8-1・§8-2）。
+
+   track を data のまま信じない。data は書き換えて送れるので、
+   持っていないコースへ移されると listDeliverable の JOIN から
+   静かに落ちて、翌朝から何も届かなくなる（§5-4-1）。 */
+export async function applySwitch(conn, user, { track }) {
+  if (!isTrack(track)) return { ok: false, reason: `未知の track: ${track}` };
+  if (track === user.active_track) return { ok: false, reason: "同じコースです" };
+
+  const owned = await entitlements.listByUser(conn, user.id);
+  const e = owned.find((x) => x.track === track);
+  if (!e) return { ok: false, reason: "持っていないコースです" };
+  if (e.remaining <= 0) return { ok: false, reason: "残りがありません" };
+
+  /* 進みの器が無ければ作る（買ったのに無い、は healProgress と同じ受け皿）。
+     current_day は渡さない ── ensureProgress は既にあれば触らない。 */
+  await learning.ensureProgress(conn, user.id, track);
+  await users.setActiveTrack(conn, user.id, track);
+  return { ok: true, track, currentDay: e.currentDay, remaining: e.remaining };
+}
+
+/* 切り替えの返事。「いまから」とは言わない ── その日の朝ぶんを
+   もう受け取っている人には嘘になる（sentToday は user 単位で、
+   同じ日に二度は送らない。§5-4-3）。 */
+export function switchDone(track, currentDay, remaining) {
+  const l = TRACK_LABELS[track];
+  return {
+    type: "text",
+    text: [
+      `${l.ja}（${l.kr}）に切り替えました。`,
+      "",
+      `${currentDay} 日目まで進んでいます。残り ${remaining} 日です。`,
+      "あすの朝のぶんから、こちらをお届けします。",
+      "",
+      "前のコースの進みは、そのまま残っています。"
+    ].join("\n")
   };
 }
 

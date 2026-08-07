@@ -1021,6 +1021,220 @@ check("async_payment_succeeded を受ける（コンビニ・振込の入金）"
   return "async(paid) 受理 / completed(unpaid) 拒否";
 });
 
+
+/* ================================================================== */
+head("[価格表の入口]  買えないコースを選ばせない（지시서⑯ §4）");
+
+/* 原稿 3 日ぶんの中級を一覧に出すと、選ばせてから価格表で「準備中」に
+   なる ── 押した人には理由が無く、尋ねる方法も無い。物差しは
+   sellablePackages 1 つだけに保つ（体験の 3 日とは別の問い）。 */
+const { askCourse: askCourseFn, sellableTracks: sellableTracksFn } =
+  await import("../server/lib/handlers/checkout.mjs");
+
+/* 原稿の数をコースごとに返す偽の接続。COUNT の params[0] が track。 */
+const tplConn = (byTrack) => fakeConn({
+  "COUNT\\(\\*\\) AS n FROM content_templates":
+    (_sql, params) => [{ n: byTrack[params[0]] ?? 0 }]
+});
+
+const PLANS_EVENT = { source: { userId: "U_t" }, replyToken: "rt",
+  postback: { data: "action=plans" } };
+
+/* 販売を開けた世界で 1 度だけ動かす（既存 2 か所と同じ退避の作法）。 */
+async function withSalesOpen(fn) {
+  const keep = { m: process.env.SALES_MODE, t: process.env.TOKUSHOHO_URL,
+                 r: process.env.REFUND_POLICY, k: process.env.STRIPE_SECRET_KEY,
+                 w: process.env.STRIPE_WEBHOOK_SECRET };
+  process.env.SALES_MODE = "open";
+  process.env.TOKUSHOHO_URL = "https://example/tokushoho";
+  process.env.REFUND_POLICY = "テスト用の 1 行";
+  process.env.STRIPE_SECRET_KEY = "sk_test_x";
+  process.env.STRIPE_WEBHOOK_SECRET = "whsec_x";
+  try { return await fn(); }
+  finally {
+    for (const [k, v] of [["SALES_MODE", keep.m], ["TOKUSHOHO_URL", keep.t],
+                          ["REFUND_POLICY", keep.r], ["STRIPE_SECRET_KEY", keep.k],
+                          ["STRIPE_WEBHOOK_SECRET", keep.w]]) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  }
+}
+
+const plansReply = async (byTrack, extra = {}) => {
+  const conn = fakeConn({
+    "COUNT\\(\\*\\) AS n FROM content_templates":
+      (_sql, params) => [{ n: byTrack[params[0]] ?? 0 }],
+    "FROM users": [{ id: 7, line_user_id: "U_t", display_name: "t",
+      name_kanji: null, name_reading: "たろう", name_kr: "타로",
+      name_source: "web", status: "active", active_track: "beginner" }],
+    ...extra
+  });
+  const sent = [];
+  const r = await handlePostback(conn, PLANS_EVENT,
+    { send: async (_t, m) => { sent.push(...m); return {}; } });
+  return { r, sent };
+};
+
+await acheck("一覧は sellablePackages の結果と一致する", async () =>
+  withSalesOpen(async () => {
+    const conn = tplConn({ beginner: 101, intermediate: 7, advanced: 3 });
+    const tracks = await sellableTracksFn(conn);
+    assert(JSON.stringify(tracks) === JSON.stringify(["beginner", "intermediate"]),
+      `売れるコース: ${tracks.join(",")}`);
+    return "초급 101 / 중급 7 → 2 코스";
+  }));
+
+await acheck("原稿 3 日のコースは一覧に出ない（体験はできても買えない）", async () =>
+  withSalesOpen(async () => {
+    const { r, sent } = await plansReply({ beginner: 101, intermediate: 3, advanced: 3 });
+    assert(sent.length === 1, `送った通数: ${sent.length}`);
+    assert(!/中級/.test(sent[0].text), `中級が残っています:\n${sent[0].text}`);
+    assert(!/上級/.test(sent[0].text), `上級が残っています:\n${sent[0].text}`);
+    assert(/初級/.test(sent[0].text), sent[0].text);
+    assert(JSON.stringify(r.tracks) === JSON.stringify(["beginner"]), JSON.stringify(r.tracks));
+    return "3 日ぶんは出さない";
+  }));
+
+await acheck("受講中のコースは一覧に残る（追加購入はここで起きる）", async () =>
+  withSalesOpen(async () => {
+    /* 除く理由は「原稿不足」だけ。受講中で外すと、残りが減った人の
+       買い直す道が消える（§4-2）。 */
+    const { sent } = await plansReply({ beginner: 101, intermediate: 101, advanced: 101 },
+      { "FROM course_entitlements": [{ track: "beginner", days_entitled: 30,
+         days_used: 10, current_day: 10, remaining: 20 }] });
+    assert(/初級/.test(sent[0].text), "受講中の初級が消えました");
+    assert(/（受講中）/.test(sent[0].text), `受講中の印がありません:\n${sent[0].text}`);
+    return "受講中でも出す + 印";
+  }));
+
+await acheck("売れるコースが 1 つも無ければ「準備中」1 通（空の一覧を出さない）", async () =>
+  withSalesOpen(async () => {
+    const { r, sent } = await plansReply({ beginner: 3, intermediate: 0, advanced: 0 });
+    assert(r.blocked === "原稿不足", JSON.stringify(r));
+    assert(sent.length === 1, `送った通数: ${sent.length}`);
+    assert(!sent[0].quickReply, "押せる選択肢を出しています（押しても何も無い）");
+    assert(/準備中|ご案内できません|お待ち/.test(sent[0].text),
+      `準備中の知らせではありません: ${sent[0].text}`);
+    return "選択肢 0 個の画面を出さない";
+  }));
+
+check("判定は 1 か所 ── sellablePackages の外に同じ物差しを置かない", () => {
+  /* 「3 日あるか」を価格表側にも書くと、売れる日数を変えた日に
+     片方だけ古くなる。入口 2 つ（postback の plans / 「受講料」と打つ道）は
+     どちらも sellableTracks を呼ぶこと。 */
+  for (const f of ["server/lib/handlers/postback.mjs", "server/lib/handlers/message.mjs"]) {
+    const src = stripComments(read(f));
+    assert(/sellableTracks\(/.test(src), `${f} が sellableTracks を通っていません`);
+    assert(!/TRIAL_DAYS\s*<=?\s*await\s+learning\.countTemplates/.test(src),
+      `${f} に体験日数の物差しで一覧を絞る式があります（判定が 2 本になります）`);
+  }
+  const ck = stripComments(read("server/lib/handlers/checkout.mjs"));
+  const defs = (ck.match(/p\.days\s*<=\s*availableDays/g) || []).length;
+  assert(defs === 1, `sellablePackages と同じ式が ${defs} 箇所あります`);
+  return "入口 2 つ → 判定 1 つ";
+});
+
+
+/* ================================================================== */
+head("[コース切り替え]  払ったぶんが宙に浮かないように（지시서⑯ §5）");
+
+/* 初級 20 日を残したまま中級を買うと active_track が移り、中級を
+   使い切った時点で初級が届かなくなる。戻る道は「もう一度買う」か
+   「ブロックして再追加」しか無かった ── UX ではなく未払いの問題。 */
+const { applySwitch, switchDone, statusMessage: statusMsg } =
+  await import("../server/lib/handlers/checkout.mjs");
+
+const SW_USER = { id: 7, active_track: "intermediate" };
+const OWNED_2 = [
+  { track: "beginner",     days_entitled: 30, days_used: 10, current_day: 10, remaining: 20 },
+  { track: "intermediate", days_entitled: 7,  days_used: 7,  current_day: 7,  remaining: 0 }
+];
+const swConn = (rows = OWNED_2) => fakeConn({ "FROM course_entitlements": rows });
+
+await acheck("残りの無いコースへは切り替えない（data を書き換えても）", async () => {
+  /* 持っていないコース・残り 0 のコース。どちらも listDeliverable の
+     JOIN から静かに落ちて、翌朝から何も届かなくなる。 */
+  const conn = swConn();
+  const none = await applySwitch(conn, { id: 7, active_track: "beginner" },
+    { track: "advanced" });
+  assert(none.ok === false, `持っていない上級へ移せました: ${JSON.stringify(none)}`);
+
+  const empty = await applySwitch(swConn(), { id: 7, active_track: "beginner" },
+    { track: "intermediate" });
+  assert(empty.ok === false, `残り 0 の中級へ移せました: ${JSON.stringify(empty)}`);
+
+  const bogus = await applySwitch(swConn(), SW_USER, { track: "'; DROP--" });
+  assert(bogus.ok === false, "未知の track を通しました");
+  return "未所持 / 残り 0 / 未知の 3 つとも拒否";
+});
+
+await acheck("切り替えは days_used も current_day も動かさない", async () => {
+  /* 切り替えただけで 1 日減ったら、買ったぶんが消えたのと同じ。 */
+  const conn = swConn();
+  const r = await applySwitch(conn, SW_USER, { track: "beginner" });
+  assert(r.ok === true, JSON.stringify(r));
+  const writes = conn.calls.filter((c) => /^\s*(UPDATE|INSERT|DELETE)/i.test(c.sql));
+
+  /* 既にある行の日数を書き換える道が無いこと。ensureProgress の
+     「無ければ 0 で作る」INSERT だけは通す ── 買ったのに進みの器が
+     無い人（買って一度も始めていない）に移ると、listDeliverable の
+     JOIN から静かに落ちて翌朝から何も届かない。あの INSERT は
+     1062 を飲むだけで、既存の行には触れない（repo/util の insertNew）。 */
+  for (const w of writes) {
+    if (/^\s*INSERT INTO learning_progress/i.test(w.sql)) {
+      assert(/VALUES\s*\(\s*\?\s*,\s*\?\s*,\s*0\s*,\s*0\s*,\s*1\s*\)/i.test(w.sql),
+        `器を作る INSERT が 0 で作っていません: ${w.sql}`);
+      assert(!/ON DUPLICATE KEY UPDATE/i.test(w.sql),
+        "既にある行を上書きする形になっています（日数が動きます）");
+      continue;
+    }
+    assert(!/days_used/i.test(w.sql), `days_used を書いています: ${w.sql}`);
+    assert(!/current_day\s*=/i.test(w.sql), `current_day を書いています: ${w.sql}`);
+  }
+  assert(writes.some((w) => /UPDATE users SET active_track/i.test(w.sql)),
+    "active_track を書いていません");
+  assert(!writes.some((w) => /advanceDay/i.test(w.sql)), "advanceDay を通っています");
+  return `書き込み ${writes.length} 件、既存の日数には触れない`;
+});
+
+await acheck("切り替えても、前のコースの進みはそのまま残る", async () => {
+  /* learning_progress は (user, track) ごとなので消す理由が無い。
+     消す SQL が紛れ込んでいないことを、実際の呼び出しで見る。 */
+  const conn = swConn();
+  await applySwitch(conn, SW_USER, { track: "beginner" });
+  for (const c of conn.calls) {
+    assert(!/DELETE\s+FROM\s+learning_progress/i.test(c.sql), c.sql);
+    assert(!/resetProgress|current_day\s*=\s*0/i.test(c.sql), c.sql);
+  }
+  const r = switchDone("beginner", 10, 20);
+  assert(/10 日目/.test(r.text) && /残り 20 日/.test(r.text), r.text);
+  /* 「いまから」と言わない ── その日の朝ぶんを既に受け取っている人には嘘。 */
+  assert(!/いまから|今すぐ/.test(r.text), `「いまから」と言っています: ${r.text}`);
+  assert(/あすの朝/.test(r.text), `いつからかが書かれていません: ${r.text}`);
+  return "進みは残り、文面は「あすの朝」";
+});
+
+await acheck("「내 진도」に、残っているコースへのボタンが出る", async () => {
+  const m = await statusMsg(swConn([
+    { track: "beginner",     days_entitled: 30, days_used: 10, current_day: 10, remaining: 20 },
+    { track: "intermediate", days_entitled: 7,  days_used: 3,  current_day: 3,  remaining: 4 }
+  ]), SW_USER);
+  const items = m.quickReply?.items || [];
+  assert(items.length === 1, `ボタン ${items.length} 個（いま届いていない 1 つのはず）`);
+  assert(/action=switch&track=beginner/.test(items[0].action.data), items[0].action.data);
+  return "初級へ 1 個";
+});
+
+await acheck("残り 0 のコースと、1 コースだけの人にはボタンを出さない", async () => {
+  /* 押しても何も起きないボタンを置かない（§5-4-5）。 */
+  const zero = await statusMsg(swConn(OWNED_2), { id: 7, active_track: "beginner" });
+  assert(!zero.quickReply, "残り 0 の中級へのボタンが出ています");
+
+  const one = await statusMsg(swConn([OWNED_2[0]]), { id: 7, active_track: "beginner" });
+  assert(!one.quickReply, "1 コースだけなのにボタンが出ています");
+  return "0 個 / 0 個";
+});
+
 console.log(`\n${failed ? "✗" : "✓"} ${passed + failed} 項目中 ${passed} 件成功`
   + (failed ? ` / ${failed} 件失敗` : ""));
 process.exit(failed ? 1 : 0);

@@ -47,8 +47,8 @@ import { cities } from "../fortune.mjs";
 import { kanaNameToHangul } from "../kana2hangul.mjs";
 import {
   salesAllowedFor, salesMode, notReady, coursePreparing, askCourse, priceList,
-  sellablePackages, startCheckout, checkoutLink, startTrialFor, applyResume,
-  resumeDone, statusMessage, missingLegalConfig
+  sellablePackages, sellableTracks, startCheckout, checkoutLink, startTrialFor,
+  applyResume, resumeDone, applySwitch, switchDone, statusMessage, missingLegalConfig
 } from "./checkout.mjs";
 import { PACKAGES, TRIAL_DAYS } from "../repo/billing.mjs";
 import { deliverNow } from "../../db/push-daily.mjs";
@@ -401,8 +401,19 @@ export async function handlePostback(conn, event,
                replied: await reply(token, [notReady()], send) };
     }
     const owned = (await entitlements.listByUser(conn, user.id)).map((e) => e.track);
-    const replied = await reply(token, [askCourse({ owned })], send);
-    return { userId: user.id, action, replied };
+
+    /* 売れるコースだけを出す（지시서⑯ §4）。判定は checkout.mjs の
+       sellableTracks 1 つ ── 「受講料」と打つ道（message.mjs）も
+       同じものを通る。 */
+    const tracks = await sellableTracks(conn);
+    if (!tracks.length) {
+      /* 空の一覧を出して押させない（§4-3）。 */
+      return { userId: user.id, action, blocked: "原稿不足",
+               replied: await reply(token, [notReady()], send) };
+    }
+
+    const replied = await reply(token, [askCourse({ owned, only: tracks })], send);
+    return { userId: user.id, action, tracks, replied };
   }
 
   /* ---- 受講料：② 価格表（＝最終確認画面）--------------------------- */
@@ -603,6 +614,21 @@ export async function handlePostback(conn, event,
     const replied = await reply(token,
       [resumeDone(r.track, r.mode, r.currentDay)], send);
     return { userId: user.id, action, track: r.track, mode: r.mode, replied };
+  }
+
+  /* ---- 持っているコースのあいだで届け先を移す（지시서⑯ §5）---------
+     「내 진도」のボタンから来る。買い直しではないので販売の門は
+     通さない ── 既に払ったぶんの届け先を変えるだけで、Stripe が
+     閉じている日でも動いてよい（trackpick と同じ考え）。
+
+     持っているか・残りがあるかは applySwitch がサーバー側で数え直す。
+     data の track をそのまま信じない（§5-4-1）。 */
+  if (action === "switch") {
+    const r = await applySwitch(conn, user, { track: params.track });
+    if (!r.ok) return { skipped: r.reason, userId: user.id, action };
+    const replied = await reply(token,
+      [switchDone(r.track, r.currentDay, r.remaining)], send);
+    return { userId: user.id, action, track: r.track, replied };
   }
 
   /* ---- 夕方のふりかえり：こたえ（지시서⑨）--------------------------

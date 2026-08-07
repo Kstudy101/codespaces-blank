@@ -22,8 +22,8 @@ import { users, learning, entitlements } from "../repo/index.mjs";
 import { replyMessage } from "../line.mjs";
 import { nextStep, messageForStep, confirmName, readingRetry } from "../onboarding.mjs";
 import { kanaNameToHangul } from "../kana2hangul.mjs";
-import { askCourse, notReady, salesAllowedFor, salesMode, missingLegalConfig }
-  from "./checkout.mjs";
+import { askCourse, notReady, salesAllowedFor, salesMode, missingLegalConfig,
+         sellableTracks } from "./checkout.mjs";
 
 /* 受け取る文面は日本語。ひらがな・カタカナ・漢字が混ざるので
    単語の一致で見る（形態素解析は入れない）。 */
@@ -143,14 +143,19 @@ export async function handleMessage(conn, event, { send = replyMessage } = {}) {
       return { userId: user.id, replied: true, blocked: "販売停止" };
     }
     const owned = (await entitlements.listByUser(conn, user.id)).map((e) => e.track);
+    /* 売れるコースだけ。postback の plans と同じ関数を通る ──
+       打って来た人と押して来た人で一覧が違う、を作らない（지시서⑯ §4）。 */
+    const tracks = await sellableTracks(conn);
     if (replyToken && !isVerifyToken(replyToken)) {
       try {
-        await send(replyToken, [askCourse({ owned })]);
+        await send(replyToken, tracks.length ? [askCourse({ owned, only: tracks })]
+                                             : [notReady()]);
       } catch (e) {
         return { userId: user.id, replied: false, error: e.message };
       }
     }
-    return { userId: user.id, replied: true, plans: true };
+    if (!tracks.length) return { userId: user.id, replied: true, blocked: "原稿不足" };
+    return { userId: user.id, replied: true, plans: true, tracks };
   }
 
   /* 始める前の 3 つ（名前・生年月日・コース）が残っていれば、

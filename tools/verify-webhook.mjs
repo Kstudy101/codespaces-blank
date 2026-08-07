@@ -518,6 +518,7 @@ const OPEN_ENV = { TOKUSHOHO_URL: "https://example.jp/tokushoho",
 const { handleMessage: handleMsg, ASK_PLANS } =
   await import("../server/lib/handlers/message.mjs");
 const { askCourse, notReady } = await import("../server/lib/handlers/checkout.mjs");
+const { TRACKS } = await import("../server/lib/repo/learning.mjs");
 
 /* 応答は { send } 差し替えで受け取る（handlePostback と同じ形）。 */
 async function askPlans(text, rows = {}) {
@@ -533,16 +534,23 @@ async function askPlans(text, rows = {}) {
 const ENT_ROW = [{ track: "beginner", days_entitled: 3, days_used: 0,
                    current_day: 0, remaining: 3 }];
 
+/* 原稿の数。plans は「売れるコースだけ」を出すようになった（지시서⑯ §4）ので、
+   原稿の無い世界では一覧そのものが出ない ── それを試したい検査は
+   この行を混ぜる。101 日ぶんあれば 3 コースとも売れる。 */
+const TPL_ROWS = [{ n: 101 }];
+
 await acheck("販売許可のとき「受講料」は plans と同じ応答（askCourse を同じ引数で）", async () =>
   withSalesEnv(OPEN_ENV, async () => {
     const { r, sent } = await askPlans("受講料はいくらですか",
-      { "FROM course_entitlements": ENT_ROW });
+      { "FROM course_entitlements": ENT_ROW, "FROM content_templates": TPL_ROWS });
     assert(sent.length === 1, `送った通数: ${sent.length}`);
-    const expected = askCourse({ owned: ["beginner"] });
+    /* postback の plans と同じ引数で作ったものと一致するか。
+       only は sellableTracks の結果（原稿 101 日なら 3 コースとも）。 */
+    const expected = askCourse({ owned: ["beginner"], only: TRACKS });
     assert(JSON.stringify(sent[0]) === JSON.stringify(expected),
-      "postback の plans（askCourse({ owned })）と同じ応答ではありません");
+      "postback の plans（askCourse({ owned, only })）と同じ応答ではありません");
     assert(r.replied === true && r.plans === true, JSON.stringify(r));
-    return "askCourse({ owned }) と一致";
+    return "askCourse({ owned, only }) と一致";
   }));
 
 await acheck("販売停止のとき notReady ── pending の途中でも postback と同じ", async () =>
@@ -603,7 +611,7 @@ await acheck("ASK_STOP・ASK_SETUP の従来動作は変わらない（境界の
     assert(r2.onboarding === true, `「コース」: ${JSON.stringify(r2)}`);
     /* 価格の語が付けば plans が取る。 */
     const { r: r3 } = await askPlans("コースの受講料はいくら",
-      { "FROM course_entitlements": ENT_ROW });
+      { "FROM course_entitlements": ENT_ROW, "FROM content_templates": TPL_ROWS });
     assert(r3.plans === true, `「コースの受講料はいくら」: ${JSON.stringify(r3)}`);
     return "止めたい系・コース系とも従来どおり";
   }));

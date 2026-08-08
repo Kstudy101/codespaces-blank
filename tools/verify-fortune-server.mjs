@@ -276,5 +276,18 @@ check("文面が無ければ、既定の一言を作らない", () => {
   return "null";
 });
 
+check("bridge 는 운세 메시지에 더 이상 없다（지시서㉑ §1-3 ── 레슨 최하단으로 이동）", () => {
+  /* fortune-text.mjs 가 bridge 를 아는 순간, 레슨（render.mjs 의 🍀）과
+     이중으로 나갈 길이 열린다. 식별자 자체가 소스에 없는 것을 본다
+     （주석 제외）. 출력에서도 옛 구분선이 사라졌는지 확인. */
+  const src = fs.readFileSync("server/lib/fortune-text.mjs", "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+  assert(!/bridge/i.test(src), "fortune-text.mjs 에 bridge 식별자가 남아 있습니다");
+  const m = fortuneMessage(fortuneFor(ME, "2026-08-04"), FULL);
+  assert(!/──────────/.test(m.text), "옛 bridge 구분선이 출력에 남아 있습니다");
+  assert(!/ひとこと/.test(m.text), "🍀 문구가 운세에 섞였습니다");
+  return "식별자 0건・구분선 없음";
+});
+
 console.log(`\n${fails.length ? "✗" : "✓"} ${pass + fails.length} 項目中 ${pass} 件成功`);
 if (fails.length) { fails.forEach((f) => console.log(`  ✗ ${f}`)); process.exit(1); }

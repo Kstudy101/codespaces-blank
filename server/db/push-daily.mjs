@@ -192,7 +192,10 @@ export function retryKey(userId, day, type) {
 
    理由は 1 度だけログに出す。出さないと、運勢が丸ごと落ちた日に
    「元々そういうもの」と読めてしまう。 */
-export function fortuneSection(u, template, { date = DATE, load = loadLines } = {}) {
+/* 원고(template)는 더 이상 받지 않는다（지시서㉑ §1-3）── bridge 는
+   renderDay 가 레슨 말미（🍀）에 붙이고, 운세 메시지는 bridge 를
+   모른다. 양쪽에 두면 같은 한마디가 아침에 두 번 나간다. */
+export function fortuneSection(u, { date = DATE, load = loadLines } = {}) {
   if (!u.birth_date) return null;
 
   if (!u.birth_confirmed) {
@@ -233,7 +236,7 @@ export function fortuneSection(u, template, { date = DATE, load = loadLines } = 
   }
   if (!f) return null;
 
-  return fortuneMessage(f, lines, { bridge: template ? template.fortune_bridge : null });
+  return fortuneMessage(f, lines);
 }
 
 
@@ -377,9 +380,16 @@ export async function deliverOne(conn, u,
       &&  (await pushlogs.everFailed(conn, u.id, "learning", today))) {
     const tpl = await learning.getTemplate(conn, u.track, today);
     if (tpl) {
-      let messages = renderDay(tpl, u);
+      /* 절목의 재송신도 통상의 아침과 같이 데일리 ❓를 접는다（㉑）──
+         절목 퀴즈 자체는 재송신에 원래 실리지 않는다（현행 유지）. */
+      const atCp = await learning.isCheckpoint(conn, today);
+      let messages = renderDay(tpl, u, { quizSection: !atCp });
       if (messages !== null) {
-        const fortune = fortuneSection(u, tpl, { load });
+        /* 꼬리통（quickReply）은 묶음 맨 끝에서만 열린다 ── 운세·부적을
+           그 앞에 끼운다（본편의 조립과 같은 규칙）. */
+        const quizTail = messages[messages.length - 1]?.quickReply
+          ? messages.pop() : null;
+        const fortune = fortuneSection(u, { load });
         if (fortune) {
           messages = [...messages, fortune];
           /* 부적도 통상의 아침과 같게（운세가 붙은 재송신에만）。
@@ -388,6 +398,7 @@ export async function deliverOne(conn, u,
           try { am = amulet(u); } catch { /* 부적만 조용히 빠짐 */ }
           if (am) messages = [...messages, am];
         }
+        if (quizTail) messages = [...messages, quizTail];
         if (DRY || DISABLED) return `${DRY ? "予定" : "停止中"}:再送信${today}日目`;
         try {
           await send(u.line_user_id, messages,
@@ -492,10 +503,30 @@ export async function deliverOne(conn, u,
     return "原稿なし";
   }
 
+  /* 節目（30/50/75）かどうかは 1 度だけ引いて、レッスンの 꼬리통・
+     復習・節目クイズの三方が同じ答えを見る ── 別々に訊くと、
+     表を直した朝に片方だけずれる。renderDay より先に引くのは、
+     절목의 아침에 데일리 ❓（무보존）를 접기 위해（지시서㉑）──
+     그날의 채점은 절목 퀴즈（기록 있음·말미）가 맡는다. */
+  const atCheckpoint = await learning.isCheckpoint(conn, next);
+
+  /* 期限予告の朝も 꼬리통을 접는다（복습 뽑기의 결정④와 같은 이유,
+     한 가지가 더 있다）: 예고（expiringNotice）는 구매 버튼의
+     quickReply 를 나르고, quickReply 는 마지막 1통에서만 열린다.
+     꼬리통이 말미를 차지하면 재구매 버튼이 화면에 안 나온다 ──
+     퀴즈의 공백은 하루, 놓친 결제 도선은 돌아오지 않는다.
+     판정을 renderDay 앞으로 옮겼을 뿐, 문면과 기록은 아래
+     기존 블록 그대로다. */
+  const willRemain = remaining - 1;
+  const entitledNow = Number(u.days_entitled ?? 0);
+  const warned = willRemain === EXPIRING_AT
+      && (await billing.hasPurchases(conn, u.id))
+      && !(await pushlogs.countForDay(conn, u.id, entitledNow, "expiring"));
+
   /* 文面を先に組む。利用者の行をそのまま渡す ── 名前も四柱も
      render 側が要るものだけ拾う。既定は入れない（全員が同じ名前・
      同じ五行で占われる）。 */
-  let messages = renderDay(tpl, u);
+  let messages = renderDay(tpl, u, { quizSection: !atCheckpoint && !warned });
 
   /* ---- 名前が要る日に、名前が無い人 -------------------------------
      はじめは「登録のお願いに差し替えて、日は進める」にしていた。
@@ -529,6 +560,13 @@ export async function deliverOne(conn, u,
     }
   }
 
+  /* 신양식 레슨의 꼬리통（❓+🍀, quickReply）은 묶음의 맨 끝에서만
+     버튼이 열린다（LINE 사양 ── 절목 퀴즈가 말미로 가는 이유와 동일）.
+     여기서 뽑아 두고, 운세·부적·예고를 끼운 뒤에 다시 붙인다.
+     1·2통째에는 quickReply 가 없으므로 이 판별로 충분하다. */
+  const quizTail = messages[messages.length - 1]?.quickReply
+    ? messages.pop() : null;
+
   /* 3 通目の運勢。組むのは送る前 ── ここで落ちても
      レッスンは送れるようにしておく（fortuneSection は投げない）。
 
@@ -537,7 +575,7 @@ export async function deliverOne(conn, u,
      既定のまま検査すると、手元（文面あり）では 3 通、CI（文面なし）
      では 2 通になり、通る場所と通らない場所が生まれる。
      実際そうなって CI だけが落ちた。 */
-  const fortune = fortuneSection(u, tpl, { load });
+  const fortune = fortuneSection(u, { load });
   if (fortune) messages = [...messages, fortune];
 
   /* ---- 期限の予告 ---------------------------------------------------
@@ -548,25 +586,18 @@ export async function deliverOne(conn, u,
      二度出さない仕組みに新しい表を作らない。push_logs の day_number へ
      「そのときの days_entitled」を入れておけば countForDay で判定できる。
      追加購入で days_entitled が変われば値も変わるので、次の期限は
-     改めて予告される ── それが正しい動き。 */
-  const willRemain = remaining - 1;
-  const entitledNow = Number(u.days_entitled ?? 0);
-  let warned = false;
-  /* 体験中（購入 0）には予告を付けない（plan-course-onboarding §5）──
+     改めて予告される ── それが正しい動き。
+
+     体験中（購入 0）には予告を付けない（plan-course-onboarding §5）──
      体験 3 日は remaining 3→2 が初日に来るので、始めた直後の 1 通に
      「あと 2 日」が付いてしまう。体験の締めは 2 日目の夕方の勧誘
-     （trial_end、push-evening）が担い、購入者の予告は現行のまま。 */
-  if (willRemain === EXPIRING_AT
-      && (await billing.hasPurchases(conn, u.id))
-      && !(await pushlogs.countForDay(conn, u.id, entitledNow, "expiring"))) {
+     （trial_end、push-evening）が担い、購入者の予告は現行のまま。
+     판정（willRemain === EXPIRING_AT ほか）は renderDay 앞으로 옮겼다
+     （꼬리통을 접기 위해 ── 위 주석）. 붙이는 위치는 여기 그대로. */
+  if (warned) {
     messages = [...messages,
       expiringNotice(u.track, { remaining: EXPIRING_AT, currentDay: next })];
-    warned = true;
   }
-
-  /* 節目（30/50/75）かどうかは 1 度だけ引いて、復習と節目の両方が
-     同じ答えを見る ── 別々に訊くと、表を直した朝に片方だけずれる。 */
-  const atCheckpoint = await learning.isCheckpoint(conn, next);
 
   /* ---- 3 日周期の復習クイズ（docs/plan-quiz.md）--------------------
      送る日（next）が 3 の倍数の朝だけ。current_day では数えない ──
@@ -576,6 +607,10 @@ export async function deliverOne(conn, u,
      クイズが 2 件出ると、どの答えがどの問題か混ざる ── その朝は
      節目クイズ（下）が出る。
 
+     신양식（꼬리통 ❓ 있음）의 아침도 같은 이유로 쉰다（지시서㉑）──
+     그날의 퀴즈는 이미 레슨이 나른다. 복습 뽑기가 계속 사는 것은
+     구양식（데일리 ❓ 없음）의 이행기 동안이다.
+
      期限の予告が付く朝も休む（承認時の決定④）。朝の便を常に
      最大 4 通に保つ ── LINE の上限は 5 で、予告と重ねると丁度 5 に
      なり、次に 1 通足した日に全体が 400 で落ちる。予告は日数ごとに
@@ -583,7 +618,7 @@ export async function deliverOne(conn, u,
 
      引けなければ（原稿なし・壊れ）何も足さない。本編は届く ──
      運勢（fortuneSection）と同じ態度。 */
-  if (next % 3 === 0 && !warned && !atCheckpoint) {
+  if (next % 3 === 0 && !warned && !atCheckpoint && !quizTail) {
     const quiz = await learning.pickReviewQuiz(conn, u.track, next);
     if (quiz) messages = [...messages, renderReviewQuiz(quiz)];
   }
@@ -615,7 +650,10 @@ export async function deliverOne(conn, u,
      쉰다。전체가 400 으로 떨어져 아무것도 안 가는 것보다 낫다。
      quickReply 를 쓰지 않는 것도 같은 이유의 이웃 ── 뒤 메시지가
      지우기 때문（⑨ 와 같은 판단으로 Flex・uri 버튼）。 */
-  if (fortune && messages.length < 5) {
+  /* 꼬리통（아직 배열 밖）도 통수에 넣어 센다 ── 지금의 조합에서는
+     상한에 닿지 않지만, 뺀 채로 세는 버릇이 남으면 통을 하나 더
+     붙이는 미래의 변경이 6통（push 전체 400）을 만든다. */
+  if (fortune && messages.length + (quizTail ? 1 : 0) < 5) {
     /* 조립이 던져도 아침은 그대로（§4-5）── amuletSection 내부에도
        try 가 있지만, 불변식은 부르는 쪽이 진다。 */
     let am = null;
@@ -627,6 +665,10 @@ export async function deliverOne(conn, u,
       messages = [...messages.slice(0, at), am, ...messages.slice(at)];
     }
   }
+
+  /* 꼬리통을 묶음 맨 끝에 되돌린다 ── quickReply 는 마지막 1통에서만
+     열린다. 이 뒤로는 아무것도 더 붙이지 않을 것. */
+  if (quizTail) messages = [...messages, quizTail];
 
   /* 下見でも、組み上がった文面は見せられるようにする（--user の
      実動作検証で「どのクイズが選ばれたか」を送らずに確かめる）。

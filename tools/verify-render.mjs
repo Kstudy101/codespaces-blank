@@ -19,7 +19,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   hasJong, fillSlots, renderDay, renderReview, renderReviewQuestion,
-  renderReviewAnswer, findMisplacedSlot, SLOTS, nameMissingNotice
+  renderReviewAnswer, findMisplacedSlot, SLOTS, nameMissingNotice,
+  isNewFormat, parseTip
 } from "../server/lib/render.mjs";
 import { semesterForDay, SEMESTERS, TOTAL_DAYS } from "../server/lib/repo/learning.mjs";
 /* 入稿の受け入れ条件。原稿そのものは公開リポジトリに無いが、
@@ -294,12 +295,13 @@ check("パッチムのある名前では助詞が変わる", () => {
   return "켄 → 은";
 });
 
-check("会話は 1 往復ごとに空行で離れる", () => {
+check("会話は 1 往復ごとに空行で離れる（訳は「  （…）」）", () => {
   const m = renderDay(TPL, { name_kr: "아이", name_reading: "あい" });
-  /* 会話 2 往復 → 間に空行 1 つ。詰まると独り言に見える。 */
-  assert(/입니다\.\nこんにちは。わたしはあいです。\n\n/.test(m[0].text),
+  /* 会話 2 往復 → 間に空行 1 つ。詰まると独り言に見える。
+     訳の行は 2 字下げ + 全角括弧（지시서㉑ §1-1 スケッチ）。 */
+  assert(/입니다\.\n  （こんにちは。わたしはあいです。）\n\n/.test(m[0].text),
     JSON.stringify(m[0].text));
-  return "往復の間に空行";
+  return "往復の間に空行・訳は括弧行";
 });
 
 check("話者（who）は任意で、付ければ頭に出る", () => {
@@ -649,6 +651,170 @@ check("バイト検査は Latin-1 誤読と BOM・壊れた UTF-8 を止める�
     checkManuscriptBytes(noHangul, "ja-only.json").join(" / "));
 
   return "BOM / mojibake / 切断 / ハングル欠落を検出";
+});
+
+/* ================================================================== */
+console.log("\n[신양식（지시서㉑）]  섹션 헤더는 코드 소유・구양식은 무너지지 않게");
+
+/* 신양식 1일치 픽스처 ── sample-신구성-3코스.json 의 형에 pos·6어를
+   맞춘 것. 헤더 이모지는 원고에 한 글자도 없다（코드가 붙인다）. */
+const NEWFMT = {
+  day_number: 51,
+  grammar_point: "-(스)ㅂ니다 / -(스)ㅂ니까?",
+  grammar_tip_kr: "形　パッチム無 → -ㅂ니다／有 → -습니다\n使　ニュース・面接・職場\n落　-아요/-어요 と意味は同じ（12日目）",
+  dialogue_template: [
+    { who: "面接官", kr: "자기소개를 부탁합니다.", ja: "自己紹介をお願いします。" },
+    { who: "{NAME_JP}", kr: "저는 {NAME}입니다.", ja: "私は{NAME_JP}です。" },
+    { who: "面接官", kr: "얼마나 공부하셨습니까?", ja: "どれくらい勉強されましたか。" }
+  ],
+  vocab_3: [
+    { kr: "면접", meaning: "面接〔面接〕", pos: "名詞" },
+    { kr: "자기소개", meaning: "自己紹介〔自己紹介〕", pos: "名詞" },
+    { kr: "바쁘다", meaning: "忙しい", pos: "形容詞" },
+    { kr: "즐겁다", meaning: "楽しい", pos: "形容詞" },
+    { kr: "다니다", meaning: "通う・勤める", pos: "動詞" },
+    { kr: "일하다", meaning: "働く", pos: "動詞" }
+  ],
+  requires_name_slot: true,
+  quiz: { question: "かたい丁寧形は？", choices: ["먹어요", "먹습니다", "먹으세요"], answer: 1 },
+  fortune_bridge: { kr: "첫인상은 말투에서 시작돼요.", ja: "第一印象は話し方から。" }
+};
+const KEN = { name_kr: "켄", name_reading: "けん" };
+const HEADERS = ["📘", "🔗", "💡", "💬", "📚", "❓", "🍀"];
+
+check("신양식 → 섹션 헤더 7종이 코드가 붙인 것으로 출력에 존재", () => {
+  /* 원고 쪽에 이모지가 없는 것을 먼저 확인 ── 있으면 「코드가
+     붙였다」의 증명이 무너진다（입고 거부는 §2-5 가 본다）. */
+  const raw = JSON.stringify(NEWFMT);
+  for (const h of HEADERS) assert(!raw.includes(h), `픽스처에 ${h} 가 들어 있습니다`);
+  const text = renderDay(NEWFMT, KEN).map((m) => m.text).join("\n");
+  for (const h of HEADERS) assert(text.includes(h), `${h} 가 출력에 없습니다`);
+  assert(text.includes("🔗 接続 (活用ルール)"), "🔗 헤더 문구");
+  assert(text.includes("💡 学習ポイント"), "💡 헤더 문구");
+  assert(text.includes("💬 実際に使ってみよう"), "💬 헤더 문구");
+  assert(text.includes("📚 今日の単語"), "📚 헤더 문구");
+  assert(text.includes("❓ 今日のクイズ"), "❓ 헤더 문구");
+  return "📘🔗💡💬📚❓🍀 전부 코드 소유";
+});
+
+check("신양식 → 3통（1·2통 + ❓ 꼬리통）・tip 은 形/使/落로 분해", () => {
+  const m = renderDay(NEWFMT, KEN);
+  assert(m.length === 3, `${m.length} 통`);
+  assert(m[0].text.startsWith(`📘 Day 51 : -(스)ㅂ니다`), m[0].text.split("\n")[0]);
+  /* 形 행은 🔗 아래, 使·落는 ・접두어로 💡 아래 ── 접두어 문자
+     자체（形　…）는 출력에 남지 않는다. */
+  assert(/🔗 接続 \(活用ルール\)\nパッチム無/.test(m[0].text), "形 행이 🔗 아래에 없습니다");
+  assert(/・使: ニュース・面接・職場/.test(m[0].text), "使 행이 ・使: 로 나오지 않습니다");
+  assert(/・落: -아요\/-어요/.test(m[0].text), "落 행이 ・落: 로 나오지 않습니다");
+  assert(!/形　/.test(m[0].text), "分解 후에도 形　접두어가 남았습니다");
+  return "1통=문법·회화 / 2통=단어 / 꼬리통=퀴즈";
+});
+
+check("vocab 6개가 품사별 2·2·2 로 묶여 1〜6 연번으로 출력", () => {
+  const m = renderDay(NEWFMT, KEN);
+  const v = m[1].text;
+  assert(/【名詞】 1\. 면접　面接〔面接〕　2\. 자기소개/.test(v), v);
+  assert(/【形容詞】3\. 바쁘다　忙しい　4\. 즐겁다/.test(v), v);
+  assert(/【動詞】 5\. 다니다　通う・勤める　6\. 일하다/.test(v), v);
+  return "【名詞】12 /【形容詞】34 /【動詞】56";
+});
+
+check("🍀 라벨이 「今日のひとこと」이고 bridge.ja 만 나온다（kr 은 비표시）", () => {
+  const text = renderDay(NEWFMT, KEN).map((m) => m.text).join("\n");
+  assert(text.includes("🍀 今日のひとこと\n第一印象は話し方から。"), "라벨·ja 가 없습니다");
+  assert(!text.includes("첫인상은"), "bridge.kr 이 화면에 나왔습니다（집필용으로만 남깁니다）");
+  /* 이중 출력 금지 ── 레슨 안에서 한 번만. */
+  assert(text.split("今日のひとこと").length === 2, "🍀 가 두 번 나왔습니다");
+  return "ja 1행・1회";
+});
+
+check("❓ 꼬리통은 quickReply 를 나르고（기존 review 방）, 말미가 아니면 열리지 않으므로 마지막 통", () => {
+  const m = renderDay(NEWFMT, KEN);
+  const tail = m[m.length - 1];
+  assert(tail.quickReply, "꼬리통에 quickReply 가 없습니다");
+  assert(m.slice(0, -1).every((x) => !x.quickReply),
+    "1·2통째에 quickReply 가 있습니다（push-daily 의 꼬리통 판별이 무너집니다）");
+  for (const it of tail.quickReply.items) {
+    assert(/^action=review&day=51&choice=\d$/.test(it.action.data), it.action.data);
+    assert(!/answer/.test(it.action.data), "data 에 answer 가 실렸습니다");
+    assert(it.action.label.length <= 20, `label 20자 초과: ${it.action.label}`);
+  }
+  assert(/①.*\n②.*\n③/.test(tail.text), "①②③ 가 본문에 없습니다");
+  return "action=review&day=51 · 정답 비탑재";
+});
+
+check("절목의 아침（quizSection:false）은 ❓를 접고 🍀는 2통으로", () => {
+  const m = renderDay(NEWFMT, KEN, { quizSection: false });
+  assert(m.length === 2, `${m.length} 통`);
+  assert(m.every((x) => !x.quickReply), "접었는데 quickReply 가 남았습니다");
+  assert(m[1].text.includes("🍀 今日のひとこと"), "🍀 가 사라졌습니다");
+  return "채점은 절목 퀴즈（기록 있음）가 맡는 날";
+});
+
+check("구양식 4케이스 전부 throw 없이（§1-2 ── 거부는 입고 관문의 일）", () => {
+  /* tip 무정형 / vocab 3어 pos 없음 / quiz 없음 / bridge 없음. */
+  const OLDFMT = {
+    day_number: 4,
+    grammar_point: "-고자（〜しようとして ※公式）",
+    grammar_tip_kr: "격식 있는 의도·목적입니다.\n「알리고자 합니다」",
+    dialogue_template: [
+      { kr: "결과를 공유하고자 합니다.", ja: "結果を共有しようと思います。" },
+      { kr: "저도 그래요.", ja: "わたしもそうです。" }
+    ],
+    vocab_3: [
+      { kr: "고자", meaning: "しようとして" },
+      { kr: "마련하다", meaning: "設ける" },
+      { kr: "요점", meaning: "要点" }
+    ],
+    requires_name_slot: false
+  };
+  const m = renderDay(OLDFMT, KEN);
+  assert(m && m.length === 2, `${m ? m.length : 0} 통`);
+  /* tip 은 분해하지 않고 💡 아래 통째（形/使/落 없음）. */
+  assert(m[0].text.includes("💡 学習ポイント\n격식 있는 의도·목적입니다."),
+    "tip 이 통째로 나오지 않았습니다");
+  assert(!m[0].text.includes("🔗"), "무정형 tip 인데 🔗 섹션이 생겼습니다");
+  /* 헤더는 구양식에도 붙는다（§6-1: 배포① 시점의 화면 변화）. */
+  assert(m[0].text.startsWith("📘 Day 4 : -고자\n[〜しようとして ※公式]"),
+    m[0].text.split("\n").slice(0, 2).join(" / "));
+  /* vocab 은 평면 목록. */
+  assert(m[1].text.includes("・고자　しようとして"), "평면 목록이 아닙니다");
+  assert(!m[1].text.includes("【名詞】"), "pos 없는 단어를 묶었습니다");
+  /* quiz·bridge 없음 → ❓·🍀 생략. */
+  assert(!m.some((x) => x.quickReply), "quiz 없는 날에 ❓가 붙었습니다");
+  assert(!m.some((x) => x.text.includes("🍀")), "bridge 없는 날에 🍀가 붙었습니다");
+
+  /* quiz 가 있어도 구양식(pos 없음)이면 데일리 ❓는 만들지 않는다 ──
+     배포① 시점의 화면 변화를 「헤더 + bridge 위치」로 한정（복습·절목
+     퀴즈의 현행 거동 유지）. bridge 가 있으면 🍀만 2통 말미에. */
+  const withQuizBridge = { ...OLDFMT,
+    quiz: { question: "?", choices: ["a", "b"], answer: 0 },
+    fortune_bridge: { kr: "오늘은 좋은 날.", ja: "今日はよい日。" } };
+  const m2 = renderDay(withQuizBridge, KEN);
+  assert(m2.length === 2 && !m2.some((x) => x.quickReply),
+    "구양식의 quiz 로 데일리 ❓를 만들었습니다");
+  assert(m2[1].text.endsWith("🍀 今日のひとこと\n今日はよい日。"),
+    "🍀 가 2통 말미에 없습니다");
+  return "tip통째 / 평면단어 / ❓생략 / 🍀생략·이동 전부 무사고";
+});
+
+check("신양식 판정（isNewFormat）은 pos 하나로 충분（§2 와 같은 문장）", () => {
+  assert(isNewFormat(NEWFMT) === true, "6어 pos 픽스처를 구양식으로 봤습니다");
+  assert(isNewFormat({ vocab_3: [{ kr: "a", meaning: "b" }] }) === false, "pos 없는데 신양식");
+  assert(isNewFormat({ vocab_3: [{ kr: "a", meaning: "b", pos: "名詞" }, { kr: "c", meaning: "d" }] }) === true,
+    "하나라도 있으면 신양식이어야 합니다");
+  assert(isNewFormat({}) === false, "vocab 없음");
+  return "pos 가 하나라도 있으면 신양식";
+});
+
+check("parseTip 은 3버킷이 다 있어야만 분해（없으면 null → 통째 표시）", () => {
+  assert(parseTip("形　A\n使　B\n落　C") !== null, "정형을 분해하지 못했습니다");
+  const t = parseTip("形　A1\nA2 이어짐\n使　B\n落　C");
+  assert(t && t.form.length === 2 && t.form[1] === "A2 이어짐", "무표지 행이 직전 버킷에 붙지 않습니다");
+  assert(parseTip("形　A\n使　B") === null, "落 없는데 분해했습니다");
+  assert(parseTip("그냥 설명입니다") === null, "무정형을 분해했습니다");
+  assert(parseTip("") === null && parseTip(null) === null, "빈 tip");
+  return "形·使·落 전부 필수・무표지 행은 이어붙임";
 });
 
 console.log(`\n${fails.length ? "✗" : "✓"} ${pass + fails.length} 項目中 ${pass} 件成功`);

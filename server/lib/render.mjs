@@ -146,30 +146,118 @@ export function fillSlots(text, user = {}) {
   return out;
 }
 
-/* ---- 1 日ぶんを組み立てる ------------------------------------------
-   2 通に分ける。1 通に詰めると長くて読み飛ばされ、3 通以上だと
-   通知が続けて鳴る。pushMessage は配列を受けるので、2 通でも
-   API 呼び出しは 1 回で済む。
+/* ---- 신양식（지시서㉑）의 부품 --------------------------------------
+   섹션 헤더（📘🔗💡💬📚❓🍀）는 전부 이 파일이 소유한다. 원고 JSON 에
+   넣으면 입고 검사（content-check §2-5）가 거부한다 ── 303일 × 헤더
+   복제를 원천 차단하기 위해서다.
 
-     1 通目  文法 + 会話
-     2 通目  単語 3 語
+   신양식 판정은 §2 와 한 문장: vocab_3 항목에 pos 가 하나라도 있으면
+   신양식. 판정을 두 군데에 두면 렌더러와 입고 검사가 다른 답을 낸다. */
+export function isNewFormat(template) {
+  const v = Array.isArray(template?.vocab_3) ? template.vocab_3 : [];
+  return v.some((w) => w && w.pos);
+}
+
+/* pos 의 값이자 표시 순서. 원고는 이 세 값만 쓸 수 있고（content-check）,
+   화면의 【名詞】 같은 묶음 헤더도 여기서 나온다 ── 표기는 한 곳에만. */
+export const POS = Object.freeze(["名詞", "形容詞", "動詞"]);
+
+/* tip 은 「形　…／使　…／落　…」의 3행 정형（새 필드를 만들지 않는다
+   ── grammar_tip_kr 하나에 들어 있고 여기서 접두어로 나눈다）.
+   행머리가 形/使/落 이면 그 버킷을 열고, 무표지 행은 직전 버킷에
+   이어 붙인다. 3버킷이 다 차지 않으면 null ── 구양식으로 간주하고
+   호출측이 통째로 표시한다（§1-2: 렌더러는 거부하지 않는다）. */
+export function parseTip(tip) {
+  const s = String(tip ?? "");
+  if (!s) return null;
+  const buckets = { "形": [], "使": [], "落": [] };
+  let cur = null;
+  for (const line of s.split("\n")) {
+    const m = /^([形使落])[　\s]*(.*)$/.exec(line);
+    if (m) { cur = m[1]; buckets[cur].push(m[2]); }
+    else if (cur !== null) buckets[cur].push(line);
+    else return null;                          /* 첫 행부터 무표지 ── 정형이 아니다 */
+  }
+  if (!buckets["形"].length || !buckets["使"].length || !buckets["落"].length) return null;
+  return { form: buckets["形"], use: buckets["使"], fall: buckets["落"] };
+}
+
+/* grammar_point 의 말미 전각（…）를 일본어부로 나눈다.
+   「-다고 하다（〜だと言う）」→ 한국어부 + [일본어부] 의 2행.
+   괄호가 없으면 일본어부 없이 1행 ── 구양식·신양식 공통. */
+function splitGrammarPoint(point) {
+  const s = String(point ?? "").trim();
+  const m = /^(.+?)（([^（）]+)）$/.exec(s);
+  return m ? { kr: m[1].trim(), ja: m[2].trim() } : { kr: s, ja: null };
+}
+
+/* quiz 열의 형. 깨져 있으면 null ── 보내지 않을 뿐, 본편은 간다.
+   원래 repo/learning.mjs 에 있던 것을 이리로 옮겼다（learning 이
+   재수출한다）── 렌더러가 꼬리통을 만들 때 같은 판정이 필요한데,
+   render → repo 방향의 import 는 층을 거꾸로 탄다. */
+export function usableQuiz(q) {
+  if (!q || typeof q.question !== "string" || !q.question
+      || !Array.isArray(q.choices) || q.choices.length < 2
+      || !Number.isInteger(q.answer) || q.answer < 0 || q.answer >= q.choices.length) {
+    return null;
+  }
+  return q;
+}
+
+/* ---- 1 日ぶんを組み立てる（지시서㉑ 신양식）--------------------------
+   레슨은 2통 + 신양식이면 꼬리통 1개.
+
+     1 통目   📘 Day N : 문법 / [일본어부] / 🔗 接続 / 💡 学習ポイント / 💬 회화
+     2 通目   📚 今日の単語（신양식: 품사 2·2·2 묶음 / 구양식: 평면 목록）
+     꼬리통   ❓ 今日のクイズ + ①②③ + quickReply（신양식만）
+
+   🍀 今日のひとこと（fortune_bridge.ja）는 레슨의 **마지막 통** 말미에
+   붙는다 ── 꼬리통이 있으면 거기, 없으면（구양식） 2통째. 표시는 ja 만
+   （§1-3 ── kr 은 집필·검수용으로 원고에 남는다）.
+
+   ★ 꼬리통의 quickReply 는 아침 묶음의 마지막 1통에서만 열린다（LINE
+   사양·절목 퀴즈가 말미로 가는 이유와 같다）. 그래서 push-daily 가
+   꼬리통을 뽑아 운세·부적 뒤（묶음 맨 끝）에 다시 붙인다. 판별은
+   「quickReply 를 가진 마지막 요소」── 1·2통째에는 quickReply 가 없다.
+
+   ★ 구양식 원고（tip 무정형·vocab 3어 pos 없음·quiz/bridge 부재）도
+   여기서 throw 하지 않는다（§1-2）. 신양식 검사는 입고 관문의 일이고,
+   렌더러는 있는 것을 무너지지 않게 보여준다. 구양식의 quiz 는 데일리
+   꼬리통을 만들지 않는다 ── 배포① 시점의 화면 변화를 「헤더 + bridge
+   위치」로 한정하기 위해（복습·절목 퀴즈의 현행 거동 유지）.
+
+   quizSection: false 는 절목（30/50/75）의 아침 ── 그날은 절목 퀴즈
+   （기록 있음·action=quiz）가 말미에 오므로, 무보존의 데일리 ❓를
+   접는다. 같은 아침에 퀴즈 2건을 두지 않는 기존 원칙.
 
    返すのは LINE の messages 配列そのもの。送信は呼ぶ側の仕事で、
    ここは文字列を作るだけにしておく ── そうしておくと、送らずに
    中身だけ確かめられる。 */
-export function renderDay(template, user = {}) {
+export function renderDay(template, user = {}, { quizSection = true } = {}) {
   if (!template) throw new Error("template がありません");
 
   const day  = Number(template.day_number);
-  const lines = [];
+  const texts = [];
 
   /* --- 1 通目 --- */
-  const head = [`📚 ${day}日目`];
-  if (template.grammar_point)  head.push(`【今日の文法】${template.grammar_point}`);
-  if (template.grammar_tip_kr) head.push(template.grammar_tip_kr);
+  const gp = splitGrammarPoint(template.grammar_point);
+  const head = [`📘 Day ${day} : ${gp.kr}`];
+  if (gp.ja) head.push(`[${gp.ja}]`);
+
+  const tip = parseTip(template.grammar_tip_kr);
+  if (tip) {
+    head.push("", "🔗 接続 (活用ルール)", ...tip.form);
+    head.push("", "💡 学習ポイント",
+      `・使: ${tip.use[0]}`, ...tip.use.slice(1),
+      `・落: ${tip.fall[0]}`, ...tip.fall.slice(1));
+  } else if (template.grammar_tip_kr) {
+    /* 구양식: 분해하지 않고 💡 아래 통째로（§1-2）. */
+    head.push("", "💡 学習ポイント", template.grammar_tip_kr);
+  }
 
   /* 会話は 1 往復ごとに空行で離す。詰めて並べると、韓国語と訳が
-     交互に 6 行続いて、どこまでが一人の台詞か読めなくなる。
+     交互に続いて、どこまでが一人の台詞か読めなくなる。
+     일본어 역은 「  （…）」── 들여쓰기 + 전각 괄호（§1-1 스케치）.
 
      who は任意。付いていれば「A：」のように頭に置く。
      無いと、問いかけと答えが同じ人の独り言に見える ── 実際
@@ -190,23 +278,57 @@ export function renderDay(template, user = {}) {
       ? (fillSlots(row.who, user) ?? String(row.who).replace(/\{[A-Z_]+\}/g, "あなた"))
       : "";
     const who = label ? `${label}：` : "";
-    body.push(ja ? `${who}${kr}\n${ja}` : `${who}${kr}`);
+    body.push(ja ? `${who}${kr}\n  （${ja}）` : `${who}${kr}`);
   }
-  if (body.length) head.push("", body.join("\n\n"));
-  lines.push(head.join("\n"));
+  if (body.length) head.push("", "💬 実際に使ってみよう", body.join("\n\n"));
+  texts.push(head.join("\n"));
 
   /* --- 2 通目 --- */
   const vocab = Array.isArray(template.vocab_3) ? template.vocab_3 : [];
   if (vocab.length) {
-    const v = ["🔖 今日の単語"];
-    for (const w of vocab) {
-      const note = w.note ? `　（${w.note}）` : "";
-      v.push(`・${w.kr}　${w.meaning}${note}`);
+    const v = ["📚 今日の単語"];
+    /* 전 항목에 아는 pos 가 있어야 묶는다. 섞여 있으면（입고 검사가
+       막지만, 만에 하나 들어와도） 단어를 잃지 않게 평면으로 낸다. */
+    if (vocab.every((w) => w && POS.includes(w.pos))) {
+      let n = 0;
+      for (const pos of POS) {
+        const ws = vocab.filter((w) => w.pos === pos);
+        if (!ws.length) continue;
+        const items = ws.map((w) => {
+          n++;
+          const note = w.note ? `（${w.note}）` : "";
+          return `${n}. ${w.kr}　${w.meaning}${note}`;
+        });
+        /* 【名詞】·【動詞】 뒤의 반각 공백은 【形容詞】와의 폭 맞춤
+           （§1-1 스케치 그대로）. */
+        v.push(`【${pos}】${pos.length === 2 ? " " : ""}${items.join("　")}`);
+      }
+    } else {
+      for (const w of vocab) {
+        const note = w.note ? `　（${w.note}）` : "";
+        v.push(`・${w.kr}　${w.meaning}${note}`);
+      }
     }
-    lines.push(v.join("\n"));
+    texts.push(v.join("\n"));
   }
 
-  return lines.map((text) => ({ type: "text", text }));
+  const msgs = texts.map((text) => ({ type: "text", text }));
+
+  /* --- 꼬리통（신양식 데일리 퀴즈）---
+     postback 은 기존 review 방（무보존·즉시 채점）을 그대로 쓴다
+     ── data 에 answer 를 싣지 않는 규칙도 quizMessage 가 그대로 진다. */
+  if (quizSection && isNewFormat(template)) {
+    const q = usableQuiz(template.quiz);
+    if (q) msgs.push(quizMessage("❓ 今日のクイズ", "review", day, q));
+  }
+
+  /* --- 🍀 今日のひとこと ── 레슨 마지막 통의 말미 --- */
+  const bridge = template.fortune_bridge;
+  if (bridge && bridge.ja && msgs.length) {
+    msgs[msgs.length - 1].text += `\n\n🍀 今日のひとこと\n${bridge.ja}`;
+  }
+
+  return msgs;
 }
 
 /* ---- 夕方のふりかえり（지시서⑨で「押して開く」形へ）-----------------

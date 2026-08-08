@@ -772,7 +772,7 @@ await check("예고와 절목이 겹친 아침(5통)은 부적이 쉰다 ── 
 });
 
 await check("確かめた生年月日の人には、運勢が付く", async () => {
-  const m = fortuneSection(WITH_SAJU, TPL[0], { load: () => FAKE_LINES });
+  const m = fortuneSection(WITH_SAJU, { load: () => FAKE_LINES });
   assert(m && m.type === "text", JSON.stringify(m));
   assert(/총운/.test(m.text), m.text);
   assert(SIPSIN.some((s) => m.text.includes(`${s}-kr`)), `十神の一言がありません: ${m.text}`);
@@ -783,20 +783,20 @@ await check("確かめていない生年月日には、運勢を付けない", a
   /* ウェブの診断は「試しに入れてみる」場所でもある。確かめずに
      101 日ぶん占うと、全部が別人のものになる ── しかも数字は
      出るので、受け取った側からは間違いだと分からない。 */
-  const m = fortuneSection({ ...WITH_SAJU, birth_confirmed: false }, TPL[0],
+  const m = fortuneSection({ ...WITH_SAJU, birth_confirmed: false },
     { load: () => FAKE_LINES });
   assert(m === null, JSON.stringify(m));
   return "null";
 });
 
 await check("四柱が無い人にも付けない（既定の運勢を作らない）", async () => {
-  const m = fortuneSection({ ...USER, birth_date: null }, TPL[0], { load: () => FAKE_LINES });
+  const m = fortuneSection({ ...USER, birth_date: null }, { load: () => FAKE_LINES });
   assert(m === null, JSON.stringify(m));
   return "null";
 });
 
 await check("文面が未入稿なら、黙って落とす（レッスンは送る）", async () => {
-  const m = fortuneSection(WITH_SAJU, TPL[0], { load: () => null });
+  const m = fortuneSection(WITH_SAJU, { load: () => null });
   assert(m === null, JSON.stringify(m));
 
   const conn = fakeConn(READY);
@@ -808,7 +808,7 @@ await check("文面が未入稿なら、黙って落とす（レッスンは送�
 });
 
 await check("運勢の読み込みが落ちても、レッスンは送る", async () => {
-  const m = fortuneSection(WITH_SAJU, TPL[0],
+  const m = fortuneSection(WITH_SAJU,
     { load: () => { throw new Error("欠番があります"); } });
   assert(m === null, "例外が外へ出ました");
   return "例外を外へ出さない";
@@ -823,24 +823,88 @@ await check("運勢は 3 通目（レッスンの後ろ）", async () => {
   await deliverOne(conn, WITH_SAJU,
     { send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES });
   assert(msgs.length === 4, `${msgs.length} 通でした（本文 2 + 運勢 + 부적）`);
-  assert(/日目/.test(msgs[0].text), `1 通目が本文ではありません: ${msgs[0].text.slice(0, 30)}`);
+  assert(/^📘 Day \d+ :/.test(msgs[0].text), `1 通目が本文ではありません: ${msgs[0].text.slice(0, 30)}`);
   assert(/총운/.test(msgs[2].text), `3 通目が運勢ではありません: ${msgs[2].text.slice(0, 30)}`);
   assert(msgs[3].type === "flex", `4 通目が부적ではありません（지시서⑪）: ${msgs[3].type}`);
   return "文法・単語・運勢・부적";
 });
 
-await check("その日の一言（fortune_bridge）は、原稿があるときだけ出る", async () => {
-  const withBridge = { ...TPL[0],
-    fortune_bridge: JSON.stringify({ kr: "오늘은 재물운이 좋아요.", ja: "今日は金運がいいです。" }) };
-  /* getTemplate を通さずに直接渡すので、JSON 列は自分で解く。 */
-  const parsed = { ...withBridge, fortune_bridge: JSON.parse(withBridge.fortune_bridge) };
+console.log("\n[bridge 이동（지시서㉑ §1-3）]  운세에서 빼고 레슨 최하단으로 ── 이중 출력 금지");
 
-  const on = fortuneSection(WITH_SAJU, parsed, { load: () => FAKE_LINES });
-  assert(/오늘은 재물운이 좋아요/.test(on.text), on.text);
+await check("bridge 는 운세 메시지에 더 이상 없다（fortuneSection 은 원고를 받지 않는다）", async () => {
+  /* 시그니처 자체가 template 를 받지 않게 됐다 ── 어느 호출이 남아
+     있어도 두 번째 인자는 옵션으로 읽혀 bridge 가 실릴 길이 없다.
+     출력에서도 옛 구분선（──────────）이 사라졌는지 본다. */
+  const m = fortuneSection(WITH_SAJU, { load: () => FAKE_LINES });
+  assert(m && /총운/.test(m.text), "운세 자체가 사라졌습니다");
+  assert(!/──────────/.test(m.text), "bridge 구분선이 남아 있습니다");
+  return "운세는 운세만";
+});
 
-  const off = fortuneSection(WITH_SAJU, TPL[0], { load: () => FAKE_LINES });
-  assert(!/오늘은 재물운이/.test(off.text), "原稿が無いのに出ました");
-  return "無ければ足さない";
+await check("bridge 가 있는 아침 ── 레슨 말미（🍀）에 1회만, 운세와 이중 출력 없음", async () => {
+  const withBridge = [{ ...TPL[0],
+    fortune_bridge: JSON.stringify({ kr: "오늘은 「예요」로 부드럽게.", ja: "今日は「예요」でやわらかく。" }) }];
+  const conn = fakeConn({ ...READY, "FROM content_templates": withBridge });
+  let msgs = null;
+  const r = await deliverOne(conn, WITH_SAJU,
+    { send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES });
+  assert(/送信:4日目/.test(r), r);
+
+  const all = msgs.map((m) => m.text || "").join("\n====\n");
+  const hits = all.split("今日は「예요」でやわらかく。").length - 1;
+  assert(hits === 1, `bridge.ja 가 ${hits}회 나왔습니다（1회여야 합니다）`);
+  assert(all.includes("🍀 今日のひとこと"), "🍀 라벨이 없습니다");
+  assert(!all.includes("오늘은 「예요」로 부드럽게"), "bridge.kr 이 화면에 나왔습니다");
+
+  const fi = msgs.findIndex((m) => /오늘의 운세/.test(m.text || ""));
+  assert(fi >= 0, "운세가 없습니다");
+  assert(!/ひとこと|예요」でやわらかく/.test(msgs[fi].text), "운세 메시지에 bridge 가 실렸습니다");
+  /* 구양식（pos 없음）이므로 🍀는 레슨 2통째 말미 ── 운세보다 앞. */
+  const bi = msgs.findIndex((m) => (m.text || "").includes("🍀"));
+  assert(bi >= 0 && bi < fi, `🍀 위치가 레슨이 아닙니다（msgs[${bi}]・운세 ${fi}）`);
+  return "레슨에 1회・운세에 0회";
+});
+
+await check("신양식 아침 ── ❓ 꼬리통이 묶음 맨 끝（부적 뒤）에서 버튼을 연다", async () => {
+  /* pos 있는 6어 + quiz + bridge ── 6일째（3의 배수）로 두어
+     복습 뽑기가 쉬는 것도 함께 본다（같은 아침에 퀴즈 2건 금지）. */
+  const NEWTPL = [{
+    day_number: 6, track: "beginner", semester: 1,
+    grammar_point: "-도（〜も）",
+    grammar_tip_kr: "形　名詞 + 도\n使　「私も」— 同じであることを足す\n落　-은/는 と重ねられません",
+    requires_name_slot: 1,
+    dialogue_template: JSON.stringify([
+      { kr: "저는 드라마를 좋아해요.", ja: "私はドラマが好きです。" },
+      { kr: "{NAME_EUN} 어때요?", ja: "{NAME_JP}はどうですか。" },
+      { kr: "저도 좋아해요.", ja: "私も好きです。" }
+    ]),
+    vocab_3: JSON.stringify([
+      { kr: "드라마", meaning: "ドラマ", pos: "名詞" }, { kr: "노래", meaning: "歌", pos: "名詞" },
+      { kr: "좋다", meaning: "よい", pos: "形容詞" }, { kr: "많다", meaning: "多い", pos: "形容詞" },
+      { kr: "보다", meaning: "見る", pos: "動詞" }, { kr: "듣다", meaning: "聞く", pos: "動詞" }
+    ]),
+    quiz: JSON.stringify({ question: "「私も行きます」は？", choices: ["저는도 가요", "저도 가요"], answer: 1 }),
+    fortune_bridge: JSON.stringify({ kr: "「나도」라고 말해 보세요.", ja: "「私も」と言ってみましょう。" })
+  }];
+  const conn = fakeConn({ ...READY, "FROM content_templates": NEWTPL });
+  let msgs = null;
+  const r = await deliverOne(conn, { ...WITH_SAJU, current_day: 5, days_used: 5 },
+    { send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES });
+  assert(/送信:6日目/.test(r), r);
+
+  assert(msgs.length === 5, `${msgs.length} 통（1·2통+운세+부적+❓ = 5）`);
+  const last = msgs[msgs.length - 1];
+  assert(last.quickReply?.items?.every((i) => /^action=review&day=6&choice=\d$/.test(i.action.data)),
+    `말미가 ❓ 꼬리통이 아닙니다: ${JSON.stringify(last.quickReply?.items?.[0]?.action || last.type)}`);
+  assert(/❓ 今日のクイズ/.test(last.text), "❓ 헤더가 없습니다");
+  assert(/🍀 今日のひとこと\n「私も」と言ってみましょう。$/.test(last.text), "🍀 가 꼬리통 말미에 없습니다");
+  /* 운세·부적은 꼬리통보다 앞. */
+  assert(msgs.findIndex((m) => /오늘의 운세/.test(m.text || "")) < msgs.length - 1, "운세가 꼬리통 뒤에 있습니다");
+  assert(msgs.some((m) => m.type === "flex"), "부적이 빠졌습니다（5통 이내인데）");
+  /* 3의 배수인데 복습 뽑기（quiz IS NOT NULL）를 돌리지 않았다. */
+  assert(!conn.sql().some((s) => /quiz IS NOT NULL/i.test(s)),
+    "신양식 아침에 복습 뽑기가 돌았습니다（퀴즈 2건）");
+  return "5통・❓ 말미・복습 뽑기 쉼";
 });
 
 console.log(`\n${fails.length ? "✗" : "✓"} ${pass + fails.length} 項目中 ${pass} 件成功`);

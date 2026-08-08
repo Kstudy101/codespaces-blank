@@ -140,7 +140,11 @@ export function resetCache() { cached = undefined; }
      2  なぜ今日がそうなのか（十神）
      3  その日いちばん高い項目と、いちばん低い項目
      4  残りの項目は等級だけ 1 行に畳む
-     5  その日の文法で言い直した一言（原稿があるときだけ）
+
+   かつてここに 5 番目（fortune_bridge ── その日の文法で言い直した
+   一言）が居たが、지시서㉑ §1-3 でレッスンの最下段（🍀 今日のひとこと、
+   lib/render.mjs）へ移した。運勢メッセージは bridge を知らない ──
+   両方に出すと同じ一言が朝の便に二度並ぶ（verify-push が見張る）。
 
    3 を「高い方と低い方」にしてあるのは、6 項目すべてに一言を
    付けると韓国語と訳で 12 行になり、レッスン本体より長くなるため。
@@ -166,7 +170,7 @@ export function rankCats(scores) {
   return { top: sorted[0], bottom: sorted[sorted.length - 1] };
 }
 
-export function fortuneMessage(fortune, lines, { bridge = null } = {}) {
+export function fortuneMessage(fortune, lines) {
   if (!fortune || !lines) return null;
 
   const { scores, grades, god } = fortune;
@@ -211,15 +215,6 @@ export function fortuneMessage(fortune, lines, { bridge = null } = {}) {
     if (rest.length) {
       out.push("", rest.map((id) => `${CAT_LABELS[id].ko} ${grades[id].ko}`).join("　"));
     }
-  }
-
-  /* 5. その日の文法で言い直した一言。原稿（content_templates の
-        fortune_bridge）が持っているときだけ。無ければ何も足さない ──
-        文法と運勢の取り合わせは人が読んで決めるもので、機械に
-        当てはめさせると「-고 싶다」で財運を語るような文が出る。 */
-  if (bridge && bridge.kr) {
-    out.push("", "──────────", bridge.kr);
-    if (bridge.ja) out.push(bridge.ja);
   }
 
   return { type: "text", text: out.join("\n") };

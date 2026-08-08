@@ -12,6 +12,7 @@
    ================================================================== */
 import { one, all, run, insertNew, fromJson, toJson, nn } from "./util.mjs";
 import { jstDateTime } from "../jst.mjs";
+import { usableQuiz } from "../render.mjs";
 
 /* ---- コース ------------------------------------------------------
    初級・中級・上級。**3 本の独立した 101 日**で、進み方を共有しない。
@@ -327,16 +328,12 @@ export async function listQuizKeys(conn) {
 }
 
 /* quiz 列の形。壊れていれば null ── 送らないだけで、本編は届く。
-   復習（pickReviewQuiz）と節目（db/push-daily.mjs）の両方がここを
-   通る。別々に見ると、片方だけ「answer が範囲外」を通してしまう。 */
-export function usableQuiz(q) {
-  if (!q || typeof q.question !== "string" || !q.question
-      || !Array.isArray(q.choices) || q.choices.length < 2
-      || !Number.isInteger(q.answer) || q.answer < 0 || q.answer >= q.choices.length) {
-    return null;
-  }
-  return q;
-}
+   復習（pickReviewQuiz）・節目（db/push-daily.mjs）・신양식 꼬리통
+   （render.mjs）が同じものを通る。別々に見ると、片方だけ
+   「answer が範囲外」を通してしまう。定義は render.mjs へ移した
+   （지시서㉑ ── render → repo の向きの import は層を逆に辿るため、
+   こちらが再輸出する）。呼び出し側は learning.usableQuiz のまま。 */
+export { usableQuiz };
 
 /* ---- 復習クイズ（3 日周期、docs/plan-quiz.md）----------------------
    maxDay 以下から 1 問を無作為に。上限を切るのは未習の文法を

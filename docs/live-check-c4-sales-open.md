@@ -1,7 +1,8 @@
 # 라이브 검증·판단 지시서 — 실판매 모드 (C4)
 
-> STATUS: **C4** — [STATUS.md](../STATUS.md) §0.
-> **선행:** A3 Stripe 테스트 3케이스 통과 · C2 `/tokushoho` 배포 · C3 리치메뉴 등록
+> STATUS: **C4 보류** — [STATUS.md](../STATUS.md) §C·§F.
+> **선행:** A3 ✓ · C2 `/tokushoho` ✓ · C3 리치メニュー ✓
+> **2026-08-08:** 체험 3일·무결제 차단 확인 후 `SALES_MODE=open` **진행 보류**.
 
 ## 판단
 

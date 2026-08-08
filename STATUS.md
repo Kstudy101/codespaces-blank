@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-08 (B1·D3 종결)
+최종 갱신: 2026-08-08 (C4 보류·체험 3일차 확인)
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -14,14 +14,15 @@
 - LINE 배신 서버(`server/`)는 **ChemiCloud 에 배포 완료** (최신 2026-08-07, `518c060` — B1 프로필 편집) —
   마이그레이션은 이제 **적용 이력(schema_migrations)** 을 가진다. 배포마다
   001부터 재실행되던 폭탄(2회차에 errno 1054 로 배포 정지)은 `8b12063` 로 종식
-- 결제(선불 횟수권) — **A3 Stripe 테스트 완료** (2026-08-08). C2·C3 완료. **C4 실판매 판단**만 남음
+- 결제(선불 횟수권) — **A3·C2·C3 완료** (2026-08-08). **C4 실판매(`SALES_MODE=open`)는 보류**
+  (2026-08-08 — 체험 3일·무결제 시 4일차 미진행 확인 후). `SALES_MODE=test` 유지
 - 관문(자동 검증) **19종 전부 통과** + smoke 29항목 (migrate 2회 연속 검사 포함)
 - 사이드 메뉴 개편([docs/plan-side-menu.md](docs/plan-side-menu.md)) — **구현·관문 완료** (B2)
 - 콘텐츠 입고·자동 업로드 — **서버 반영 완료** (D1·D1b·D1c·D2, 2026-08-07 대표 확인).
   private repo → FTPS → UAPI Deploy → `.cpanel.yml` seed 전 경로 가동 ([plan-content-ci](docs/plan-content-ci.md))
 
 **권장 진행 순서 (한 줄).**
-C4 실판매 → E 조건 도래 시 라이브 확인.
+E 조건 도래 시 라이브 확인. C4는 재개 시 [live-check-c4](docs/live-check-c4-sales-open.md).
 
 **B3 (2026-08-07 확인).** maintain §3 `#3 beginner 持っている=3 / 台帳=0` —
 migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼으나 **`trial_track` 은
@@ -37,7 +38,7 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **C4** | 실판매 모드 (`SALES_MODE=open`) 판단·투입 | 대표 | [live-check-c4-sales-open.md](docs/live-check-c4-sales-open.md). A3 완료 |
+| — | (현재 없음) | — | C4 보류 (2026-08-08) |
 
 ### B. 개발 (남은 것)
 
@@ -45,11 +46,11 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
 |---|---|---|---|
 | — | (현재 없음) | — | — |
 
-### C. 결제 오픈 — C4만 남음
+### C. 결제 오픈 — C4 보류
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **C4** | A3 완료 후 `SALES_MODE=open` 판단 | 대표 | [live-check-c4](docs/live-check-c4-sales-open.md) · [plan-journey](docs/plan-journey.md) §4 |
+| **C4** | `SALES_MODE=open` — **진행 보류** | 대표 | [live-check-c4](docs/live-check-c4-sales-open.md). A3·선행 완료. 체험 3일·무결제 차단 확인(2026-08-08) |
 
 ### D. 콘텐츠 입고
 
@@ -84,10 +85,11 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
   **C2 tokushoho.html** — 사이트 배포 (2026-08-08),
   **C3 리치メニュー** — LINE 등록 (2026-08-08, `richmenu-ad029399fabcc322b8050f8d92974678`),
   **D3 퀴즈 원고** — 3코스×51문=153, 서버 seed·`答え合わせ` 확인 (2026-08-08 대표 확인)
-- **중지·종결**: **D0** — 로컬 `server/content/` 24JSON(초·중·고 303일) ChemiCloud **수동 FTPS·seed** (2026-08-08 대표 결정).
-  로컬 `seed-content.mjs --check` ✓ (`beginner-01.json` 제거 후). **서버 반영 안 함·재개 예정 없음.**
-  원고 반영은 **D1c** (private repo → FTPS → deploy → `.cpanel.yml` seed) 경로만 유지.
-- **잠김(미완 아님)**: 실판매 모드 — C4 판단 전까지 `SALES_MODE` 는 test 유지
+- **중지·종결**: **D0** — 로컬 `server/content/` 24JSON ChemiCloud **수동 FTPS·seed** (2026-08-08 대표 결정).
+  원고 반영은 **D1c** 경로만 유지.
+- **보류**: **C4** — `SALES_MODE=open` 투입 보류 (2026-08-08). 체험 3일·무결제 시 4일차 미진행·upsell 문면 확인.
+  코드·A3·C2·C3는 완료. 재개 시 [live-check-c4](docs/live-check-c4-sales-open.md).
+- **잠김(미완 아님)**: `SALES_MODE` **test** 유지 (C4 보류 중)
 - **옛 계획**: [plan-p4-content.md](docs/plan-p4-content.md) — 렌더러·배치·원고 입고 전부 가동 중 (2026-08-07)
 
 > 참고: 2026-08-05 보류였던 plan-outage-billing 의 설계 2건은 **2026-08-06
@@ -143,10 +145,11 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
 
 ---
 
-## 3. 결제 오픈 — A3·C2·C3 완료 (2026-08-08), C4만 남음
+## 3. 결제 오픈 — A3·C2·C3 완료, C4 보류 (2026-08-08)
 
-A5·C1 env 입력 · A3 Stripe 테스트 · C2 `/tokushoho` · C3 리치メニュー 완료.
-`SALES_MODE` 는 **test** 유지 — C4 에서 `open` 판단.
+A5·C1 env · A3 Stripe · C2 `/tokushoho` · C3 리치メニュー 완료.
+**C4(`SALES_MODE=open`) 보류** — 체험 3일·무결제 시 4일차 미진행 확인(2026-08-08).
+`SALES_MODE` **test** 유지.
 
 | 환경변수 | 역할 | 비고 |
 |---|---|---|

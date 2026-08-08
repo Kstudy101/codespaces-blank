@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-08 (C4 보류·체험 3일차 확인)
+최종 갱신: 2026-08-08 (레슨 신양식 ㉑ — 렌더러·검사 배포, 상급 원고 후보 대기)
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -38,7 +38,8 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| — | (현재 없음) | — | C4 보류 (2026-08-08) |
+| **㉑-G** | **상급 교체 문법 확정** — 84·39·41 세 자리, 각 A/B/C | 대표 | [plan-newformat §5](docs/plan-newformat.md). 확정 후 시드. 미확정이면 상급 원고 서버 반영 보류 |
+| — | (그 외 없음) | — | C4 보류 (2026-08-08) |
 
 ### B. 개발 (남은 것)
 
@@ -324,6 +325,7 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | [docs/live-check-profile.md](docs/live-check-profile.md) | 프로필 편집 참고 (B1 종결) |
 | [docs/plan-tokushoho.md](docs/plan-tokushoho.md) | 特定商取引法 표기 — 승인·문안 대기 (C2) |
 | [docs/plan-side-menu.md](docs/plan-side-menu.md) | 사이드 메뉴 개편 — 완료 (B2) |
+| [docs/plan-newformat.md](docs/plan-newformat.md) | 레슨 신양식 ㉑ — 렌더러·검사 배포 완료, 상급 원고 교체 후보 대기 (§5·§7) |
 | [docs/plan-content-51-101.md](docs/plan-content-51-101.md) | 초급 51〜101 착수점 — 완료 (D1b) |
 | [docs/system-overview.txt](docs/system-overview.txt) | 시스템 전반 |
 
@@ -365,6 +367,8 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 
 | 커밋 | 내용 |
 |---|---|
+| `bb5529d` | **㉑ §2** 입고 검사 신양식 7규칙 — pos 유무로 신·구 판정(render 와 한 문장), tip 形/使/落·대화 3행·단어 6개 2·2·2·quiz 필수·헤더 이모지 금지·운세 단정 금지. 구양식 303일은 기존 규칙 그대로(재시드 가능). verify-render 59→67·verify-quiz 18→19 |
+| `82fe964` | **㉑ §1** 레슨 신양식 렌더러 — 헤더 7종 코드 소유(📘🔗💡💬📚❓🍀), tip 分解·단어 2·2·2·데일리 ❓ 꼬리통(action=review 재사용). 구양식 무사고 렌더. bridge 를 운세에서 빼 레슨 최하단(🍀 今日のひとこと, ja만)으로. push-daily 꼬리통 말미·통수 상한·복습 뽑기 배타. verify-render 50→67·push 56→58·fortune-server 19→20. [plan-newformat](docs/plan-newformat.md) |
 | (STATUS) | **D 콘텐츠 입고 완료** — 본편 원고·`fortune-lines.json` 서버 반영, private repo CI(FTPS→deploy→seed) 가동 확인. A0·A1·D1·D1b·D1c·D2 → §F |
 | `0f94fee` | 원고 전용 FTP 계정과 `tools/upload-content.sh` (지시서⑬) — 전권 토큰 대신 `content/` 에 갇힌 계정 하나로. FTPS 강제·비밀번호 비노출·삭제 없음·크기 대조. `verify-server` +9 (84→93), 변이 시험 8종 전부 검출. [plan-upload-content](docs/plan-upload-content.md) |
 | (§2) | 코스 선택을 온보딩 말미에 — track 단계·trackpick(판매 게이트 밖)·즉시 1일차·체험 중 기한예고 억제·trial_end 신설(004)·askCourse pick 변형. C2 연동 안내 2건(7880092)과 같은 배포 |

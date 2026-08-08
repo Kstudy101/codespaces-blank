@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-08 20:05 JST (커밋 `943541f` · FTPS 업로드는 인증서 호스트 불일치로 실패 · 시드 대기)
+최종 갱신: 2026-08-08 21:32 JST (㉑-S 시드 대표 완료 · 코드 push·라이브 확인 대기)
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -22,41 +22,16 @@
   private repo → FTPS → UAPI Deploy → `.cpanel.yml` seed 전 경로 가동 ([plan-content-ci](docs/plan-content-ci.md))
 
 **권장 진행 순서 (한 줄).**
-㉑-S 원고 시드(JST 18시 전) — 초·중·상 회화 리프레시 + 퀴즈 4지·오답피드백([plan-beginner-dialogue-refresh](docs/plan-beginner-dialogue-refresh.md) · [plan-quiz-harder-distractors](docs/plan-quiz-harder-distractors.md), 입고 0·verify-quiz 19)을 포함해 올릴 것 → E 조건 도래 시 라이브 확인. C4는 재개 시 [live-check-c4](docs/live-check-c4-sales-open.md).
+㉑-S **시드 완료**(2026-08-08 대표) → 퀴즈 피드백 코드(`943541f`) **push·deploy-server** → 내일 아침 신양식·❓ 라이브 확인 → E1(복습 퀴즈) 조건 도래 시. C4는 재개 시 [live-check-c4](docs/live-check-c4-sales-open.md).
 
-### §0-㉑ 신양식 원고 시드 — 오늘 보류한 이유와 내일 할 일 (2026-08-08 18:55 JST)
+### §0-㉑ 신양식 원고 시드 — **완료** (2026-08-08 대표)
 
-**코드는 배포 끝났습니다.** `82fe964`(렌더러)·`bb5529d`(입고 검사) 둘 다
-`deploy-server` + `Deploy to Xserver` **success**. 문서 커밋은 `paths-ignore: docs/**`
-라 배포가 돌지 않는 것이 정상입니다. `main` 은 `origin/main` 과 동기 상태.
+업로드·`seed-content` 완료. 원고(회화 리프레시·퀴즈 4지)는 DB 반영됨.
 
-**남은 것은 원고 303일뿐이고, 오늘은 착수하지 않았습니다** — 착수 시각이
-**18:55 JST 로 §8-9 의 「JST 18시 전」을 넘겼기 때문**입니다. 저녁 복습의 답은
-「こたえを見る」를 누른 순간 다시 계산되므로, 18시 발송과 탭 사이에 그날 원고를
-갈아끼우면 문제와 답이 어긋납니다(방어 코드 없음 — 이 운용 규칙이 유일한 방어).
-
-> 업로드만 해도 안전하지 않습니다. `.cpanel.yml` 은 **배포마다 seed 를 돌리므로**,
-> 파일만 올려 둔 상태에서 누군가 서버 배포를 하면 그 순간 18시 이후 시드가 됩니다.
-
-**내일(또는 JST 18시 이전) 할 일 — 순서대로:**
-
-```bash
-# 1. 올릴 것 확인 (아무것도 쓰지 않음)
-bash tools/upload-content.sh --dry-run server/content/beginner-01-15.json
-
-# 2. 21개 파일 업로드 (초·중·상 각 101일)
-for f in server/content/{beginner,intermediate,advanced}-*.json; do
-  bash tools/upload-content.sh "$f"
-done
-bash tools/upload-content.sh --list      # 저쪽에 뭐가 있나
-
-# 3. 시드는 cPanel Terminal 에서 사람이 (이 기기엔 cpanel.token 이 없습니다)
-bash ~/kstudy101-line/db/run.sh db/seed-content.mjs --check   # 1문자도 안 씀
-bash ~/kstudy101-line/db/run.sh db/seed-content.mjs           # DB 반영
-```
-
-시드는 **upsert 라 몇 번 넣어도 같은 결과**이고 퀴즈 보존식(`8a8cce3`)이 있어
-재시드 자체는 안전합니다. 로컬 `--check` 는 **303일 0건** 통과 상태입니다.
+**남아 있는 코드 쪽:** `943541f` / `c445f9b` 가 `origin/main` 보다 **ahead 2**.
+오답 피드백(`formatQuizReply`)은 **push → deploy-server** 후에 라이브에 나옵니다.
+(문서·STATUS만 고친 커밋은 `paths-ignore` 로 사이트 배포가 안 돌 수 있음 —
+`server/lib/**` 변경이 있는 `943541f` 는 deploy-server 대상.)
 
 **B3 (2026-08-07 확인).** maintain §3 `#3 beginner 持っている=3 / 台帳=0` —
 migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼으나 **`trial_track` 은
@@ -72,14 +47,14 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **㉑-S** | **신양식 원고 303일 서버 반영(시드)** — **오늘(08-08)은 보류**, 내일 JST 18시 전에 | 대표 | 코드는 배포 완료. 원고만 남음. 08-08 18:55 JST 시점에 착수 불가 판정 — 아래 §0-㉑ |
-| — | (그 외 없음) | — | C4 보류 (2026-08-08) |
+| **㉑-L** | 시드 후 라이브 확인 — 아침 신양식 회화·데일리 ❓·오답 피드백 문면 | 대표 | ㉑-S 시드 완료(2026-08-08). 코드 `943541f` 미push면 피드백 문면은 구형일 수 있음 |
+| — | (그 외 없음) | — | C4 보류 |
 
 ### B. 개발 (남은 것)
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| — | (현재 없음) | — | — |
+| **㉑-P** | `943541f`(+STATUS) **push** → `deploy-server` (오답 피드백·verify-quiz) | 개발/대표 | 원고는 시드됨. 채점 회신 강화는 서버 코드 배포 필요 |
 
 ### C. 결제 오픈 — C4 보류
 

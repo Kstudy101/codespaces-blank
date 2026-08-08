@@ -24,7 +24,7 @@ import { nextStep, messageForStep, confirmName, readingRetry } from "../onboardi
 import { kanaNameToHangul } from "../kana2hangul.mjs";
 import { profileEligible, profileStartUrl } from "./profile.mjs";
 import { askCourse, notReady, salesAllowedFor, salesMode, missingLegalConfig,
-         sellableTracks } from "./checkout.mjs";
+         sellableTracks, statusMessage } from "./checkout.mjs";
 
 /* 受け取る文面は日本語。ひらがな・カタカナ・漢字が混ざるので
    単語の一致で見る（形態素解析は入れない）。 */
@@ -204,28 +204,12 @@ export async function handleMessage(conn, event, { send = replyMessage } = {}) {
     return { userId: user.id, replied: true, onboarding: true };
   }
 
+  /* string か LINE メッセージオブジェクト。進み具合は statusMessage と
+     同じ文面・同じ quickReply にする（リッチメニュー［何日目？］と揃える）。 */
   let reply = null;
 
   if (hit(text, ASK_STATUS)) {
-    /* 残りは course_entitlements と days_used の引き算で出る
-       （migrations/002）。current_day では出せない ──
-       「1 日目からやり直す」で戻るのは current_day だけなので、
-       そちらで数えるとやり直した人の残りが増えて見える。 */
-    const track = user.active_track;
-    const ent = track ? await entitlements.get(conn, user.id, track) : null;
-
-    if (!ent) {
-      reply = "まだ受講が始まっていません。"
-            + "\n下のメニューの［受講料］からコースをお選びください。";
-    } else {
-      const left = Math.max(0, ent.remaining);
-      reply = left > 0
-        /* 「（全 101 日）」は付けない（지시서⑧ §3）── 진행 상황
-           화면에는 잔여만, 전량은 파는 화면(가격표)에만. */
-        ? `いま ${ent.currentDay} 日目まで進んでいます。残り ${left} 日ぶんお届けできます。`
-        : `いま ${ent.currentDay} 日目まで進んでいます。お届けできる日数を使い切りました。`
-          + `\n下のメニューの［受講料］から追加できます。`;
-    }
+    reply = await statusMessage(conn, user);
   } else if (hit(text, ASK_STOP)) {
     /* こちらから status を変えない。ブロックすれば unfollow が来て、
        そこで配信対象から外れる（handlers/follow.mjs）。
@@ -246,7 +230,8 @@ export async function handleMessage(conn, event, { send = replyMessage } = {}) {
      こちらの失敗ではないので、送信できなかったことだけ返す。 */
   if (replyToken && !isVerifyToken(replyToken)) {
     try {
-      await send(replyToken, [{ type: "text", text: reply }]);
+      const msgs = typeof reply === "string" ? [{ type: "text", text: reply }] : [reply];
+      await send(replyToken, msgs);
     } catch (e) {
       return { userId: user.id, replied: false, error: e.message };
     }

@@ -689,14 +689,14 @@ export async function statusMessage(conn, user) {
     };
   }
 
-  const lines = owned.map((e) => {
-    const l = TRACK_LABELS[e.track];
-    const here = e.track === user.active_track ? "▶ " : "　";
-    return `${here}${l.ja}（${l.kr}）　${e.currentDay} / ${TOTAL_DAYS} 日目　残り ${Math.max(0, e.remaining)} 日`;
-  });
+  /* いまお届け中のコースの current_day / TOTAL_DAYS（101）。
+     「今日まで N/101」の N は確保済みの日。分母は講座の長さで、
+     残日数や購入日数ではない（2026-08-09 代表）。 */
+  const active = owned.find((e) => e.track === user.active_track) || owned[0];
+  const dayLine = `今日まで${active.currentDay}/${TOTAL_DAYS}です。`;
 
   /* 【切り替え】いま届いていないコースに残りがあるなら、そこへ戻す
-     ボタンを出す（지시서⑯ §5）。
+     ボタンを出す（指示書⑯ §5）。
 
      出さないと、初級 20 日を残したまま中級を買った人は、中級を
      使い切った時点で初級が宙に浮く ── 戻る道が「初級をもう一度買う」か
@@ -709,8 +709,7 @@ export async function statusMessage(conn, user) {
 
   return {
     type: "text",
-    text: ["いまの進み具合です。", "", ...lines,
-           "", "▶ が、いまお届けしているコースです。",
+    text: [dayLine,
            ...(switchable.length ? ["", "残っているコースへ切り替えられます（進みはそのままです）。"] : [])
           ].join("\n"),
     ...(switchable.length ? { quickReply: { items: switchable.map((e) => ({

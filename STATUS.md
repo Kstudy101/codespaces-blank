@@ -22,7 +22,41 @@
   private repo → FTPS → UAPI Deploy → `.cpanel.yml` seed 전 경로 가동 ([plan-content-ci](docs/plan-content-ci.md))
 
 **권장 진행 순서 (한 줄).**
-E 조건 도래 시 라이브 확인. C4는 재개 시 [live-check-c4](docs/live-check-c4-sales-open.md).
+㉑-S 원고 시드(내일 JST 18시 전) → E 조건 도래 시 라이브 확인. C4는 재개 시 [live-check-c4](docs/live-check-c4-sales-open.md).
+
+### §0-㉑ 신양식 원고 시드 — 오늘 보류한 이유와 내일 할 일 (2026-08-08 18:55 JST)
+
+**코드는 배포 끝났습니다.** `82fe964`(렌더러)·`bb5529d`(입고 검사) 둘 다
+`deploy-server` + `Deploy to Xserver` **success**. 문서 커밋은 `paths-ignore: docs/**`
+라 배포가 돌지 않는 것이 정상입니다. `main` 은 `origin/main` 과 동기 상태.
+
+**남은 것은 원고 303일뿐이고, 오늘은 착수하지 않았습니다** — 착수 시각이
+**18:55 JST 로 §8-9 의 「JST 18시 전」을 넘겼기 때문**입니다. 저녁 복습의 답은
+「こたえを見る」를 누른 순간 다시 계산되므로, 18시 발송과 탭 사이에 그날 원고를
+갈아끼우면 문제와 답이 어긋납니다(방어 코드 없음 — 이 운용 규칙이 유일한 방어).
+
+> 업로드만 해도 안전하지 않습니다. `.cpanel.yml` 은 **배포마다 seed 를 돌리므로**,
+> 파일만 올려 둔 상태에서 누군가 서버 배포를 하면 그 순간 18시 이후 시드가 됩니다.
+
+**내일(또는 JST 18시 이전) 할 일 — 순서대로:**
+
+```bash
+# 1. 올릴 것 확인 (아무것도 쓰지 않음)
+bash tools/upload-content.sh --dry-run server/content/beginner-01-15.json
+
+# 2. 21개 파일 업로드 (초·중·상 각 101일)
+for f in server/content/{beginner,intermediate,advanced}-*.json; do
+  bash tools/upload-content.sh "$f"
+done
+bash tools/upload-content.sh --list      # 저쪽에 뭐가 있나
+
+# 3. 시드는 cPanel Terminal 에서 사람이 (이 기기엔 cpanel.token 이 없습니다)
+bash ~/kstudy101-line/db/run.sh db/seed-content.mjs --check   # 1문자도 안 씀
+bash ~/kstudy101-line/db/run.sh db/seed-content.mjs           # DB 반영
+```
+
+시드는 **upsert 라 몇 번 넣어도 같은 결과**이고 퀴즈 보존식(`8a8cce3`)이 있어
+재시드 자체는 안전합니다. 로컬 `--check` 는 **303일 0건** 통과 상태입니다.
 
 **B3 (2026-08-07 확인).** maintain §3 `#3 beginner 持っている=3 / 台帳=0` —
 migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼으나 **`trial_track` 은
@@ -38,7 +72,7 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **㉑-S** | **신양식 원고 303일 서버 반영(시드)** — private repo push → D1c CI | 대표 | [plan-newformat §7-8](docs/plan-newformat.md). 원고는 로컬 `server/content/` 에만 있음. **저녁 6시 이후 재배치 금지**(§8-9) |
+| **㉑-S** | **신양식 원고 303일 서버 반영(시드)** — **오늘(08-08)은 보류**, 내일 JST 18시 전에 | 대표 | 코드는 배포 완료. 원고만 남음. 08-08 18:55 JST 시점에 착수 불가 판정 — 아래 §0-㉑ |
 | — | (그 외 없음) | — | C4 보류 (2026-08-08) |
 
 ### B. 개발 (남은 것)

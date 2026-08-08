@@ -38,7 +38,7 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **㉑-G** | **상급 교체 문법 확정** — 84·39·41 세 자리, 각 A/B/C | 대표 | [plan-newformat §5](docs/plan-newformat.md). 확정 후 시드. 미확정이면 상급 원고 서버 반영 보류 |
+| **㉑-S** | **신양식 원고 303일 서버 반영(시드)** — private repo push → D1c CI | 대표 | [plan-newformat §7-8](docs/plan-newformat.md). 원고는 로컬 `server/content/` 에만 있음. **저녁 6시 이후 재배치 금지**(§8-9) |
 | — | (그 외 없음) | — | C4 보류 (2026-08-08) |
 
 ### B. 개발 (남은 것)
@@ -367,6 +367,7 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 
 | 커밋 | 내용 |
 |---|---|
+| (원고·gitignore) | **㉑ §3** 원고 303일 신양식 전면 재작성 — 상급 §3-2 교체 3건(84 `-노라`·39 `-(으)ㅁ을 금할 수 없다`·41 `-(으)ㄴ/는 마당에`) 확정 반영, 초급 101·중급 101 신작. 단어 뜻 한자 괄호 제거(대표 지시). `_build-lib` 공통(오답 풀 자동·fb 기계검사). `seed-content --check` 303일 0건 |
 | `bb5529d` | **㉑ §2** 입고 검사 신양식 7규칙 — pos 유무로 신·구 판정(render 와 한 문장), tip 形/使/落·대화 3행·단어 6개 2·2·2·quiz 필수·헤더 이모지 금지·운세 단정 금지. 구양식 303일은 기존 규칙 그대로(재시드 가능). verify-render 59→67·verify-quiz 18→19 |
 | `82fe964` | **㉑ §1** 레슨 신양식 렌더러 — 헤더 7종 코드 소유(📘🔗💡💬📚❓🍀), tip 分解·단어 2·2·2·데일리 ❓ 꼬리통(action=review 재사용). 구양식 무사고 렌더. bridge 를 운세에서 빼 레슨 최하단(🍀 今日のひとこと, ja만)으로. push-daily 꼬리통 말미·통수 상한·복습 뽑기 배타. verify-render 50→67·push 56→58·fortune-server 19→20. [plan-newformat](docs/plan-newformat.md) |
 | (STATUS) | **D 콘텐츠 입고 완료** — 본편 원고·`fortune-lines.json` 서버 반영, private repo CI(FTPS→deploy→seed) 가동 확인. A0·A1·D1·D1b·D1c·D2 → §F |

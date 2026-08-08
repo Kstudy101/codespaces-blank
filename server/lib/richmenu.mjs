@@ -9,11 +9,12 @@
    配置でもないので、cron にも .cpanel.yml にも入れない。
    変えるときだけ tools/setup-richmenu.mjs を手で走らせる。
 
-   ┌─────────────┬─────────────┬─────────────┐
-   │  講座について │   受講料     │   進み具合   │
-   ├─────────────┴─────────────┴─────────────┤
-   │              お問い合わせ                 │
-   └──────────────────────────────────────────┘
+   ┌──────────────────────────────────────┐
+   │           コース紹介（Notion）         │
+   ├────────────┬────────────┬────────────┤
+   │ コース利用料金 │  何日目？   │ その他サービス │
+   │ （受講料）   │ （進み具合） │  （Notion）  │
+   └────────────┴────────────┴────────────┘
 
    【画像が要る】
    LINE は「画像 1 枚 ＋ 押せる範囲の座標」でメニューを作る。文字も
@@ -38,22 +39,27 @@ const API = () => `${process.env.LINE_API_BASE || "https://api.line.me"}/v2/bot`
 const DATA_API = () => process.env.LINE_DATA_API_BASE || "https://api-data.line.me/v2/bot";
 
 const W = 2500, H = 1686;
-const TOP_H = 1124, BOTTOM_H = H - TOP_H;      // 上段 2/3・下段 1/3
+const TOP_H = 786;
+const BOTTOM_H = H - TOP_H;                    // 900
 const COL = Math.floor(W / 3);                 // 833
 const COL_LAST = W - COL * 2;                  // 834（余りを最後の列へ）
+
+const COURSE_GUIDE_URL =
+  "https://luxuriant-burst-b65.notion.site/Kstudy101-3b6439a4f5e7802e9739e64a0a8df5b5?source=copy_link";
+const OTHER_SERVICES_URL =
+  "https://app.notion.com/p/3b6439a4f5e780d6a385caf5230aca44?source=copy_link";
 
 /* 押せる範囲。隙間も重なりも作らない ── 隙間は「押しても何も
    起きない帯」になり、重なりは先に書いたほうが勝つ。 */
 export const AREAS = Object.freeze([
-  { bounds: { x: 0,        y: 0,     width: COL,      height: TOP_H },
-    action: { type: "postback", data: "action=about",  displayText: "講座について" } },
-  { bounds: { x: COL,      y: 0,     width: COL,      height: TOP_H },
+  { bounds: { x: 0,       y: 0,      width: W,        height: TOP_H },
+    action: { type: "uri", uri: COURSE_GUIDE_URL } },
+  { bounds: { x: 0,       y: TOP_H,  width: COL,      height: BOTTOM_H },
     action: { type: "postback", data: "action=plans",  displayText: "受講料を見ます" } },
-  { bounds: { x: COL * 2,  y: 0,     width: COL_LAST, height: TOP_H },
+  { bounds: { x: COL,     y: TOP_H,  width: COL,      height: BOTTOM_H },
     action: { type: "postback", data: "action=status", displayText: "進み具合" } },
-  { bounds: { x: 0,        y: TOP_H, width: W,        height: BOTTOM_H },
-    action: { type: "uri",
-              uri: `${process.env.SITE_URL || "https://www.kstudy101.jp"}/contact` } }
+  { bounds: { x: COL * 2, y: TOP_H,  width: COL_LAST, height: BOTTOM_H },
+    action: { type: "uri", uri: OTHER_SERVICES_URL } }
 ]);
 
 export function menuDefinition() {

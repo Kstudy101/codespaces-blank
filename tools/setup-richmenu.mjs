@@ -31,7 +31,8 @@ const value = (n, d = null) => {
 };
 
 const DRY = flag("dry-run");
-const IMAGE = value("image", process.env.RICHMENU_IMAGE || null);
+const IMAGE = value("image",
+  process.env.RICHMENU_IMAGE || path.join(ROOT, "server", "assets", "richmenu.jpg"));
 
 /* ---- いま何が登録されているか ---------------------------------------- */
 if (flag("list")) {

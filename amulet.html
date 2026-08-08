@@ -3,19 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>부적メーカー — 韓国のお守りを 1 枚つくる | 名前で学ぶ韓国語</title>
+<title>부적メーカー — 韓国のお守りを 1 枚つくる | 名前からはじめるハングル勉強</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 32 32%22%3E%3Crect width%3D%2232%22 height%3D%2232%22 rx%3D%227%22 fill%3D%22%23e0526b%22%2F%3E%3Ccircle cx%3D%2216.00%22 cy%3D%228.80%22 r%3D%224.6%22 fill%3D%22%23fff%22%2F%3E%3Ccircle cx%3D%2222.85%22 cy%3D%2213.78%22 r%3D%224.6%22 fill%3D%22%23fff%22%2F%3E%3Ccircle cx%3D%2220.23%22 cy%3D%2221.82%22 r%3D%224.6%22 fill%3D%22%23fff%22%2F%3E%3Ccircle cx%3D%2211.77%22 cy%3D%2221.82%22 r%3D%224.6%22 fill%3D%22%23fff%22%2F%3E%3Ccircle cx%3D%229.15%22 cy%3D%2213.78%22 r%3D%224.6%22 fill%3D%22%23fff%22%2F%3E%3Ccircle cx%3D%2216%22 cy%3D%2216%22 r%3D%223.1%22 fill%3D%22%23ffd9df%22%2F%3E%3C%2Fsvg%3E">
 <meta name="description" content="韓国のお守り「부적（符籍）」を 1 枚つくって画像で保存できます。願いに合わせた漢字と、その韓国漢字音・訓音つき。生年月日を入れると、命式に足りない五行から 1 種をおすすめします。">
 <link rel="canonical" href="https://www.kstudy101.jp/amulet">
 <meta property="og:type" content="article">
-<meta property="og:site_name" content="名前で学ぶ韓国語">
+<meta property="og:site_name" content="名前からはじめるハングル勉強">
 <meta property="og:locale" content="ja_JP">
 <meta property="og:url" content="https://www.kstudy101.jp/amulet">
-<meta property="og:title" content="부적メーカー｜名前で学ぶ韓国語">
+<meta property="og:title" content="부적メーカー｜名前からはじめるハングル勉強">
 <meta property="og:description" content="韓国のお守り「부적」を 1 枚つくって保存できます。願いの漢字と、その韓国読みつき。">
 <meta property="og:image" content="https://www.kstudy101.jp/ogp.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="부적メーカー｜名前で学ぶ韓国語">
+<meta name="twitter:title" content="부적メーカー｜名前からはじめるハングル勉強">
 <meta name="twitter:description" content="韓国のお守り「부적」を 1 枚つくって保存できます。願いの漢字と、その韓国読みつき。">
 <meta name="twitter:image" content="https://www.kstudy101.jp/ogp.png">
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1754834273377558"
@@ -126,7 +126,7 @@
 </head>
 <body>
 
-<div class="site-head"><a href="/">← 名前で学ぶ韓国語 トップへ</a></div>
+<div class="site-head"><a href="/">← 名前からはじめるハングル勉強 トップへ</a></div>
 
 <div class="wrap">
 
@@ -314,7 +314,7 @@
        target="_blank" rel="noopener noreferrer">Google の広告に関するポリシー</a>
     をご確認ください。
   </p>
-  <p><b>名前で学ぶ韓国語</b> — powered by <a href="#" id="brand">Kstudy101</a></p>
+  <p><b>名前からはじめるハングル勉強</b> — powered by <a href="#" id="brand">Kstudy101</a></p>
   <p class="foot-meta"><a href="/privacy">プライバシーポリシー</a>・<a href="/contact">お問い合わせ</a></p>
   <p class="foot-meta">お名前・生年月日は端末の中だけで扱います。</p>
 </footer>
@@ -473,10 +473,14 @@ function draw(){
     g.fillText(`${k.ko}（${k.ja}）`, 70 + 5 * (w + 6) + 12, SY + 48);
   }
 
+  /* 署名は左の五方色ブロックと同じ 2 行を分け合う。左は総合運のとき
+     いちばん伸びて（五方色 + 「연애운（恋愛運）」）x≈450 まで来るので、
+     ブランド名を 22px のままにすると右から 308px ＝ x≈382 で始まり重なる。
+     16px に落として x≈466 から始めるようにし、URL も同じ大きさに揃える。 */
   g.textAlign = 'right';
-  font(g, 700, 22); g.fillStyle = P.dim;
-  g.fillText('名前で学ぶ韓国語', W - 70, SY + 16);
-  font(g, 400, 20);
+  font(g, 700, 16); g.fillStyle = P.dim;
+  g.fillText('名前からはじめるハングル勉強', W - 70, SY + 16);
+  font(g, 400, 16);
   g.fillText('kstudy101.jp', W - 70, SY + 48);
 
   canvasOk = true;

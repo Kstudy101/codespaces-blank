@@ -633,9 +633,8 @@ await acheck("ASK_PROFILE の語が同じ分岐へ", async () => {
   return `${ASK_PROFILE.length} 語`;
 });
 
-await acheck("進み具合は「今日まで N/101」で返す（2026-08-09 代表）", async () => {
-  /* N = current_day、101 = TOTAL_DAYS（講座の長さ）。残日数ではない。
-     分量の「全 101 日」表記は価格表側（verify-billing）が守る。 */
+await acheck("進み具合は「今日まで N/101」＋韓国語の応援で返す（2026-08-09 代表）", async () => {
+  /* N = current_day、101 = TOTAL_DAYS。名前は name_kr（plan-status-cheer）。 */
   const { sent } = await askPlans("いま何日目？", {
     "FROM users": [{ id: 7, line_user_id: "U_test", status: "active",
       active_track: "beginner", name_kr: "다나카", name_kanji: "田中",
@@ -648,8 +647,14 @@ await acheck("進み具合は「今日まで N/101」で返す（2026-08-09 代�
       birth_confirmed: 1, ohaeng_main: "목" }]
   });
   assert(sent.length === 1, `送った通数: ${sent.length}`);
-  assert(sent[0].text === "今日まで3/101です。", sent[0].text);
-  return "今日まで3/101";
+  const want = [
+    "今日まで3/101です。🇰🇷💕",
+    "",
+    "화이팅! 오늘도 한 걸음 💪✨",
+    "다나카님 응원합니다^^"
+  ].join("\n");
+  assert(sent[0].text === want, sent[0].text);
+  return "今日まで3/101 + 応援";
 });
 
 await acheck("ASK_STOP・ASK_SETUP の従来動作は変わらない（境界の語も含む）", async () =>

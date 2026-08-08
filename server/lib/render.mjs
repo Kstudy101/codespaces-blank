@@ -541,3 +541,40 @@ export function nameMissingNotice(day) {
     ].join("\n")
   };
 }
+
+/* ---- クイズ採点の返事（docs/plan-quiz-harder-distractors.md §8）------
+   不正解でも「選んだ番号」と「正解」を並べ、ひとことで形の意味を足す。
+   data に answer は載せない（postback がサーバー原稿から引く）。 */
+export function formatQuizReply(quiz, choice, {
+  passed,
+  checkpointSemester = null
+} = {}) {
+  if (passed) {
+    if (checkpointSemester != null) {
+      return `⭕ 正解です！🎉\n第${checkpointSemester}学期の節目クイズ、合格です！`;
+    }
+    return "⭕ 正解です！🎉";
+  }
+  const mark = (i) => CIRCLED[i] || `${Number(i) + 1}`;
+  const yours = quiz?.choices?.[choice];
+  const correct = quiz?.choices?.[quiz.answer];
+  const lines = [
+    "❌ ざんねん…",
+    `あなたの答え: ${mark(choice)} ${yours ?? ""}`.trimEnd(),
+    `正解: ${mark(quiz.answer)} ${correct ?? ""}`.trimEnd()
+  ];
+  const tip = quizExplain(quiz);
+  if (tip) lines.push(`ひとこと: ${tip}`);
+  return lines.join("\n");
+}
+
+function quizExplain(quiz) {
+  if (quiz?.explain && String(quiz.explain).trim()) return String(quiz.explain).trim();
+  const q = String(quiz?.question || "");
+  const m = /「([^」]+)」/.exec(q);
+  if (!m) return "";
+  /* 質問が「〜の韓国語は？」なら意味そのもの、「〜に当たる形は？」なら形の意味 */
+  if (/韓国語/.test(q)) return `「${m[1]}」`;
+  if (/当たる形|正しい形/.test(q)) return `「${m[1]}」の形です`;
+  return `「${m[1]}」`;
+}

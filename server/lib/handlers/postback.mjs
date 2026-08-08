@@ -53,7 +53,7 @@ import {
 import { PACKAGES, TRIAL_DAYS } from "../repo/billing.mjs";
 import { deliverNow } from "../../db/push-daily.mjs";
 import { isTrack } from "../repo/learning.mjs";
-import { renderReviewAnswer } from "../render.mjs";
+import { renderReviewAnswer, formatQuizReply } from "../render.mjs";
 
 /* "a=1&b=2" を読む。URLSearchParams を使うのは、
    自前で split すると値に & や = が入ったときに崩れるため。 */
@@ -694,12 +694,9 @@ export async function handlePostback(conn, event,
     }
 
     const passed = choice === q.answer;
-    const mark = ["①", "②", "③", "④"][q.answer] || `${q.answer + 1}`;
     const replied = await reply(token, [{
       type: "text",
-      text: passed
-        ? "⭕ 正解です！🎉"
-        : `❌ ざんねん…　正解は ${mark} ${q.choices[q.answer] ?? ""} でした`
+      text: formatQuizReply(q, choice, { passed })
     }], send);
     return { userId: user.id, action, day, choice, passed, replied };
   }
@@ -749,12 +746,9 @@ export async function handlePostback(conn, event,
      記録だけして黙ると、答えたのに何も起きていないように見える ──
      このファイルの頭書き自身がそう約束している。返信の失敗は
      採点の結果を壊さない（reply は throw しない）。 */
-  const mark = ["①", "②", "③", "④"][q.answer] || `${q.answer + 1}`;
   const replied = await reply(token, [{
     type: "text",
-    text: passed
-      ? `⭕ 正解です！🎉\n第${semester}学期の節目クイズ、合格です！`
-      : `❌ ざんねん…　正解は ${mark} ${q.choices[q.answer] ?? ""} でした`
+    text: formatQuizReply(q, choice, { passed, checkpointSemester: semester })
   }], send);
   return { userId: user.id, track, day, semester, choice, passed, replied };
 }

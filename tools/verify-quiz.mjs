@@ -316,6 +316,8 @@ await check("不正解 → 正答を教える。quiz_pass_log には触らない
     { send: async (_t, m) => { replied = m; return {}; } });
   assert(r.passed === false, JSON.stringify(r));
   assert(/네/.test(replied[0].text), `正答が入っていません: ${replied[0].text}`);
+  assert(/あなたの答え:/.test(replied[0].text), `選んだ答えがありません: ${replied[0].text}`);
+  assert(/正解:/.test(replied[0].text), `正解ラベルがありません: ${replied[0].text}`);
   /* quiz_pass_log は getProgress の SELECT にも並ぶ。読むのは自由で、
      禁じるのは書くこと ── 書いた瞬間に修了判定の材料が汚れる。 */
   assert(!conn.sql().some((s) => /^(UPDATE|INSERT|DELETE)/i.test(s)),
@@ -376,7 +378,8 @@ await check("不合格 → ❌ と正答を返す。false も 1 回だけ記録"
     { send: async (_t, m) => { replied = m; return {}; } });
   assert(r.passed === false, JSON.stringify(r));
   assert(replied && replied.length === 1, "返事が 1 通ではありません");
-  assert(/❌/.test(replied[0].text) && /네/.test(replied[0].text),
+  assert(/❌/.test(replied[0].text) && /네/.test(replied[0].text)
+      && /あなたの答え:/.test(replied[0].text) && /正解:/.test(replied[0].text),
     `正答が入っていません: ${replied[0].text}`);
   const w = passLogWrites(conn);
   assert(w.length === 1, `quiz_pass_log への書き込みが ${w.length} 回`);

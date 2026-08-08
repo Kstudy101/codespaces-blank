@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-08 (레슨 신양식 ㉑ — 렌더러·검사 배포, 상급 원고 후보 대기)
+최종 갱신: 2026-08-08 (회화 리프레시 + 퀴즈 난이도·오답피드백 로컬 완료 · 시드 대기)
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -22,7 +22,7 @@
   private repo → FTPS → UAPI Deploy → `.cpanel.yml` seed 전 경로 가동 ([plan-content-ci](docs/plan-content-ci.md))
 
 **권장 진행 순서 (한 줄).**
-㉑-S 원고 시드(내일 JST 18시 전) → E 조건 도래 시 라이브 확인. C4는 재개 시 [live-check-c4](docs/live-check-c4-sales-open.md).
+㉑-S 원고 시드(JST 18시 전) — 초·중·상 회화 리프레시 + 퀴즈 4지·오답피드백([plan-beginner-dialogue-refresh](docs/plan-beginner-dialogue-refresh.md) · [plan-quiz-harder-distractors](docs/plan-quiz-harder-distractors.md), 입고 0·verify-quiz 19)을 포함해 올릴 것 → E 조건 도래 시 라이브 확인. C4는 재개 시 [live-check-c4](docs/live-check-c4-sales-open.md).
 
 ### §0-㉑ 신양식 원고 시드 — 오늘 보류한 이유와 내일 할 일 (2026-08-08 18:55 JST)
 

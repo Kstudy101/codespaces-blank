@@ -27,9 +27,25 @@
    どれも 1 日ぶんを見ている限りは気づける。101 日を通しで
    見るのが難しいだけなので、機械に数えさせる。
    ================================================================== */
-import { SLOTS, findMisplacedSlot, renderDay, renderReview } from "./render.mjs";
+import { SLOTS, findMisplacedSlot, renderDay, renderReview,
+         isNewFormat, parseTip, POS } from "./render.mjs";
 
 const TOTAL_DAYS = 101;
+
+/* ---- 신양식（지시서㉑ §2）--------------------------------------------
+   판정은 render.mjs 의 isNewFormat 1곳: vocab_3 에 pos 가 하나라도
+   있으면 신양식으로 간주하고 7규칙을 전부 강제한다. 없으면 구양식
+   （기존 규칙만）으로 통과 ── 이행기 동안 서버의 기존 파일이 재시드
+   가능해야 하기 때문이다.
+
+   섹션 헤더 이모지는 코드（render.mjs）소유 ── 원고에 있으면 거부.
+   303일 × 헤더 복제를 원천 차단한다（§1-1）. */
+const HEADER_EMOJI = /[📘🔗💡💬📚❓🍀]/u;
+
+/* bridge 의 운세 단정（§0-7）. 지시서의 3문자열（運がよ·운이 좋·
+   運勢がよ）에 한자 「良」 표기와 「운세가 좋」을 더했다 ── 같은
+   단정의 표기 변형이라 놓치면 규칙이 반쪽이 된다. */
+const FORTUNE_ASSERT = /運がよ|運が良|運勢がよ|運勢が良|운이 좋|운세가 좋/;
 
 const ANY_SLOT = /\{(NAME(?:_[A-Z]+)?)\}/g;
 
@@ -140,8 +156,19 @@ export function checkDay(d, seen = new Set()) {
   if (seen.has(key)) at(`${track} の ${day} 日目が 2 回出てきます`);
   seen.add(key);
 
+  /* 신·구 판정（§2 ── render.mjs 와 같은 한 문장）. 신양식이면
+     7규칙 전부, 구양식이면 기존 규칙만. */
+  const isNew = isNewFormat(d);
+
   if (!d.grammar_point) at("grammar_point がありません");
   if (!d.grammar_tip_kr) at("grammar_tip_kr がありません");
+
+  /* --- 규칙 1: tip 은 形/使/落 3행 정형（신양식） ---
+     분해는 렌더러（parseTip）와 같은 함수로 본다 ── 여기서 통과한
+     원고가 화면에서 분해되지 않는 일이 없도록. */
+  if (isNew && d.grammar_tip_kr && !parseTip(String(d.grammar_tip_kr))) {
+    at("신양식: grammar_tip_kr 은 形・使・落 3행 정형이어야 합니다");
+  }
 
   /* --- 説明に差し込み口は使えない（2026-08-07 대표 승인）--------------
      renderDay() は grammar_tip_kr を fillSlots に通さず、そのまま
@@ -160,6 +187,13 @@ export function checkDay(d, seen = new Set()) {
 
   /* --- 会話 --- */
   const dia = d.dialogue_template;
+  /* 규칙 2: 3행 드라마 고정（§0-3）. 행 수가 틀려도 아래 행별 검사는
+     그대로 돌린다 ── 개수만 고치고 재입고했더니 이번엔 행 내용으로
+     떨어지는 왕복을 만들지 않기 위해. kr·ja 필수는 기존 검사가
+     양식 공통으로 본다. */
+  if (isNew && Array.isArray(dia) && dia.length !== 3) {
+    at(`신양식: 대화는 정확히 3행입니다（지금 ${dia.length}행）`);
+  }
   if (!Array.isArray(dia) || dia.length < 2) {
     at("dialogue_template は 2 文以上の配列にしてください");
   } else {
@@ -186,10 +220,15 @@ export function checkDay(d, seen = new Set()) {
     });
   }
 
-  /* --- 単語 --- */
+  /* --- 単語 ---
+     규칙 3（§0-4）: 구양식은 3어 그대로, 신양식은 6어 + 각 pos +
+     품사별 정확히 2개. 지시서의 「3~6 완화」는 이행기의 수용 집합을
+     말한 것 ── 실물은 구=3·신=6 뿐이므로 {3,6} 만 받는다. 4·5개짜리
+     반쪽 원고까지 열어 주면 완화가 아니라 구멍이 된다. */
   const voc = d.vocab_3;
-  if (!Array.isArray(voc) || voc.length !== 3) {
-    at(`vocab_3 はちょうど 3 語にしてください（今 ${Array.isArray(voc) ? voc.length : "配列でない"}）`);
+  const vocWant = isNew ? 6 : 3;
+  if (!Array.isArray(voc) || voc.length !== vocWant) {
+    at(`vocab_3 は${isNew ? "（신양식）6" : "ちょうど 3"} 語にしてください（今 ${Array.isArray(voc) ? voc.length : "配列でない"}）`);
   } else {
     voc.forEach((w, i) => {
       if (!w?.kr) at(`単語 ${i + 1}: kr がありません`);
@@ -198,6 +237,20 @@ export function checkDay(d, seen = new Set()) {
          {NAME} も {OHAENG_GA} も同じく文字のまま届く。 */
       if (w?.kr && ANY_BRACE.test(w.kr)) at(`単語 ${i + 1}: 単語に差し込み口は使えません`);
     });
+    if (isNew) {
+      /* pos 는 분류 키 ── 값·표기는 render.mjs 의 POS 한 곳（§2-3）.
+         품사별 2개가 무너지면 화면의 【名詞】12/【形容詞】34/【動詞】56
+         짜임이 그날만 비뚤어진다. */
+      voc.forEach((w, i) => {
+        if (!w?.pos || !POS.includes(w.pos)) {
+          at(`単語 ${i + 1}: pos 는 ${POS.join("・")} 중 하나여야 합니다（지금 ${JSON.stringify(w?.pos)}）`);
+        }
+      });
+      for (const p of POS) {
+        const n = voc.filter((w) => w?.pos === p).length;
+        if (n !== 2) at(`신양식: ${p} 는 정확히 2개여야 합니다（지금 ${n}개）`);
+      }
+    }
   }
 
   /* --- 名前を使うかどうかの申告と、中身が合っているか ---
@@ -239,6 +292,13 @@ export function checkDay(d, seen = new Set()) {
       if (!fb.kr) at("fortune_bridge に kr がありません");
       if (fb.kr && ANY_BRACE.test(fb.kr)) at("fortune_bridge に差し込み口は使えません");
       if (fb.kr && ODD_CHAR.test(fb.kr)) at("fortune_bridge に見慣れない文字が混ざっています");
+      /* 규칙 6（§0-7）: bridge 는 이제 레슨（🍀）에 실려 운세를 못 받는
+         사람에게도 간다 ── 운세 단정을 쓰면 그 사람에겐 근거 없는
+         운세 문장이 된다. 화면에 나가는 ja 만이 아니라 kr 도 본다
+         （kr 은 집필·검수의 원본이라, 남겨 두면 번역할 때 되살아난다）. */
+      if (isNew && (FORTUNE_ASSERT.test(fb.kr || "") || FORTUNE_ASSERT.test(fb.ja || ""))) {
+        at("신양식: fortune_bridge 에 운세 단정（運がよ／운이 좋 류）은 쓸 수 없습니다");
+      }
     }
   }
 
@@ -248,6 +308,11 @@ export function checkDay(d, seen = new Set()) {
      配信側（pickReviewQuiz）は壊れた原稿を黙って抜くので、
      入稿時に止めないと「なぜかこの日だけクイズが出ない」になる。 */
   const qz = d.quiz;
+  /* 규칙 4（§0-5）: 신양식은 퀴즈 매일 필수 ── 없으면 그날만 ❓가
+     비고, 받는 쪽은 「이 코스는 원래 이런가」로 읽는다. */
+  if (isNew && (qz === undefined || qz === null)) {
+    at("신양식: quiz 는 필수입니다（매일 1문）");
+  }
   if (qz !== undefined && qz !== null) {
     if (typeof qz !== "object" || Array.isArray(qz)) {
       at("quiz は {question, choices, answer} の形にしてください");
@@ -271,6 +336,26 @@ export function checkDay(d, seen = new Set()) {
          書いても文字のまま届く。名前入りは別の理由でも不可: 正解の
          文字列が人ごとに変わって採点できない。 */
       if (ANY_BRACE.test(JSON.stringify(qz))) at("quiz に差し込み口は使えません");
+    }
+  }
+
+  /* --- 규칙 5（§2-5）: 섹션 헤더 이모지는 원고에 못 넣는다 ---
+     헤더는 render.mjs 소유（§1-1）── 원고에도 넣으면 화면에 두 번
+     붙고, 문구를 고치는 날 303일을 같이 고치게 된다. 欄 이름으로
+     멈춘다（어느 欄인지 말하지 않으면 51일 쓰고 나서 찾게 된다）. */
+  if (isNew) {
+    const spots = [
+      ["grammar_point", d.grammar_point],
+      ["grammar_tip_kr", d.grammar_tip_kr],
+      ["dialogue_template", Array.isArray(dia) ? JSON.stringify(dia) : null],
+      ["vocab_3", Array.isArray(voc) ? JSON.stringify(voc) : null],
+      ["quiz", qz ? JSON.stringify(qz) : null],
+      ["fortune_bridge", fb ? JSON.stringify(fb) : null]
+    ];
+    for (const [name, s] of spots) {
+      if (s && HEADER_EMOJI.test(String(s))) {
+        at(`신양식: ${name} 에 섹션 헤더 이모지（📘🔗💡💬📚❓🍀）가 들어 있습니다 ── 헤더는 코드 소유입니다`);
+      }
     }
   }
 

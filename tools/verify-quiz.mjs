@@ -405,6 +405,32 @@ await check("content-check が quiz の形を見る", async () => {
   return "無い日は自由、ある日は全部見る";
 });
 
+await check("신양식（pos 있음）에서는 quiz 누락이 거부된다（지시서㉑ §2-4）", async () => {
+  /* 구양식의 「無い日は自由」는 그대로 두고, 신양식만 매일 필수.
+     판정은 vocab 의 pos ── render.mjs 의 isNewFormat 과 같은 문장. */
+  const newDay = {
+    day_number: 5, __track: "beginner",
+    grammar_point: "-도（〜も）",
+    grammar_tip_kr: "形　名詞 + 도\n使　同じであることを足す\n落　-은/는 と重ねない",
+    dialogue_template: [
+      { kr: "저는 드라마를 좋아해요.", ja: "私はドラマが好きです。" },
+      { kr: "저도요.", ja: "私もです。" },
+      { kr: "노래도 좋아해요.", ja: "歌も好きです。" }
+    ],
+    vocab_3: [
+      { kr: "드라마", meaning: "ドラマ", pos: "名詞" }, { kr: "노래", meaning: "歌", pos: "名詞" },
+      { kr: "좋다", meaning: "よい", pos: "形容詞" }, { kr: "많다", meaning: "多い", pos: "形容詞" },
+      { kr: "보다", meaning: "見る", pos: "動詞" }, { kr: "듣다", meaning: "聞く", pos: "動詞" }
+    ],
+    requires_name_slot: false
+  };
+  const bad = checkDay(newDay, new Set());
+  assert(bad.some((m) => /quiz 는 필수/.test(m)), `누락이 통과했습니다: ${bad.join(" / ") || "(0건)"}`);
+  assert(checkDay({ ...newDay, day_number: 6, quiz: QUIZ }, new Set()).length === 0,
+    "quiz 를 넣어도 다른 것이 걸립니다");
+  return "누락 거부・보완 시 통과";
+});
+
 console.log(fails.length
   ? `\n✗ ${fails.length} 件が満たされていません`
   : `\n✓ ${pass} 件、すべて満たしています`);

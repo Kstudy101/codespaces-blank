@@ -817,5 +817,103 @@ check("parseTip 은 3버킷이 다 있어야만 분해（없으면 null → 통�
   return "形·使·落 전부 필수・무표지 행은 이어붙임";
 });
 
+/* ---- §2 입고 검사 ── 신양식 7규칙（지시서㉑）------------------------
+   각 규칙을 일부러 깨뜨린 입력이 「걸리는」 것과, 온전한 신양식·
+   구양식이 「걸리지 않는」 것（거짓 양성 없음）을 짝으로 본다. */
+console.log("\n[입고 검사 §2]  신양식 7규칙 ── 깨뜨린 입력이 걸리는가");
+
+check("온전한 신양식 1일치는 0건（거짓 양성 없음）", () => {
+  const bad = checkDay({ ...NEWFMT, __track: "advanced" }, new Set());
+  assert(bad.length === 0, bad.join(" / "));
+  return "0건";
+});
+
+check("규칙 1: tip 에 形・使・落 가 다 없으면 거부", () => {
+  const bad = checkDay({ ...NEWFMT, grammar_tip_kr: "形　A\n使　B" }, new Set());
+  assert(bad.some((m) => m.includes("形・使・落")), bad.join(" / "));
+  return "落 누락이 걸림";
+});
+
+check("규칙 2: 대화가 3행이 아니면 거부（구양식 2행은 통과）", () => {
+  const two = checkDay({ ...NEWFMT,
+    dialogue_template: NEWFMT.dialogue_template.slice(0, 2) }, new Set());
+  assert(two.some((m) => m.includes("정확히 3행")), two.join(" / "));
+  const four = checkDay({ ...NEWFMT, dialogue_template: [
+    ...NEWFMT.dialogue_template,
+    { who: "面接官", kr: "감사합니다.", ja: "ありがとうございます。" }
+  ] }, new Set());
+  assert(four.some((m) => m.includes("정확히 3행")), four.join(" / "));
+  return "2행·4행 다 걸림";
+});
+
+check("규칙 3: vocab 6어・pos 필수・품사별 2개", () => {
+  const five = checkDay({ ...NEWFMT, vocab_3: NEWFMT.vocab_3.slice(0, 5) }, new Set());
+  assert(five.some((m) => m.includes("6 語")), five.join(" / "));
+  const oddPos = checkDay({ ...NEWFMT,
+    vocab_3: NEWFMT.vocab_3.map((w, i) => i === 0 ? { ...w, pos: "副詞" } : w) }, new Set());
+  assert(oddPos.some((m) => m.includes("pos")), oddPos.join(" / "));
+  const uneven = checkDay({ ...NEWFMT,
+    vocab_3: NEWFMT.vocab_3.map((w, i) => i === 3 ? { ...w, pos: "動詞" } : w) }, new Set());
+  assert(uneven.some((m) => m.includes("정확히 2개")), uneven.join(" / "));
+  return "5어 / 副詞 / 2·1·3 전부 걸림";
+});
+
+check("규칙 4: 신양식은 quiz 필수（구양식은 자유）", () => {
+  const noQuiz = { ...NEWFMT };
+  delete noQuiz.quiz;
+  const bad = checkDay(noQuiz, new Set());
+  assert(bad.some((m) => m.includes("quiz 는 필수")), bad.join(" / "));
+  return "누락이 걸림";
+});
+
+check("규칙 5: 섹션 헤더 이모지가 원고에 있으면 欄 이름으로 거부", () => {
+  const inTip = checkDay({ ...NEWFMT,
+    grammar_tip_kr: "形　📘A\n使　B\n落　C" }, new Set());
+  assert(inTip.some((m) => m.includes("grammar_tip_kr") && m.includes("헤더 이모지")),
+    inTip.join(" / "));
+  const inBridge = checkDay({ ...NEWFMT,
+    fortune_bridge: { kr: "좋아요.", ja: "🍀いいですね。" } }, new Set());
+  assert(inBridge.some((m) => m.includes("fortune_bridge") && m.includes("헤더 이모지")),
+    inBridge.join(" / "));
+  const inQuiz = checkDay({ ...NEWFMT,
+    quiz: { ...NEWFMT.quiz, question: "❓どれ？" } }, new Set());
+  assert(inQuiz.some((m) => m.includes("quiz") && m.includes("헤더 이모지")), inQuiz.join(" / "));
+  return "tip / bridge / quiz 에서 검출・欄 명시";
+});
+
+check("규칙 6: bridge 의 운세 단정（kr·ja 양쪽）", () => {
+  const ja = checkDay({ ...NEWFMT,
+    fortune_bridge: { kr: "말해 보세요.", ja: "今日は運がよい日。" } }, new Set());
+  assert(ja.some((m) => m.includes("운세 단정")), ja.join(" / "));
+  const kr = checkDay({ ...NEWFMT,
+    fortune_bridge: { kr: "오늘은 운이 좋아요.", ja: "話してみましょう。" } }, new Set());
+  assert(kr.some((m) => m.includes("운세 단정")), kr.join(" / "));
+  return "運がよ / 운이 좋 이 걸림";
+});
+
+check("규칙 7: 구양식은 기존 규칙만 ── 3어·운세단정 bridge 그대로 통과（이행기 재시드）", () => {
+  /* 서버에 이미 시드된 303일과 같은 모양. 여기가 떨어지면 배포마다
+     도는 seed 가 기존 원고를 거부해 이행기가 무너진다. */
+  const legacy = {
+    day_number: 4,
+    grammar_point: "-고자（〜しようとして）",
+    grammar_tip_kr: "격식 있는 의도.\n「알리고자」",
+    dialogue_template: [
+      { kr: "결과를 공유하고자 합니다.", ja: "結果を共有しようと思います。" },
+      { kr: "저도 그래요.", ja: "わたしもそうです。" }
+    ],
+    vocab_3: [
+      { kr: "고자", meaning: "しようとして" },
+      { kr: "마련하다", meaning: "設ける" },
+      { kr: "요점", meaning: "要点" }
+    ],
+    requires_name_slot: false,
+    fortune_bridge: { kr: "오늘의 공부 운이 좋아요.", ja: "今日の学習運がよいです。" }
+  };
+  const bad = checkDay(legacy, new Set());
+  assert(bad.length === 0, bad.join(" / "));
+  return "구양식 무변화";
+});
+
 console.log(`\n${fails.length ? "✗" : "✓"} ${pass + fails.length} 項目中 ${pass} 件成功`);
 if (fails.length) { fails.forEach((f) => console.log(`  ✗ ${f}`)); process.exit(1); }

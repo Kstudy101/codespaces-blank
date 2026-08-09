@@ -185,6 +185,31 @@ async function onboardingMessages(conn, user, { guide = true } = {}) {
   ].filter(Boolean);
 }
 
+/* ---- 友だちなのに users に居ない人を、立て直す ----------------------
+
+   LINE 側で友だちのままなら、follow は**二度と来ない**。だから users の
+   行が無くなると（手で消した・webhook が落ちていた間に追加された）、
+   その人には歓迎も質問も永久に届かない。
+
+   それだけなら「静かなだけ」だが、実際にはリッチメニューが出ている。
+   押しても打っても何も起きない画面が残る ── 出口が無い（2026-08-09
+   대표 실측）。message と postback が !user を黙って返していたため。
+
+   触ってきたこの機会に器を置き直し、follow と同じ 2 通から始める。
+   返信そのものは呼ぶ側の経路に任せる ── replyToken の扱いは
+   message と postback で違い、ここで持つと二重になる。 */
+export async function recoverUser(conn, lineUserId) {
+  const { user } = await users.upsertOnFollow(conn, { lineUserId });
+  return user;
+}
+
+/* follow で送るのと**同じ 2 通**。写しを作らない ── 片方だけ直した日に
+   「どちらから来たか」で文面が割れる（지시서㉓ §0-A と同じ理由）。 */
+export async function welcomeMessages(conn, user) {
+  return [welcomeBoard(), ...(await onboardingMessages(conn, user, { guide: false }))];
+}
+
+
 /* ブロック。消さない ── 消すと再追加が新規に見え、
    買った日数も進捗も無かったことになる。
    実際の削除は退会要求のときだけ（users.deleteUser）。 */

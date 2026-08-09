@@ -54,6 +54,7 @@ import { PACKAGES, TRIAL_DAYS } from "../repo/billing.mjs";
 import { deliverNow } from "../../db/push-daily.mjs";
 import { isTrack } from "../repo/learning.mjs";
 import { renderReviewAnswer, formatQuizReply } from "../render.mjs";
+import { recoverUser, welcomeMessages } from "./follow.mjs";
 
 /* "a=1&b=2" を読む。URLSearchParams を使うのは、
    自前で split すると値に & や = が入ったときに崩れるため。 */
@@ -151,8 +152,18 @@ export async function handlePostback(conn, event,
   if (!lineUserId) return { skipped: "userId がありません" };
 
   const { action, params } = parsePostbackData(event?.postback?.data);
-  const user = await users.findByLineUserId(conn, lineUserId);
-  if (!user) return { skipped: "未登録の利用者です", lineUserId };
+  let user = await users.findByLineUserId(conn, lineUserId);
+  if (!user) {
+    /* リッチメニューを押したのに users に居ない。黙って返していたので、
+       メニューは出ているのに何を押しても無反応だった（message.mjs と
+       同じ穴。handlers/follow.mjs の recoverUser 参照）。
+       ボタンの用件は捨てる ── まだ名前も生年月日も無い人に
+       「受講料」や「何日目」を返しても意味が無い。歓迎から始める。 */
+    user = await recoverUser(conn, lineUserId);
+    const back = await welcomeMessages(conn, user);
+    const replied = await reply(event?.replyToken, back, send);
+    return { userId: user.id, action, recovered: true, replied };
+  }
 
   /* 進みの器が欠けていれば、触ってきたこの機会に置き直す
      （repo/learning.mjs healProgress ── 欠けたままだと配信から

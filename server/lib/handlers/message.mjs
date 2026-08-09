@@ -23,6 +23,7 @@ import { replyMessage } from "../line.mjs";
 import { nextStep, messageForStep, confirmName, readingRetry } from "../onboarding.mjs";
 import { kanaNameToHangul } from "../kana2hangul.mjs";
 import { profileEligible, profileStartUrl } from "./profile.mjs";
+import { recoverUser, welcomeMessages } from "./follow.mjs";
 import { askCourse, notReady, salesAllowedFor, salesMode, missingLegalConfig,
          sellableTracks, statusMessage } from "./checkout.mjs";
 
@@ -68,8 +69,23 @@ export async function handleMessage(conn, event, { send = replyMessage } = {}) {
   }
   const text = String(event.message.text || "");
 
-  const user = await users.findByLineUserId(conn, lineUserId);
-  if (!user) return { skipped: "未登録の利用者です", lineUserId };
+  let user = await users.findByLineUserId(conn, lineUserId);
+  if (!user) {
+    /* 黙って返していた所。友だちのままなら follow は二度と来ないので、
+       ここで返さないとその人は永久に何も受け取れない ── リッチメニューは
+       出ているので、押しても打っても無反応な画面だけが残る
+       （handlers/follow.mjs の recoverUser 参照）。 */
+    user = await recoverUser(conn, lineUserId);
+    const back = await welcomeMessages(conn, user);
+    if (replyToken && !isVerifyToken(replyToken) && back.length) {
+      try {
+        await send(replyToken, back);
+      } catch (e) {
+        return { userId: user.id, recovered: true, replied: false, error: e.message };
+      }
+    }
+    return { userId: user.id, recovered: true, replied: true };
+  }
 
   /* 進みの器が欠けていれば、触ってきたこの機会に置き直す
      （repo/learning.mjs healProgress）。失敗しても返事は続ける。 */

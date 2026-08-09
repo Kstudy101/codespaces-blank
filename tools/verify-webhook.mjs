@@ -373,14 +373,38 @@ await acheck("正答が未入稿なら「不正解」にせず pending で返す
   return "pending";
 });
 
-await acheck("未登録の利用者は採点しない", async () => {
-  const conn = fakeConn({ "FROM users": [] });
-  const r = await handlePostback(conn, {
-    source: { userId: "U_unknown" },
-    postback: { data: "action=quiz&day=30&choice=1" }
+await acheck("未登録の利用者は採点せず、器を置き直して歓迎から始める", async () => {
+  /* 以前はここで黙って返していた（skipped）。友だちのままなら follow は
+     二度と来ないので、users の行が消えた人にはリッチメニューだけが残り、
+     押しても打っても無反応な画面になっていた（2026-08-09 대표 실측）。
+
+     いまは器を置き直して歓迎 2 通を返す。ただし**押したボタンの用件は
+     捨てる** ── まだ名前も生年月日も無い人の答えを採点したら、
+     持っていない進みに書き込むことになる。 */
+  let sent = null;
+  /* 実物と同じ順で動かす ── 1 度目の「FROM users」は空（居ない）、
+     INSERT のあとに引き直すと行が在る。空のままにすると、置き直しの
+     直後に null を掴んで落ちる（実際そうなった）。 */
+  let inserted = false;
+  const conn = fakeConn({
+    "INSERT INTO users": () => { inserted = true; return { affectedRows: 1, insertId: 99 }; },
+    "FROM users": () => (inserted
+      ? [{ id: 99, line_user_id: "U_unknown", status: "trial", name_kr: null }]
+      : [])
   });
-  assert(r.skipped && /未登録/.test(r.skipped), JSON.stringify(r));
-  return "skipped";
+  const r = await handlePostback(conn, {
+    source: { userId: "U_unknown" }, replyToken: "t",
+    postback: { data: "action=quiz&day=30&choice=1" }
+  }, { send: async (_t, m) => { sent = m; return {}; } });
+
+  assert(r.recovered === true, JSON.stringify(r));
+  assert(conn.calls.some((c) => /INSERT INTO users/i.test(c.sql)),
+    "器を置き直していません");
+  assert(!conn.calls.some((c) => /UPDATE learning_progress|quiz_pass_log/i.test(c.sql)),
+    "未登録の人の答えを採点しました");
+  assert(sent && sent.length >= 1 && /はじめまして/.test(sent[0].text),
+    `歓迎から始まっていません: ${sent ? sent[0].text.slice(0, 30) : "null"}`);
+  return "置き直し → 歓迎（採点なし）";
 });
 
 /* ---- 答えた直後に、答えたのと同じ質問が戻らないこと ------------------
@@ -475,6 +499,32 @@ await acheck("スタンプ・画像には応えない", async () => {
   });
   assert(r.skipped, JSON.stringify(r));
   return "skipped";
+});
+
+await acheck("users に居ない人が一言送ったら、器を置き直して歓迎を返す", async () => {
+  /* 2026-08-09 대표 실측の再現。行を消したあと LINE 側は友だちのままで、
+     follow は二度と来ない。ここが黙って返していたので、リッチメニューは
+     出ているのに「あ」と打っても何も起きない画面が残った ── 出口が無い。
+
+     「心当たりの無い文面には返さない」（次の検査）とは別扱いにする。
+     あちらは**居る人**の雑談を無視する話で、こちらは居ない人の
+     最初の一言。無視すると、その人には二度と道が開かない。 */
+  let sent = null, inserted = false;
+  const conn = fakeConn({
+    "INSERT INTO users": () => { inserted = true; return { affectedRows: 1, insertId: 99 }; },
+    "FROM users": () => (inserted
+      ? [{ id: 99, line_user_id: "U_gone", status: "trial", name_kr: null }]
+      : [])
+  });
+  const { handleMessage } = await import("../server/lib/handlers/message.mjs");
+  const r = await handleMessage(conn, {
+    source: { userId: "U_gone" }, message: { type: "text", text: "あ" }, replyToken: "t"
+  }, { send: async (_t, m) => { sent = m; return {}; } });
+
+  assert(r.recovered === true, JSON.stringify(r));
+  assert(sent && sent.length >= 1, "何も返していません");
+  assert(/はじめまして/.test(sent[0].text), `歓迎から始まっていません: ${sent[0].text.slice(0, 30)}`);
+  return `置き直し → 歓迎 ${sent.length} 通`;
 });
 
 await acheck("心当たりの無い文面には返さない（通知を増やさない）", async () => {

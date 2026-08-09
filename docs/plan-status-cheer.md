@@ -143,7 +143,7 @@ return {
 - [x] `[name]` = `name_kr` · `님 ` 한 칸
 - [x] `verify-webhook` 기대 문면 갱신
 - [x] `node tools/verify-webhook.mjs` / `verify-billing.mjs` 통과
-- [ ] 커밋·푸시·deploy-server 후 실기 확인
+- [x] 커밋·푸시（`75d471d`）· deploy-server 후 실기 확인
 
 ---
 

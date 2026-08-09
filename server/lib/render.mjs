@@ -515,7 +515,7 @@ function quizMessage(head, action, day, quiz) {
 export function renderReviewQuiz(quiz) {
   if (!quiz || !Array.isArray(quiz.choices)) throw new Error("quiz がありません");
   const day = Number(quiz.dayNumber);
-  return quizMessage(`🔁 ふくしゅうクイズ（${day}日目より）`, "review", day, quiz);
+  return quizMessage(`🔁 復習クイズ（${day}日目より）`, "review", day, quiz);
 }
 
 /* 節目（30/50/75）の 1 通。復習（action=review、無保存）とは別の部屋で、

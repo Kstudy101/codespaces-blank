@@ -935,7 +935,7 @@ await check("신양식 3의 배수 ── ❓를 접고 🔁 복습만（A안）
 
   assert(msgs.length === 5, `${msgs.length} 통（1·2통+운세+부적+🔁 = 5）`);
   const last = msgs[msgs.length - 1];
-  assert(/🔁 ふくしゅうクイズ/.test(last.text), `말미가 🔁 이 아닙니다: ${String(last.text || "").split("\n")[0]}`);
+  assert(/🔁 復習クイズ/.test(last.text), `말미가 🔁 이 아닙니다: ${String(last.text || "").split("\n")[0]}`);
   assert(!/❓ 今日のクイズ/.test(msgs.map((m) => m.text || "").join("\n")),
     "3의 배수인데 데일리 ❓가 남았습니다");
   assert(conn.sql().some((s) => /quiz IS NOT NULL/i.test(s)),

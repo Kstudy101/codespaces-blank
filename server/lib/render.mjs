@@ -546,25 +546,24 @@ export function nameMissingNotice(day) {
 /* ---- クイズ採点の返事（docs/plan-quiz-harder-distractors.md §8）------
    不正解でも「選んだ番号」と「正解」を並べ、ひとことで形の意味を足す。
    data に answer は載せない（postback がサーバー原稿から引く）。 */
+/* 採点のあと・正誤共通の締め（2026-08-09 代表 · plan-quiz-harder-distractors C）.
+   正解だけの「今夜また…」はやめ、どちらでも同じ終わり方にする。 */
+const QUIZ_CLOSING = [
+  "今日もお疲れ様でした。",
+  "言語は毎日の繰り返しです！",
+  "また明日お会いしましょう。오늘도 화이팅！"
+].join("\n");
+
 export function formatQuizReply(quiz, choice, {
   passed,
   checkpointSemester = null
 } = {}) {
   if (passed) {
-    /* 正解のあとに夕方復習への一言（2026-08-09 代表 · plan-quiz-correct-cheer C）. */
-    const cheer = [
-      "",
-      "今夜また会いましょう！🌙",
-      "오늘 하루도 화이팅! 💕"
-    ].join("\n");
-    if (checkpointSemester != null) {
-      return [
-        "⭕ よくできました！🎉",
-        `第${checkpointSemester}学期の節目クイズ、合格です！`,
-        cheer
-      ].join("\n");
-    }
-    return ["⭕ よくできました！🎉", cheer].join("\n");
+    const head = checkpointSemester != null
+      ? ["⭕ よくできました！🎉",
+         `第${checkpointSemester}学期の節目クイズ、合格です！`]
+      : ["⭕ よくできました！🎉"];
+    return [...head, "", QUIZ_CLOSING].join("\n");
   }
   const mark = (i) => CIRCLED[i] || `${Number(i) + 1}`;
   const yours = quiz?.choices?.[choice];
@@ -576,6 +575,7 @@ export function formatQuizReply(quiz, choice, {
   ];
   const tip = quizExplain(quiz);
   if (tip) lines.push(`ひとこと: ${tip}`);
+  lines.push("", QUIZ_CLOSING);
   return lines.join("\n");
 }
 

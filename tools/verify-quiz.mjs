@@ -306,9 +306,12 @@ await check("正解 → その場で返事、DB には何も書かない", async
   /* 「正解」の 2 文字を要求していた。2026-08-09 に文面が
      「⭕ よくできました！🎉」＋夕方の一言へ変わり（plan-quiz-correct-cheer C）、
      この関門だけが取り残されてサイトと配信サーバーの配置を 3 コミット止めた。
+     同日、正誤共通の締め（plan-quiz-harder-distractors C）へ差し替え。
      確定した文面そのものを見る ── 次に文面を変えるときは、ここも同じ
      コミットで直すこと。 */
   assert(/よくできました/.test(replied[0].text), replied[0].text);
+  assert(/今日もお疲れ様でした/.test(replied[0].text), replied[0].text);
+  assert(/また明日お会いしましょう/.test(replied[0].text), replied[0].text);
   assert(!conn.sql().some((s) => /^(INSERT|UPDATE|DELETE)/i.test(s)),
     "復習クイズが DB に書いています（合否の上書き事故のもと）");
   return "無状態";
@@ -323,6 +326,8 @@ await check("不正解 → 正答を教える。quiz_pass_log には触らない
   assert(/네/.test(replied[0].text), `正答が入っていません: ${replied[0].text}`);
   assert(/あなたの答え:/.test(replied[0].text), `選んだ答えがありません: ${replied[0].text}`);
   assert(/正解:/.test(replied[0].text), `正解ラベルがありません: ${replied[0].text}`);
+  assert(/今日もお疲れ様でした/.test(replied[0].text), replied[0].text);
+  assert(/また明日お会いしましょう/.test(replied[0].text), replied[0].text);
   /* quiz_pass_log は getProgress の SELECT にも並ぶ。読むのは自由で、
      禁じるのは書くこと ── 書いた瞬間に修了判定の材料が汚れる。 */
   assert(!conn.sql().some((s) => /^(UPDATE|INSERT|DELETE)/i.test(s)),

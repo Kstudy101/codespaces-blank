@@ -428,6 +428,59 @@ check("体験は purchases に入れない（0 円の行で売上が狂う）", 
   return "entitlements だけ";
 });
 
+/* ---- 体験日数は行が持つ（migrations/007）----------------------------
+   fakeConn は SQL を実行せず、見た目で用意した行を返すだけ。だから
+   ここの 3 つは全部ソースの静的検査で、SQL の意味は smoke.mjs が
+   本物の MySQL で見る。
+
+   守っているのは 1 つ ── TRIAL_DAYS を変えた翌朝に、既存の体験者が
+   全員 findEntitlementDrift に載らないこと。その通知は「払ったのに
+   日数が足りない人」を放すためのもので、誤検知が常態化すると
+   本物を読み飛ばす。 */
+const EXPECTED_SRC = (() => {
+  const src = stripComments(read("server/lib/repo/billing.mjs"));
+  const m = src.match(/const EXPECTED\s*=\s*`([^`]*)`/);
+  if (!m) throw new Error("billing.mjs に const EXPECTED が見つかりません");
+  return m[1];
+})();
+
+check("EXPECTED に体験日数の数字リテラルが無い", () => {
+  /* 焼き戻し方は 2 つしかない ── ${...} で埋めるか、IF の then に
+     数字を直接書くか。どちらも過去の契約を今の定数で再計算する。 */
+  assert(!/\$\{/.test(EXPECTED_SRC),
+    `体験日数を SQL に焼き戻しています（007 の意味が消えます）: ${EXPECTED_SRC}`);
+  assert(!/e\.track,\s*\d/.test(EXPECTED_SRC),
+    `体験日数を SQL に焼き戻しています（007 の意味が消えます）: ${EXPECTED_SRC}`);
+  return "定数の埋め込み無し";
+});
+
+check("EXPECTED が s.trial_days を読んでいる", () => {
+  assert(/IF\(s\.trial_track = e\.track,\s*COALESCE\(s\.trial_days/.test(EXPECTED_SRC),
+    `契約の行から体験日数を読んでいません: ${EXPECTED_SRC}`);
+  return "行が持つ日数で照合";
+});
+
+check("startTrial の「贈る日数」と「台帳の日数」が同じ識別子から出る", () => {
+  const src = stripComments(read("server/lib/repo/billing.mjs"));
+  const fn = src.match(/export async function startTrial[\s\S]*?\n}/)[0];
+
+  assert(/INSERT INTO subscriptions[\s\S]*?trial_days/i.test(fn),
+    "INSERT の列に trial_days がありません（台帳が体験日数を覚えません）");
+
+  const end = fn.match(/addDays\([^,]+,\s*([A-Za-z_$][\w$]*)\s*-\s*1\s*\)/);
+  const gr  = fn.match(/entitlements\.grant\([^)]*?,\s*([A-Za-z_$][\w$]*)\s*\)/);
+  assert(end && gr, "trial_end の算出か grant の日数が読み取れません");
+  assert(end[1] === gr[1],
+    `贈る日数と台帳の日数を別々に読んでいます: addDays は ${end[1]} / grant は ${gr[1]}`);
+
+  /* 本文に直接 TRIAL_DAYS が 2 回以上出てきたら、それは 2 か所で
+     独立に読んでいる形 ── 1 回（const days への代入）だけが正しい。 */
+  const n = (fn.match(/\bTRIAL_DAYS\b/g) || []).length;
+  assert(n === 1,
+    `贈る日数と台帳の日数を別々に読んでいます（TRIAL_DAYS が本文に ${n} 回）`);
+  return `どちらも ${end[1]}`;
+});
+
 
 /* ================================================================== */
 head("[門]  表示の義務を満たす前に売らない");

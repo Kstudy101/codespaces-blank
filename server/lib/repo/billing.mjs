@@ -34,7 +34,7 @@ export const TRIAL_DAYS = 3;
 
 export async function getSubscription(conn, userId) {
   return one(conn,
-    `SELECT id, user_id, trial_start, trial_end, trial_track, payment_status
+    `SELECT id, user_id, trial_start, trial_end, trial_track, trial_days, payment_status
        FROM subscriptions WHERE user_id = ?`, [userId]);
 }
 
@@ -53,11 +53,16 @@ export async function startTrial(conn, userId, track, startDate = null) {
   if (!isTrack(track)) throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")}）`);
   const start = startDate || jstDate();
 
+  /* 台帳に書く日数と、実際に贈る日数を 1 つの値から取る（007）。
+     2 か所で別々に TRIAL_DAYS を読むと、片方だけ直した日に
+     「貰った日数と台帳」が黙ってずれる。 */
+  const days = TRIAL_DAYS;
+
   const ins = await insertNew(conn,
     `INSERT INTO subscriptions
-       (user_id, trial_start, trial_end, trial_track, payment_status)
-     VALUES (?, ?, ?, ?, 'trial')`,
-    [userId, start, addDays(start, TRIAL_DAYS - 1), track]);
+       (user_id, trial_start, trial_end, trial_track, trial_days, payment_status)
+     VALUES (?, ?, ?, ?, ?, 'trial')`,
+    [userId, start, addDays(start, days - 1), track, days]);
 
   if (!ins.created) {
     /* もう使っている。どのコースで使ったかを返して、呼ぶ側が
@@ -69,7 +74,7 @@ export async function startTrial(conn, userId, track, startDate = null) {
      数えるのに 2 か所を足し合わせることになり、片方を忘れる。
      purchases には入れない ── あちらは「払った」台帳なので、
      0 円の行が混ざると売上の集計が狂う。 */
-  await entitlements.grant(conn, userId, track, TRIAL_DAYS);
+  await entitlements.grant(conn, userId, track, days);
 
   return { created: true, subscription: await getSubscription(conn, userId) };
 }
@@ -192,17 +197,21 @@ export async function findByPaymentRef(conn, paymentRef) {
    （GENERATED ALWAYS AS (…) STORED の方）なので、AS stored と書くと
    1064 で落ちる。エラーは「文法が違う」としか出ず、指す位置も
    その次の行になるので、別名が原因だとは読み取れない。
-   本物の MySQL に流して初めて分かった類い（db/smoke.mjs）。
-
-   TRIAL_DAYS を ? で渡さず埋めているのは、prepared statement が
-   SELECT の式の先頭に来た ? の型を決められないため。
-   埋めるのはこのファイルの const（3）なので注入の余地は無い。 */
-const T = Number(TRIAL_DAYS);
+   本物の MySQL に流して初めて分かった類い（db/smoke.mjs）。 */
 
 /* 体験ぶんは「体験を使ったコース」にだけ乗る。s が無い（体験を
    使っていない）人は s.trial_track が NULL なので、比較が NULL に
-   なり IF は 0 を返す ── 別に IS NULL を書かなくてよい。 */
-const EXPECTED = `COALESCE(p.total, 0) + IF(s.trial_track = e.track, ${T}, 0)`;
+   なり IF は 0 を返す ── 別に IS NULL を書かなくてよい。
+
+   日数は定数ではなく行が持つ（007）。TRIAL_DAYS を変えても過去の
+   契約が再計算されない ── これが無いと、体験日数を変えた翌朝に
+   既存の体験者が全員この通知に載る。
+
+   trial_track はあるのに trial_days が NULL なら、それは startTrial の
+   書き忘れの証拠。COALESCE で 0 に落として drift として鳴らす ──
+   静かに 3 を補うと、間違いが見えないまま残る。 */
+const EXPECTED =
+  `COALESCE(p.total, 0) + IF(s.trial_track = e.track, COALESCE(s.trial_days, 0), 0)`;
 
 const DRIFT_SQL = `
   SELECT e.user_id, e.track,

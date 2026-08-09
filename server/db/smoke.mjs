@@ -206,6 +206,20 @@ try {
     return "beginner 3 日";
   });
 
+  /* ---- 体験日数を行が持つ（migrations/007）--------------------------
+     関門はソースしか読めない。列が本当にあるか・EXPECTED の SQL が
+     MySQL で通るかは、本物に流さないと分からない ── ここが 007 の
+     唯一の実証。drift が 0 でないなら、体験ぶんが二重に乗っているか
+     まったく乗っていないかのどちらか。 */
+  const s1 = await billing.getSubscription(pool, uid);
+  const d0 = await billing.recountEntitledDays(pool, uid, T);
+  check("体験を使った行は trial_days を持ち、drift が 0", () => {
+    assert(Number(s1.trial_days) === billing.TRIAL_DAYS,
+      `trial_days = ${s1.trial_days}（TRIAL_DAYS は ${billing.TRIAL_DAYS}）`);
+    assert(d0.drift === 0, `${d0.stored} と ${d0.expected} がずれています`);
+    return `trial_days ${s1.trial_days} / drift 0`;
+  });
+
   /* コースを変えても 2 度目は通らない。通ると 3 コース ×3 日 = 9 日を
      無料で受け取れる。一意キーは subscriptions.user_id 1 本なので、
      1062 は「もう体験を使った」だけを意味すると確定できる。 */

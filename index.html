@@ -550,10 +550,38 @@ a.sns-btn{color:var(--text)}   /* リンクにしても見た目はボタンの�
   line-height:1.5;
 }
 .tipbar-go{flex:none; color:var(--gold); font-weight:700}
-@media (prefers-reduced-motion:reduce){ .tipbar{transition:none} .tipbar:active{transform:none} }
+
+/* ---------- LINE 直行バー（豆知識バーの直下・流入 2） ----------
+   構造もクラス名も .tipbar をそのまま倣う ── ここで新しい意匠を
+   作らない。色だけを LINE の緑に割る。同じ金色だと 2 本のバーが
+   1 本に見えて、どちらも押されない。
+   #06c755 は LINE のブランド色なので、パレット変数（--gold 等）には
+   入れない ── うちの色ではないものを、うちの色の顔で置かない。 */
+.linebar{
+  display:flex; align-items:center; gap:12px; text-decoration:none;
+  background:#e8f7ec; border:1px solid #06c755;
+  border-radius:12px; padding:11px 14px; margin:0 0 20px;
+  transition:background .15s, transform .1s;
+}
+.linebar:hover{background:#dbf1e2}
+.linebar:active{transform:scale(.995)}
+.linebar:focus-visible{outline:2px solid #06c755; outline-offset:2px}
+.linebar-badge{
+  flex:none; display:inline-flex; align-items:baseline; gap:6px;
+  font-size:.78rem; font-weight:700; color:#fff; background:#06c755;
+  border-radius:999px; padding:4px 11px; white-space:nowrap;
+}
+.linebar-badge small{font-size:.66rem; font-weight:400; opacity:.9}
+.linebar-txt{flex:1; min-width:0; font-size:.9rem; line-height:1.45}
+.linebar-txt b{display:block; font-size:.98rem}
+.linebar-go{flex:none; color:#06c755; font-weight:700}
+@media (prefers-reduced-motion:reduce){
+  .tipbar,.linebar{transition:none}
+  .tipbar:active,.linebar:active{transform:none}
+}
 @media (max-width:420px){
-  .tipbar{flex-wrap:wrap; gap:8px}
-  .tipbar-txt{flex:1 0 100%; order:3}
+  .tipbar,.linebar{flex-wrap:wrap; gap:8px}
+  .tipbar-txt,.linebar-txt{flex:1 0 100%; order:3}
 }
 
 /* ---------- サイドバー ----------------------------------------------
@@ -902,22 +930,39 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
   <span class="tipbar-go" aria-hidden="true">→</span>
 </a>
 
+<!-- 流入 2（LINE 直行）の入口。診断カードの「上」に置くのは代表指示。
+     href はハードコード ── 静的サイトなので env が読めない。同じ URL が
+     server/lib/pages.mjs にもあり、片方だけ直すと直さなかった側が
+     死んだリンクになる。verify-pages が 2 つを突き合わせる。
+     gtag は 1 行でも外せない ── これが無いと、このバーが得だったのか
+     診断を食っただけだったのかを永久に判定できない。 -->
+<a class="linebar" href="https://line.me/R/ti/p/@kstudy101"
+   target="_blank" rel="noopener"
+   onclick="gtag('event','line_banner_click',{location:'below_tipbar'})">
+  <span class="linebar-badge">LINE<small>바로 시작</small></span>
+  <span class="linebar-txt">
+    <b>入力なしでも、すぐ始められます</b>
+    友だち追加して、LINE の中でお名前を登録
+  </span>
+  <span class="linebar-go" aria-hidden="true">→</span>
+</a>
+
 <!-- ============ STAGE 1 : INPUT ============ -->
 <div class="card" id="form-card" data-clarity-mask="true">
   <p class="why">
-    <b>なぜお名前が必要？</b><br>
+    <b>ハングル、名前から始めませんか？</b><br>
     名前の「音」と「漢字」、それぞれからハングルを学べます。音からはハングルの読み方、
-    漢字からは韓国語の単語と意味を知ることができます。
+    漢字からは韓国語の単語と意味を確認してみましょう。
   </p>
 
   <div class="okbox">
-    <div class="okbox-ttl">どんな名前でも診断できます</div>
+    <div class="okbox-ttl">どんな名前からもOKです！</div>
     <ul class="oklist">
-      <li><b>本名</b><span>漢字も入れると、漢字から韓国語の単語まで学べます（おすすめ）</span></li>
+      <li><b>本名</b><span>漢字も入れると、漢字から韓国語の単語まで学べます！</span></li>
       <li><b>ニックネーム・あだ名</b><span>「みう」「ゆき」など、ふりがなだけでOK</span></li>
-      <li><b>ハンドルネーム・推しの名前</b><span>カタカナでもそのまま診断できます</span></li>
+      <li><b>ハンドルネーム・推しの名前</b><span>カタカナでもそのままOKです！</span></li>
     </ul>
-    <p class="okfoot">本名を入れたくない方は、ニックネームだけでも全部の STEP を試せます。</p>
+    <p class="okfoot">本名を入れたくない方は、ニックネームだけでも全部のSTEPを試せます！</p>
   </div>
 
   <div class="row">
@@ -949,13 +994,13 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
   <p class="err" id="err"></p>
 
   <div style="margin-top:20px">
-    <button id="go">名前で韓国語勉強スタート</button>
+    <button id="go">名前からハングル勉強スタート！</button>
   </div>
 
   <p class="privacy">
     ※ 入力されたお名前は<b>どこにも保存されません</b>。
     診断はすべてお使いの端末（ブラウザ）の中だけで行われ、
-    お名前・生年月日がサーバーや第三者に送信されることはありません。
+    お名前がサーバーや第三者に送信されることはありません。
     アクセス解析・利用状況の記録からも<b>除外</b>しています。
     生年月日は、あとの占いで入れていただいたものを
     <a href="/gilbang">方角</a>・<a href="/amulet">お守り</a>で入れ直さずに済むよう
@@ -984,37 +1029,37 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     <div class="conv" id="d-hanja-row">
       <div class="flag">📜</div>
       <div>
-        <div class="lbl">韓国漢字音（漢字をハングルで読むと）</div>
+        <div class="lbl">韓国漢字音（漢字をハングルで読むとこうなります）</div>
         <div class="val" id="d-hanjaeum"></div>
-        <div class="sub">同じ漢字でも、ハングルではこう読みます</div>
+        <div class="sub">同じ漢字でも、ハングルではこう読むんですね</div>
       </div>
     </div>
   </div>
 
   <!-- STEP 2 -->
   <div class="card">
-    <h2>自分の名前でハングルを覚える</h2>
+    <h2>自分の名前でハングルを覚えてみよう！</h2>
     <p class="hint" style="margin:-8px 0 18px">
-      ハングルは「子音 + 母音」の組み合わせ。あなたの名前で分解してみましょう。
+      ハングルは「子音 + 母音」の組み合わせ。あなたの名前で分解してみよう！
     </p>
     <div id="d-jamo"></div>
     <div class="warnbox">
-      <b>ポイント</b> — ハングルは記号ではなく、パーツの組み立てです。
+      <b>ポイント</b> — ハングルは記号ではなく、パーツの組み立て！
       左上が子音、右か下が母音。これが分かれば、もう「読める」入口に立っています。
     </div>
   </div>
 
   <!-- STEP 3 -->
   <div class="card" id="step3">
-    <h2>お名前の漢字で、ハングルの単語を覚える</h2>
+    <h2>お名前の漢字で、ハングルの単語を覚えてみよう！</h2>
     <div id="d-hanja"></div>
   </div>
 
   <!-- STEP 4 -->
   <div class="card">
-    <h2>自分の名前で文をつくる</h2>
+    <h2>自分の名前で文をつくってみよう！</h2>
     <p class="hint" style="margin:-8px 0 18px">
-      お名前が入った文は、記憶に残ります。声に出して読んでみてください。
+      名前が入った文は、記憶に残ります。声に出して読んでみてください！
     </p>
     <div id="d-sent"></div>
 
@@ -1022,14 +1067,14 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
       <summary>簡単な会話を見てみよう<span class="talk-arrow" aria-hidden="true">→</span></summary>
       <div class="talk-body">
         <div id="d-talk"></div>
-        <button type="button" class="talk-more" id="talk-again">別の場面を見る</button>
+        <button type="button" class="talk-more" id="talk-again">別の場面を見てみよう！</button>
       </div>
     </details>
   </div>
 
   <!-- STEP 5 -->
   <div class="card">
-    <h2>ハングルでの「呼ばれ方」を知る</h2>
+    <h2>ハングルでの「呼ばれ方」を知ってみよう！</h2>
     <div id="d-call"></div>
     <div class="warnbox" id="d-callnote"></div>
   </div>
@@ -1037,10 +1082,10 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
   <!-- SHARE -->
   <div class="card">
     <div class="step-no">🌸 シェア</div>
-    <h2>友だちの名前は、ハングルでどう読む？</h2>
+    <h2>友だちの名前は、ハングルでどう読む？シェアしてみよう！</h2>
     <p class="hint" style="margin:-8px 0 18px">
       下のカードを保存して、そのままシェアできます。
-      家族や友だちの名前で試してもらうと盛り上がります。
+      家族や友だちの名前で試してもらうと盛り上がります！
     </p>
 
     <div class="cardwrap">
@@ -1097,13 +1142,12 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
        あちらは点数から選ぶ 1 本、こちらは 5 つ全部。                -->
   <div class="gate" id="gate">
     <div class="step-no" style="justify-content:center">🔮 ここから占い<small>점 보기 ＝ 占う</small></div>
-    <h2>ハングルの名前で、占ってみませんか？</h2>
+    <h2>ハングルの名前で、占ってみよう！</h2>
     <p>
       占いのことを、ハングルでは <b class="ko">점</b>（チョム）といいます。<br>
       なかでも、生まれた年・月・日・時刻を干支に直した4本の柱が
       <b class="ko">사주</b>（四柱）です。<br>
-      あなたの四柱から、<b>名前の五行・今日の運勢・おみくじ・方角・お守り</b>の
-      5 つをまとめてお出しします。
+      あなたの四柱から、<b>名前の五行・今日の運勢・おみくじ・方角・お守り</b>の5つをお出しします！<br>
     </p>
     <div class="row">
       <div>
@@ -1131,17 +1175,17 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     </div>
     <p class="hint gate-hint">
       生まれた時刻がわからなければ、「わからない」のままで大丈夫です。
-      その場合は時柱を除いた3柱でお出しします。
+      その場合は時柱を除いた3柱でお出しします！
     </p>
     <p class="err" id="err2"></p>
-    <button id="go2">占ってみる</button>
+    <button id="go2">占ってみよう！</button>
 
     <!-- どこから来た数字なのかを、押す前に置いておく。四柱は入力を
          そのまま並べ替えたものではなく暦の計算なので、根拠を書かないと
          「それらしい漢字が出ただけ」と区別がつかない。 -->
     <p class="gate-src">
       暦は<b>万年暦</b>（<b class="ko">만세력</b>）と同じ立て方です。年柱は<b>立春</b>、
-      月柱は<b>十二節</b>で切り替え、時刻は生まれた場所の<b>真太陽時</b>に直しています。
+      月柱は<b>十二節</b>で切り替え、時刻は生まれた場所の<b>真太陽時</b>に直しています！
     </p>
   </div>
 
@@ -1151,7 +1195,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     <!-- ① 韓国式ネーム診断 -->
     <div class="card">
       <div class="step-no">🔮 その①<small>이름 풀이 ＝ 名前の読み解き</small></div>
-      <h2>あなたの名前を、ハングル式に読み解くと</h2>
+      <h2>あなたの名前を、ハングル式に読み解くとこうなります！</h2>
       <div id="d-ohaeng"></div>
       <div id="d-zodiac"></div>
       <div id="d-birth"></div>
@@ -1160,7 +1204,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     <!-- ② 今日の運勢 -->
     <section class="card fortune" id="fortune" aria-labelledby="fortune-h">
       <div class="step-no">🔮 その②<small>오늘의 운세 ＝ 今日の運勢</small></div>
-      <h2 id="fortune-h">今日のあなたは、どんな日？</h2>
+      <h2 id="fortune-h">今日のあなたは、どんな日？運勢をお知らせします！</h2>
       <div id="f-result" hidden></div>
     </section>
 
@@ -1172,10 +1216,10 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
          gilbang.js から呼んでいる）。                              -->
     <div class="card">
       <div class="step-no">🔮 その③<small>おみくじ・方角・お守り</small></div>
-      <h2>今日はもう3つ、あなたに</h2>
+      <h2>今日はもう3つ、あなたにお出しします！ </h2>
       <p class="hint" style="margin:-8px 0 18px">
         おみくじを1本、向かうとよい方角を1つ、お守りを1枚。
-        ここでは今日の結論だけをお出しします —— 詳しい読み方や作り直しは、それぞれのページで。
+        ここでは今日の結論だけをお出しします —— 詳しい読み方や作り直しは、それぞれのページでお楽しみください！
       </p>
 
       <div class="s6-list">
@@ -1185,7 +1229,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
             <span class="s6-ttl">おみくじ<small>오미쿠지</small></span>
             <a class="s6-go" href="/omikuji">もっと見る</a>
           </div>
-          <p class="s6-txt">計算ではなく、くじ引き。ハングルのことわざが1つ出ます。1日1回。</p>
+          <p class="s6-txt">計算ではなく、くじ引き。ハングルのことわざが1つ出ます。1日1回です！</p>
           <div class="s6-body" id="om-body"></div>
         </div>
 
@@ -1195,7 +1239,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
             <span class="s6-ttl">今日の方角<small>오늘의 길방</small></span>
             <a class="s6-go" href="/gilbang">もっと見る</a>
           </div>
-          <p class="s6-txt">日本の方角とハングルの<b class="ko">손없는 날</b>、そしてあなたの命式に足りない五行の方位。</p>
+          <p class="s6-txt">日本の方角とハングルの<b class="ko">손없는 날</b>、そしてあなたの命式に足りない五行の方位をお出しします！</p>
           <div class="s6-body" id="gb-body"></div>
         </div>
 
@@ -1205,7 +1249,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
             <span class="s6-ttl">お守りメーカー<small>ハングルのお守りを作る</small></span>
             <a class="s6-go" href="/amulet">もっと見る</a>
           </div>
-          <p class="s6-txt">お守りを作るための漢字を1字書いた1枚。画像で保存できます。</p>
+          <p class="s6-txt">お守りを作るための漢字を1字書いた1枚。画像で保存できます！</p>
           <div class="s6-body" id="am-body"></div>
         </div>
       </div>
@@ -1216,7 +1260,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
          今日の 3 語まで出そろってから描く（runSaju の呼ぶ順を参照）。 -->
     <div class="card">
       <div class="step-no">🌸 まとめ<small>오늘의 정리 ＝ 今日のまとめ</small></div>
-      <h2>今日、あなたの名前で覚えたハングル</h2>
+      <h2>今日、あなたの名前で覚えたハングルをまとめてみよう！</h2>
       <div id="d-recap"></div>
     </div>
 
@@ -1229,10 +1273,10 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
          運勢を出すときで、描く場所だけが違う。                       -->
     <div class="card" id="s-words">
       <div class="step-no">📗 今日の言葉<small>오늘 배울 세 단어</small></div>
-      <h2>今日学ぶ3つの単語</h2>
+      <h2>今日学ぶ3つの単語を選んでみよう！</h2>
       <p class="hint" style="margin:-8px 0 18px">
         今日の運勢の項目に合わせて選んでいます。声に出してみて、
-        気に入ったものだけ単語帳に保存してください。
+        気に入ったものだけ単語帳に保存してみよう！
       </p>
       <div id="d-words"></div>
     </div>
@@ -1247,10 +1291,10 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
          URL を入れた時点で出る作りにしてあるので、順番を間違えない。 -->
     <div class="card" id="s-line" hidden>
       <div class="step-no">💬 つづける<small>매일 아침 7시 ＝ 毎朝7時</small></div>
-      <h2>明日の朝から、LINEで101日間</h2>
+      <h2>明日の朝から、LINEで101日間お出しします！</h2>
       <p class="hint" style="margin:-8px 0 18px">
         今日出した診断結果をそのまま引き継いで、あなたの名前が出てくるハングルを
-        毎朝7時にお届けします。まずは3日間、無料でお試しいただけます。
+        毎朝7時にお届けします！まずは3日間、無料でお試しいただけます。
       </p>
 
       <!-- 何が送られるかを、押す前に置く。折りたたみにしない ──
@@ -1260,17 +1304,17 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
       <button id="line-go">LINE で続きを受け取る</button>
       <p class="hint" id="line-msg" role="status" aria-live="polite" style="margin-top:10px"></p>
       <p class="privacy" style="margin-top:14px">
-        送信するのは上に挙げたものだけです。ボタンを押さなければ、
+        送信するのは上に挙げたものだけ！ボタンを押さなければ、
         これまでどおり何も送信されません。
         くわしくは<a href="/privacy">プライバシーポリシー</a>をご確認ください。
       </p>
     </div>
   </div>
 
-  <p class="tagline">私の名前から始めるハングル勉強。</p>
+  <p class="tagline">私の名前から始めるハングル勉強。これで始まります！</p>
 
   <div style="margin-bottom:20px">
-    <button class="ghost" id="again">別の名前で試す</button>
+    <button class="ghost" id="again">別の名前で試してみよう！</button>
   </div>
 </div>
 
@@ -1285,14 +1329,14 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
   <div class="card about-sec" id="about-intro">
     <h2>「名前からはじめるハングル勉強」とは</h2>
     <p class="body-p">
-      ハングルの教材は、たいてい同じ順番で始まります。ハングルの母音と子音を覚えて、
+      ハングルの教材は、たいてい同じ順番で始まります！ハングルの母音と子音を覚えて、
       あいさつを覚えて、数字を覚えて、文法へ。正しい順番ですが、
       <strong>自分と関係のない文字の羅列が続く</strong>ので、多くの人はここで飽きてしまいます。
     </p>
     <p class="body-p">
-      このサイトは順番を逆にしました。最初に扱う教材は<strong>あなた自身の名前</strong>です。
+      このサイトは順番を逆にしました！最初に扱う教材は<strong>あなた自身の名前</strong>です。
       自分の名前がハングルでどう書かれるのかを見て、その文字がどう組み立てられているのかを知り、
-      名前の漢字からハングルの単語を覚える。覚える対象が自分のことなので、記憶に残ります。
+      名前の漢字からハングルの単語を覚える。覚える対象が自分のことなので、記憶に残ります！
     </p>
     <div class="tbl">
       <table>
@@ -1306,16 +1350,16 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     </div>
     <p class="body-p">
       入力できるのは本名だけではありません。ニックネームでも、ハンドルネームでも、
-      カタカナの名前でも同じように診断できます。
+      カタカナの名前でも同じように診断できます！
     </p>
   </div>
 
   <!-- サンプル -->
   <div class="card about-sec" id="about-sample">
-    <h2>例：「田中 愛」さんの場合</h2>
+    <h2>例：「田中 愛」さんの場合を見てみよう！</h2>
     <p class="body-p" style="margin-bottom:20px">
-      実際にどんな結果が出るのか、ひとつ見てみましょう。
-      以下は<strong>田中 愛（たなか あい）</strong>さんを例にしたネーム診断結果です。
+      実際にどんな結果が出るのか、ひとつ見てみよう！
+      以下は<strong>田中 愛（たなか あい）</strong>さんを例にしたネーム診断の結果です！
     </p>
 
     <div class="namebox">
@@ -1326,7 +1370,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     <div class="conv">
       <div class="flag">🇰🇷</div>
       <div>
-        <div class="lbl">ハングル表記（音読みをそのまま）</div>
+        <div class="lbl">ハングル表記（音読みをそのままハングルで書くとこうなります）</div>
         <div class="val ko">타나카 아이</div>
       </div>
     </div>
@@ -1377,22 +1421,22 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     <div class="sent">
       <div class="ko">제 이름은 아이예요.</div>
       <div class="ja">わたしの名前はあいです。</div>
-      <div class="note">「아이」は母音で終わるので <b>예요</b>。パッチム（最後の子音）があれば「이에요」になります。</div>
+      <div class="note">「아이」は母音で終わるので <b>예요</b>。パッチム（最後の子音）があれば「이에요」になります！</div>
     </div>
 
     <p class="body-p" style="margin-top:20px">
       生年月日を入れると、これに加えてハングル式のネーム診断（子音五行）と干支、
-      そして誕生日をハングルで言う練習が表示されます。
+      そして誕生日をハングルで言う練習が表示されます！
     </p>
   </div>
 
   <!-- ハングルの仕組み -->
   <div class="card about-sec" id="about-jamo">
-    <h2>ハングルは「組み立て」でできている</h2>
+    <h2>ハングルは「組み立て」でできているんですね！</h2>
     <p class="body-p">
       ハングルが漢字と決定的に違うのは、<strong>一文字ずつ覚える必要がない</strong>ことです。
-      ハングルの一文字は、かならず「子音＋母音」（ときどきさらに子音）の組み合わせでできています。
-      パーツは全部で40個ほど。パーツさえ分かれば、見たことのない文字も読めます。
+      ハングルの一文字は、かならず「子音＋母音」（ときどきさらに子音）の組み合わせでできています！
+      パーツは全部で40個ほど。パーツさえ分かれば、見たことのない文字も読めます！
     </p>
     <div class="tbl">
       <table>
@@ -1405,24 +1449,24 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
       </table>
     </div>
     <p class="body-p">
-      並べ方には決まりがあります。母音が縦棒のとき（ㅏ ㅣ ㅓ）は<strong>左に子音、右に母音</strong>。
-      母音が横棒のとき（ㅗ ㅜ ㅡ）は<strong>上に子音、下に母音</strong>。
-      「가」は左右、「고」は上下。それだけです。
+      並べ方には決まりがあります！母音が縦棒のとき（ㅏ ㅣ ㅓ）は<strong>左に子音、右に母音</strong>。
+      母音が横棒のとき（ㅗ ㅜ ㅡ）は<strong>上に子音、下に母音</strong>！
+      「가」は左右、「고」は上下。それだけです！
     </p>
     <div class="warnbox">
       <b>「아」の ㅇ は読まない</b> — 母音だけの音を書きたいとき、ハングルは形を整えるために
-      子音の位置に ㅇ を置きます。この ㅇ は音を持ちません。
-      「아」は「a」、「이」は「i」と読みます。ただし<u>下に来た ㅇ は「ng」の音になります</u>
+      子音の位置に ㅇ を置きます。この ㅇ は音を持ちません！
+      「아」は「a」、「이」は「i」と読みます。ただし<u>下に来た ㅇ は「ng」の音になります！</u>
       （例：「중」= ju + ng）。
     </div>
   </div>
 
   <!-- 表記ルール -->
   <div class="card about-sec" id="about-rule">
-    <h2>日本語の名前をハングルで書くときのルール</h2>
+    <h2>日本語の名前をハングルで書くときのルールを知ってみよう！</h2>
     <p class="body-p">
-      日本語の音をハングルに移すとき、いくつか決まったパターンがあります。
-      当サイトの変換もこのルールに従っています。
+      日本語の音をハングルに移すとき、いくつか決まったパターンがあります！
+      当サイトの変換もこのルールに従っています！
     </p>
     <div class="tbl">
       <table>
@@ -1434,24 +1478,24 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
       </table>
     </div>
     <p class="body-p">
-      三番目がいちばん戸惑うところです。ハングルでは日本語のような長音の区別がないため、
+      三番目がいちばん戸惑うところです！ハングルでは日本語のような長音の区別がないため、
       「とうきょう」は「토쿄」（2文字）になります。「ゆうき」も「유키」です。
     </p>
     <div class="warnbox">
       <b>当サイトの表記について</b> — 「たなか」を当サイトは <b>타나카</b> と表記します。
       ハングルの外来語表記法にしたがうと <b>다나카</b> が正式です。
-      当サイトは<u>発音を覚えることを優先</u>して、実際の音に近い表記を採用しています。
+      当サイトは<u>発音を覚えることを優先</u>して、実際の音に近い表記を採用しています！
       公的な書類などで使う場合は「다나카」をご確認ください。
     </div>
   </div>
 
   <!-- ハングル漢字音 -->
   <div class="card about-sec" id="about-eum">
-    <h2>「田中」が「전중」になる理由（ハングル漢字音）</h2>
+    <h2>「田中」が「전중」になる理由（ハングル漢字音）を知ってみよう！</h2>
     <p class="body-p">
-      日本語とハングルには、<strong>どちらも漢字を自分の言語の音で読む</strong>という共通点があります。
+      日本語とハングルには、<strong>どちらも漢字を自分の言語の音で読む</strong>という共通点があります！
       日本語で「山」を「サン」と読むように、ハングルでは「산」と読みます。
-      つまり同じ漢字に、日本語音とハングル音の両方があるのです。
+      つまり同じ漢字に、日本語音とハングル音の両方があるのです！
     </p>
     <div class="tbl">
       <table>
@@ -1465,42 +1509,42 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
       </table>
     </div>
     <p class="body-p">
-      音が似ているものが多いことに気づきましたか。どちらも古い中国語の発音を取り入れたためで、
-      対応関係にはかなりの規則性があります。この規則をつかむと、
+      音が似ているものが多いことに気づきましたか！どちらも古い中国語の発音を取り入れたためで、
+      対応関係にはかなりの規則性があります！この規則をつかむと、
       <strong>知らないハングルの単語でも漢字から意味を推測できる</strong>ようになります。
-      「大学」は「대학」、「学生」は「학생」です。
+      「大学」は「대학」、「学生」は「학생」です！
     </p>
     <p class="body-p">
       ですから「田中 愛」という名前は、ハングルでは音をそのまま写した「타나카 아이」とも、
       漢字をハングルで読んだ「전중 애」とも表せます。実際に使われるのは前者ですが、
-      後者を知っておくと漢字語の入り口になります。
+      後者を知っておくと漢字語の入り口になります！
     </p>
   </div>
 
   <!-- 呼び方 -->
   <div class="card about-sec" id="about-call">
-    <h2>ハングルでは「〜さん」をどう言う？</h2>
+    <h2>ハングルでは「〜さん」をどう言う？呼び方を知ってみよう！</h2>
     <p class="body-p">
       日本語の「さん」にあたるのが <b>씨</b>（シ）です。ただし使い方に、
-      日本語と大きく違う点がひとつあります。
+      日本語と大きく違う点がひとつあります！
     </p>
     <div class="call">
       <div class="t">아이 씨</div>
-      <div class="d">いちばん一般的。日本語の「あいさん」に近い言い方です。</div>
+      <div class="d">いちばん一般的。日本語の「あいさん」に近い言い方です！</div>
     </div>
     <div class="call">
       <div class="t">아이 님</div>
-      <div class="d">「씨」よりさらに丁寧。ネット・接客・ビジネスでよく使われます。</div>
+      <div class="d">「씨」よりさらに丁寧。ネット・接客・ビジネスでよく使われます！</div>
     </div>
     <div class="call">
       <div class="t">아이야</div>
       <div class="d">親しい友だちや年下への呼びかけ。母音で終わる名前には「야」、
-        パッチムがあれば「아」がつきます（例：켄 → 켄아）。</div>
+        パッチムがあれば「아」がつきます（例：켄 → 켄아）！</div>
     </div>
     <div class="warnbox">
       <b>苗字だけで「씨」は失礼になることがある</b> — 日本語では「田中さん」と苗字で呼ぶのが普通ですが、
       ハングルで「타나카 씨」のように<u>苗字だけ＋씨</u>は、事務的・見下した響きになることがあります。
-      名前（下の名前）＋씨か、フルネーム＋씨が自然です。
+      名前（下の名前）＋씨か、フルネーム＋씨が自然です！
     </div>
   </div>
 
@@ -1517,10 +1561,10 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 
     <h3 class="sub-h">入力した名前は保存されますか？</h3>
     <p class="body-p">
-      保存されません。変換も判定もすべてブラウザの中だけで行われ、
-      名前や生年月日がサーバーへ送信されることはありません。
+      保存されません！変換も判定もすべてブラウザの中だけで行われ、
+      名前や生年月日がサーバーへ送信されることはありません！
       生年月日だけは、方角やお守りのページで入れ直さずに済むよう、
-      <strong>そのタブを閉じるまで</strong>お使いの端末の中に置いています。
+      <strong>そのタブを閉じるまで</strong>お使いの端末の中に置いています！
       （年・月・日・時刻・出生地の5つだけで、お名前は含みません）。
       タブを閉じれば消えます。詳しくは<a href="/privacy">プライバシーポリシー</a>をご覧ください。
     </p>
@@ -1528,13 +1572,13 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     <h3 class="sub-h">本名を入れたくないのですが</h3>
     <p class="body-p">
       ニックネームでもハンドルネームでも構いません。「名（ふりがな）」だけ入力すれば、
-      すべての STEP を試せます。漢字は任意です。
+      すべての STEP を試せます。漢字は任意です！
     </p>
 
     <h3 class="sub-h">漢字のハングル読みが表示されないことがあります</h3>
     <p class="body-p">
-      日本の姓名で使われる漢字を中心に収録しているため、未収録の漢字は表示されません。
-      よく使う漢字で出ないものがあれば<a href="/contact">お問い合わせ</a>からお知らせください。
+      日本の姓名で使われる漢字を中心に収録しているため、未収録の漢字は表示されません！
+      よく使う漢字で出ないものがあれば<a href="/contact">お問い合わせ</a>からお知らせください！
     </p>
 
     <h3 class="sub-h">診断結果の「五行」は占いですか？</h3>
@@ -1542,7 +1586,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
       ハングルの姓名判断（성명학）で使われる「子音五行」の考え方をもとにした、
       <strong>エンターテインメント目的のコンテンツ</strong>です。
       名前の最初の子音を五行に当てはめるという実際の方法を使っていますが、
-      占い・鑑定として提供するものではありません。
+      占い・鑑定として提供するものではありません！
     </p>
   </div>
 
@@ -1557,12 +1601,12 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
   <div class="card about-sec" id="about-free">
     <h2>生年月日を入れなくても、今すぐ見られるページ</h2>
     <p class="body-p">
-      占いのことを、ハングルでは <b class="ko">점</b>（チョム）といいます。なかでも、生まれた
+      占いのことを、ハングルでは <b class="ko">점</b>（チョム）といいます！なかでも、生まれた
       年・月・日・時刻の 4 つを干支に直した <b class="ko">사주</b>（四柱）は、日本の
       四柱推命と同じ考え方です。ページ後半の占いでは、今日の<b>日辰</b>（その日の干支）と
       あなたの四柱を照らし合わせて、総合・金運・恋愛・仕事・健康・<b>学習</b>の
-      6 項目をお出しします。
-      下の 3 つは生年月日が要らないので、名前を入れる前でもそのままご覧いただけます。
+      6 項目をお出しします！
+      下の 3 つは生年月日が要らないので、名前を入れる前でもそのままご覧いただけます！
     </p>
     <div class="sm-grid">
       <a href="/omikuji">
@@ -1597,16 +1641,15 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 <footer>
   <p class="foot-note">
     ※ ハングルの診断機能に入力されたお名前・生年月日が、広告配信やアクセス解析に
-    診断機能に入力されたお名前・生年月日が、広告配信やアクセス解析に
-    利用されることはありません。
+    利用されることはありません！
     詳しくは<a href="/privacy">プライバシーポリシー</a>、および
     <a href="https://policies.google.com/technologies/ads?hl=ja"
        target="_blank" rel="noopener noreferrer">Google の広告に関するポリシー</a>
-    をご確認ください。
+    をご確認ください！
   </p>
   <p><b>名前からはじめるハングル勉強</b> — powered by <a href="#" id="brand">Kstudy101</a></p>
   <p class="foot-meta"><a href="/privacy">プライバシーポリシー</a>・<a href="/contact">お問い合わせ</a></p>
-  <p class="foot-meta">お名前・生年月日は端末の中だけで扱います。</p>
+  <p class="foot-meta">お名前・生年月日は端末の中だけで扱います！</p>
 </footer>
 
 </div>

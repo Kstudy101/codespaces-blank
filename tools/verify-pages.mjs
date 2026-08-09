@@ -320,6 +320,38 @@ check("詳細窓に URL と説明があり、別タブ + rel=noopener で開く"
   return "URL・説明・別タブ・noopener・Esc";
 });
 
+check("LINE 直行バーは 1 本だけ・別タブ・rel=noopener（지시서㉓ §1）", () => {
+  /* 2 本あると、押した人がどちらから来たのか GA4 で分けられない。
+     少ないほうの取りこぼしではなく「多い」ほうを見るのは、
+     コピペで増えるのがこの手のバーだから。 */
+  const s = src["index.html"];
+  const bars = [...s.matchAll(/<a class="linebar"([\s\S]*?)>/g)];
+  assert(bars.length === 1, `.linebar が ${bars.length} 本あります（1 本だけ）`);
+  assert(/target="_blank"/.test(bars[0][1]), "別タブで開きません（診断ページを失わせないため）");
+  assert(/rel="[^"]*\bnoopener\b/.test(bars[0][1]), "rel に noopener がありません");
+  /* 効果を測る 1 行。無いと、このバーが得だったのか診断を食っただけ
+     だったのかを永久に判定できない（지시서㉓ §1-1）。 */
+  assert(/gtag\('event','line_banner_click'/.test(bars[0][1]),
+    "gtag の計測が入っていません ── 効いたかどうかを後から測れません");
+  return "1 本・別タブ・noopener・計測";
+});
+
+check("友だち追加 URL がサイトとサーバーで一致する（지시서㉓ §1-3）", () => {
+  /* 同じ URL が 2 か所にある。静的サイトは env を読めないので
+     index.html はハードコード、サーバーは既定値。片方だけ直すと、
+     直さなかった側が黙って死んだリンクになる ── 死んだのがどちらかは
+     利用者にしか分からない。kana2hangul と同じで、写しを許すかわりに
+     関門が実物どうしを突き合わせる。 */
+  const site = /<a class="linebar" href="([^"]+)"/.exec(src["index.html"]);
+  assert(site, "index.html に .linebar の href がありません");
+  const server = fs.readFileSync("server/lib/pages.mjs", "utf8");
+  const def = /LINE_ADD_FRIEND_URL \|\| "([^"]+)"/.exec(server);
+  assert(def, "server/lib/pages.mjs に既定の友だち追加 URL がありません");
+  assert(site[1] === def[1],
+    `食い違っています ── index.html: ${site[1]} / pages.mjs: ${def[1]}`);
+  return site[1];
+});
+
 check("privacy に性別の文言が無い（지시서⑱ ── 集めない・書かない）", () => {
   /* 性別の収集をやめた。ポリシーに残っていれば「集めていないのに
      集めると書く」逆向きの食い違い ── 4 回踏んだ「방침과 코드의

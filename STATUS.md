@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-09 (친구추가 웰컴 서버 복귀 `aacf6dc` — **★-LIVE 대표 확인 대기**)
+최종 갱신: 2026-08-09 (무료 체험 **3일 → 7일** 2단계 구현 — 1단계 `main`, 2단계 브랜치 대기)
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -25,20 +25,63 @@
 - 콘텐츠 입고·자동 업로드 — **서버 반영 완료** (D1·D1b·D1c·D2, 2026-08-07 대표 확인).
   private repo → FTPS → UAPI Deploy → `.cpanel.yml` seed 전 경로 가동 ([plan-content-ci](docs/plan-content-ci.md))
 
+- **무료 체험 3일 → 7일** — **구현 완료 · 배포 대기** (2026-08-09, [plan-trial-7days](docs/plan-trial-7days.md)).
+  **2단계로 나눠 놓았습니다. 순서를 지키십시오** → §0-◆
+
 **권장 진행 순서 (한 줄).**
-**★-LIVE**（あいさつオフ + 친구추가로 보드·질문 확인）→ 대표 콘솔 3건(§0-☆) → contact.html 개명 범위 결정 → E1 조건 도래 시. C4는 [live-check-c4](docs/live-check-c4-sales-open.md).
+**◆-1 체험 7일 1단계 배포**(DB 백업 먼저) → 하루 뒤 ◆-2 검증 → ◆-3 2단계 merge →
+대표 콘솔 3건(§0-☆) → contact.html 개명 범위 결정 → E1 조건 도래 시. C4는 [live-check-c4](docs/live-check-c4-sales-open.md).
 
-### §0-★ 친구추가 인사말 — **서버 정본으로 복귀** (2026-08-09 밤)
+### §0-◆ 무료 체험 7일 — **2단계로 나뉘어 있습니다** (2026-08-09)
 
-증상: 배너→LINE 친구추가 후, LINE OA에 저장한 あいさつ가 안 나옴.
-대응: 1통째 `welcomeBoard` 를 **다시 서버가 보냄**（[plan-follow-greeting-fix](docs/plan-follow-greeting-fix.md)）.
-`catch` 도 원인을 `stderr` 에 남김（★-CATCH）.
+3일로는 습관이 한 바퀴 돌지 않아 7일로 올립니다. 근거·판정은
+[plan-trial-7days](docs/plan-trial-7days.md), 지시서는 「작업지시서25」.
 
-**대표 필수:** [manager.line.biz](https://manager.line.biz/) → 応答設定 →
-**あいさつメッセージ = オフ**（켜 두면 웰컴이 2통）.
+**왜 나눴는가.** `TRIAL_DAYS` 를 그냥 7 로 올리면, `EXPECTED` 가 상수를 SQL 에
+구워 쓰고 있었기 때문에 **기존 체험자 전원이 다음 날 04:00 `maintain` 에서
+drift 경고로 뜹니다**(각 −4일). 그 경고는 「돈은 냈는데 일수가 모자란 사람」을
+잡는 장치라, 오탐이 상시화되면 진짜 미지급을 읽고 넘기게 됩니다.
 
-라이브 확인: 차단→재추가 또는 새 계정으로 친구추가 → 보드+질문.
+그래서 **1단계(열 신설, 동작 무변경)** 를 먼저 배포해 「3에서도 drift 0」을
+실증한 뒤, **2단계(7일 전환)** 를 올립니다. 한 번에 올리면 다음 날 drift 가
+나왔을 때 **열이 잘못된 것인지 7 이 잘못된 것인지 구분할 수 없습니다.**
 
+| ◆ | 할 일 | 위치 | 담당 |
+|---|---|---|---|
+| **◆-0** | **DB 백업** (cPanel → phpMyAdmin → Export) | — | 대표 |
+| **◆-1** | **1단계 배포** — `main` 을 push (`62b6cbb`). `TRIAL_DAYS` 는 **아직 3**. 동작은 1mm 도 안 바뀜 | `main` | 대표 |
+| **◆-2** | **하루 두고 검증** (아래 3개 전부) | 본번 | 대표 |
+| **◆-3** | **2단계 merge** — `git merge trial-7days-stage2` → push. **저녁 6시 이전에** | 브랜치 `56d516b` | 대표 |
+| **◆-4** | LINE 공식계정 무료 통수 확인 — 체험자 1인당 **6통 → 14통(2.3배)** | LINE 콘솔 | 대표 |
+
+**◆-2 의 합격 기준 3개** (하나라도 어긋나면 ◆-3 으로 넘어가지 마십시오):
+
+```sql
+-- ① 미기입 = 0 이어야 한다. 0 이 아니면 007 의 UPDATE 가 안 든 것
+SELECT COUNT(*) AS 체험자, SUM(trial_days IS NULL) AS 미기입
+  FROM subscriptions WHERE trial_start IS NOT NULL;
+```
+- ② 배포 로그에 `007-trial-days.sql` 적용 + `migrate --check` 에 `subscriptions.trial_days`
+- ③ `maintain` 1회 수동 실행 → 건수가 **1단계 전과 같을 것**
+  (B3 의 legacy 1건은 남아 있는 것이 정상 — `trial_track` NULL 문제로 별건)
+
+**◆-3 을 저녁 6시 이후에 배포하지 마십시오.** 그날 `current_day = 6` 인 사람이
+있으면, 저녁 배치와 배포 사이에 판정이 바뀌어 권유가 두 번 나가거나 아예 안 나갑니다.
+
+**2단계가 별도 브랜치인 이유** — 같은 브랜치에 쌓으면 `git push` 한 번에 두 단계가
+함께 배포되어, 나눈 의미가 사라집니다. 브랜치면 그 경로가 물리적으로 없습니다.
+
+**2단계가 서버·사이트 한 커밋인 이유** — 신설한 `verify-pages` 2항목이
+`index.html`·`tokushoho.html` 을 `billing.mjs` 와 대조하므로, 한쪽만 커밋하면 그
+커밋이 RED 입니다. `tokushoho.html` 은 특정상거래법 표기라 표기와 실제가 다른 것
+자체가 문제이기도 합니다(C4 재개 전 필수).
+
+### §0-★ 친구추가 인사말 — **해결** (2026-08-09 밤)
+
+서버 `welcomeBoard` 복귀（`aacf6dc`）+ OA あいさつオフ.
+대표 확인: **ブロック → 再追加**（말 없이）만으로 보드+読み方 = follow 정상.
+이전에 침묵이던 경우는 follow 가 안 오는 조작（非表示 등）이었을 가능성이 큼.
+`あ` 스크린샷은 그때의 recover 안전망. reply 분리 수정은 불필요 → 보류 종료.
 ### §0-☆ 대표 실기 대기 (2026-08-09)
 
 | # | 위치 | 할 일 | 안 하면 |
@@ -60,10 +103,14 @@
 **B3 (2026-08-07 확인).** maintain §3 `#3 beginner 持っている=3 / 台帳=0` —
 migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼으나 **`trial_track` 은
 기존 이용자에 백필하지 않음**. `findEntitlementDrift` 는 `trial_track = e.track` 일 때만
-체험 3일을 기대하므로, `trial_start` 는 있는데 `trial_track` 이 NULL 인 legacy 1건이
+체험 일수를 기대하므로, `trial_start` 는 있는데 `trial_track` 이 NULL 인 legacy 1건이
 경고로 남는다. **현재 코드 버그 아님.** 수동 조치: 해당 user 의 `trial_track` 을
 실제 체험 코스로 UPDATE 하거나, entitlement 를 실측 후 맞춤. 자동 수정은 하지 않음
 (maintain 설계).
+
+> **2026-08-09 (007) 이후:** 기대 일수는 상수가 아니라 `subscriptions.trial_days`
+> 열에서 온다. 이 legacy 1건은 **그대로 남는 것이 정상** — 원인이 `trial_track` NULL
+> 이라 별건이다. §0-◆-2 에서 「1단계 전과 같은 건수」를 볼 때 이 1건을 세십시오.
 
 열 공통: **ID** / **작업** / **담당**(`대표`·`개발`·`조건대기`) / **근거**.
 
@@ -71,7 +118,6 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **★-LIVE** | 친구추가 라이브 — 보드+질문 수신 확인（あいさつオフ 후） | 대표 | §0-★ 복귀 후 |
 | **☆-1〜4** | 콘솔 3건 + 저장소 2건 | 대표 | §0-☆ 표 |
 | **㉑-L** | 시드 후 라이브 확인 — 아침 신양식 회화·데일리 ❓·오답 피드백 문면 | 대표 | ㉑-S 시드 완료(2026-08-08). 코드는 2026-08-09 배포 완료 |
 
@@ -85,7 +131,7 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
 
 | ID | 작업 | 담당 | 근거 |
 |---|---|---|---|
-| **C4** | `SALES_MODE=open` — **진행 보류** | 대표 | [live-check-c4](docs/live-check-c4-sales-open.md). A3·선행 완료. 체험 3일·무결제 차단 확인(2026-08-08) |
+| **C4** | `SALES_MODE=open` — **진행 보류** | 대표 | [live-check-c4](docs/live-check-c4-sales-open.md). A3·선행 완료. 체험 3일·무결제 차단 확인(2026-08-08). **재개 전 §0-◆-3 이 먼저** — `tokushoho.html`(특정상거래법 표기)의 체험 일수가 실제와 같아야 함 |
 
 ### D. 콘텐츠 입고
 
@@ -124,6 +170,8 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
   원고 반영은 **D1c** 경로만 유지.
 - **보류**: **C4** — `SALES_MODE=open` 투입 보류 (2026-08-08). 체험 3일·무결제 시 4일차 미진행·upsell 문면 확인.
   코드·A3·C2·C3는 완료. 재개 시 [live-check-c4](docs/live-check-c4-sales-open.md).
+- **배포 대기**: **체험 7일** — 구현·관문 완료, 1단계 `main` `62b6cbb` / 2단계 브랜치
+  `trial-7days-stage2` `56d516b`. 순서는 §0-◆ ([plan-trial-7days](docs/plan-trial-7days.md))
 - **잠김(미완 아님)**: `SALES_MODE` **test** 유지 (C4 보류 중)
 - **옛 계획**: [plan-p4-content.md](docs/plan-p4-content.md) — 렌더러·배치·원고 입고 전부 가동 중 (2026-08-07)
 
@@ -343,6 +391,7 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | [docs/research-audit.md](docs/research-audit.md) | 전수 점검 결과 (2026-08-04) |
 | [docs/research-line-flow.md](docs/research-line-flow.md) | LINE 연동 요구사항별 실기 검증 |
 | [docs/plan-billing.md](docs/plan-billing.md) | 선불 횟수권 설계·구현 결과 |
+| [docs/plan-trial-7days.md](docs/plan-trial-7days.md) | 무료 체험 3일→7일 — 구현 완료·배포 대기 (§0-◆) |
 | [docs/plan-audit-fixes.md](docs/plan-audit-fixes.md) | 전수 점검에서 나온 것의 수정 결과 |
 | [docs/plan-fortune-content.md](docs/plan-fortune-content.md) | 운세 콘텐츠 확장 (사이트 쪽) |
 | [docs/plan-fortune-daily.md](docs/plan-fortune-daily.md) | 운세 배신 |
@@ -369,6 +418,13 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 
 읽지 않으면 반드시 밟는 것들입니다. 자세한 이유는 각 파일 머리말에 있습니다.
 
+0. **시간에 따라 바뀌는 상수를 SQL 에 굽지 마십시오.** `EXPECTED` 가 `TRIAL_DAYS` 를
+   문자열에 박고 있어서, 3→7 로 올리는 순간 **과거 계약이 새 상수로 재계산**될
+   뻔했습니다(기존 체험자 전원 −4일 drift). 지금은 `subscriptions.trial_days`
+   열에서 읽습니다(007) — 과거 행은 그때의 값을 스스로 듭니다.
+   같은 이유로 **`DEFAULT` 를 붙이지 않았습니다**: 기본값이 있으면 코드가
+   빼먹어도 조용히 메워져, 「7일 지급인데 장부는 3」이 무신호로 생깁니다.
+   `verify-billing` 3항목이 숫자 재굽기를 막습니다
 1. **잔여 일수는 `days_entitled - days_used`.** `current_day` 로 세면 안 됩니다 —
    「1일차부터 다시」로 `current_day` 가 0이 되므로, 받은 일수가 공짜가 됩니다
 2. **`advanceDay` 는 일자 확보와 일수 소비를 한 문장에서** 합니다. 나누면 그 사이에
@@ -411,6 +467,17 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 ---
 
 ## 9. 최근 작업 이력
+
+### 2026-08-09 — 무료 체험 3일 → 7일 (2단계. **배포 대기**)
+
+| 커밋 | 내용 |
+|---|---|
+| `56d516b` (브랜치 `trial-7days-stage2`) | **2단계 — `TRIAL_DAYS = 7`.** `TRIAL_UPSELL_DAY = TRIAL_DAYS - 1` 신설. 상수를 안 보던 문면 5곳(웰컴보드·upsell 2·`index.html`·`tokushoho.html`). 저녁 권유의 「2」가 **4곳에 독립으로** 박혀 있던 것을 상수로 — 일부만 고치면 권유가 **아무 로그 없이** 사라진다. `trialUpsellSection` 은 DB 의 실제 `current_day` 를 넘긴다. 체험 중 기한예고 억제는 **동작 유지, 근거 주석만 갱신**(7일에선 5일차라 원래 이유가 소멸). pages 21→23 · webhook 58→59 · evening 32→33 |
+| `62b6cbb` (`main`) | **1단계 — `trial_days` 열(007). 동작 무변경, `TRIAL_DAYS` 는 3 그대로.** `EXPECTED` 가 상수를 SQL 에 굽던 것을 열 기반으로. 안 하면 7 로 올린 다음 날 **기존 체험자 전원이 drift 경고**(각 −4일)로 떠서, 진짜 미지급을 읽고 넘기게 된다. `startTrial` 은 지급·장부·`trial_end` 를 **한 지역변수**에서. billing 77→80, 변이시험 4종 검출 |
+
+**이 작업의 교훈.** 「숫자 하나 바꾸기」로 보였지만 실제로는 12지점이었고, 그중
+**1곳(`EXPECTED`)이 과거 데이터를 소급 재계산**하는 자리였다. 상수를 SQL 에 굽는
+형태는 값이 고정인 동안에는 아무 증상이 없다 — 바꾸는 날에만 드러난다.
 
 ### 2026-08-09 (13커밋 · 사이트·서버 양쪽 배포 완료)
 

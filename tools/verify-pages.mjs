@@ -377,6 +377,30 @@ check("amulet.html の ?cat= は KINDS で照合してから使う（지시서�
   return "照合 → 既定 total → render の順";
 });
 
+/* ---- 体験日数は配信サーバーが正（plan-trial-7days §7）---------------
+   静的サイトは billing.mjs を読めないので、書いた数字がそのまま残る。
+   3→7 のとき、サーバーだけ 7 になってサイトが 3 のままだと、
+   tokushoho.html は**特定商取引法の表記**なので表記と実際が食い違う
+   ── それ自体が問題になる（Stripe 審査が見る文書）。
+   関門がこちら側から billing.mjs を読んで突き合わせる。 */
+const { TRIAL_DAYS } = await import("../server/lib/repo/billing.mjs");
+
+check(`index.html の体験日数が配信サーバーと同じ（${TRIAL_DAYS} 日）`, () => {
+  const m = src["index.html"].match(/まずは(\d+)日間、無料でお試し/);
+  assert(m, "「まずは N 日間、無料でお試し」が見つかりません（文面が変わりました）");
+  assert(Number(m[1]) === TRIAL_DAYS,
+    `サイトは ${m[1]} 日、配信サーバーは ${TRIAL_DAYS} 日です`);
+  return `${m[1]} 日`;
+});
+
+check(`tokushoho.html の体験日数が配信サーバーと同じ（${TRIAL_DAYS} 日）── 法定表記`, () => {
+  const m = src["tokushoho.html"].match(/各コース\s*(\d+)\s*日間の無料体験/);
+  assert(m, "「各コース N 日間の無料体験」が見つかりません（文面が変わりました）");
+  assert(Number(m[1]) === TRIAL_DAYS,
+    `表記は ${m[1]} 日、実際は ${TRIAL_DAYS} 日です（特定商取引法の表記と実際が違います）`);
+  return `${m[1]} 日`;
+});
+
 console.log(`\n${failed ? "✗" : "✓"} ${passed + failed} 項目中 ${passed} 件成功`
   + (failed ? ` / ${failed} 件失敗` : "") + `　（${pages.length} ページ）`);
 process.exit(failed ? 1 : 0);

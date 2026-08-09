@@ -35,6 +35,7 @@ import { pushMessage, isUnreachable } from "../lib/line.mjs";
 import { jstDate, jstDateTime } from "../lib/jst.mjs";
 import { renderReview, renderReviewQuestion } from "../lib/render.mjs";
 import { salesAllowedFor, sellablePackages, trialUpsellNotice } from "../lib/handlers/checkout.mjs";
+import { TRIAL_UPSELL_DAY } from "../lib/repo/billing.mjs";
 
 /* ---- 引数 --------------------------------------------------------- */
 const argv = process.argv.slice(2);
@@ -100,10 +101,11 @@ export function retryKey(userId, day, type) {
    通知を二度鳴らさない。quickReply が開くのは最後の 1 通だけなので、
    末尾に置くことが条件でもある。
 
-   対象は「今朝 2 日目が届いた体験中の人」。listReviewTargets の行には
-   status も current_day も無いので、day_number = 2 のときだけ 1 人ぶん
-   引き直して確かめる（findDeliverable。全員ぶん取ると、勧誘のために
-   夕方の一覧へ列を足し続けることになる）。
+   対象は「今朝 TRIAL_UPSELL_DAY 日目が届いた体験中の人」。
+   listReviewTargets の行には status も current_day も無いので、
+   day_number がその日のときだけ 1 人ぶん引き直して確かめる
+   （findDeliverable。全員ぶん取ると、勧誘のために夕方の一覧へ
+   列を足し続けることになる）。
 
    通算 1 回だけ。push_logs の trial_end（migrations/004）で数える ──
    残り 0 の朝の勧誘（upsell）と種別を分けるのは承認時の修正 2。
@@ -115,11 +117,14 @@ export function retryKey(userId, day, type) {
    原稿の保有日数が売れる上限、を二か所に書かない。 */
 async function trialUpsellSection(conn, u) {
   const full = await users.findDeliverable(conn, u.id);
-  if (!full || full.status !== "trial" || Number(full.current_day) !== 2) return null;
+  if (!full || full.status !== "trial"
+      || Number(full.current_day) !== TRIAL_UPSELL_DAY) return null;
   if (await pushlogs.countByType(conn, u.id, "trial_end")) return null;
   const availableDays = await learning.countTemplates(conn, full.track);
   const canBuy = salesAllowedFor(full) && sellablePackages(availableDays).length > 0;
-  return trialUpsellNotice(full.track, { canBuy });
+  /* 文面に出す進み具合は DB の実測を渡す ── 定数を渡すと、判定と
+     表示が食い違っていても文面がそれを隠す。 */
+  return trialUpsellNotice(full.track, { canBuy, currentDay: Number(full.current_day) });
 }
 
 /* ---- 1 人ぶん ------------------------------------------------------
@@ -169,7 +174,7 @@ export async function deliverOne(conn, u,
 
   /* 日数は消費しない ── この便が advanceDay を呼ばない不変式は
      勧誘を足しても変わらない（verify-evening がソースごと見張る）。 */
-  const upsell = day === 2 ? await trialUpsellSection(conn, u) : null;
+  const upsell = day === TRIAL_UPSELL_DAY ? await trialUpsellSection(conn, u) : null;
   const bundle = upsell ? [...messages, upsell] : messages;
 
   if (DRY || DISABLED) {
@@ -181,7 +186,7 @@ export async function deliverOne(conn, u,
     await pushlogs.logSent(conn, u.id, { dayNumber: day, pushType: "review" });
     if (upsell) {
       /* 出したことを別に残す ── これが「通算 1 回」の判定そのもの。 */
-      await pushlogs.logSent(conn, u.id, { dayNumber: 2, pushType: "trial_end" });
+      await pushlogs.logSent(conn, u.id, { dayNumber: TRIAL_UPSELL_DAY, pushType: "trial_end" });
       return `送信+勧誘:${day}日目`;
     }
     return `送信:${day}日目`;

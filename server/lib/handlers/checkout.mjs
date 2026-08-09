@@ -28,7 +28,7 @@
    売れないほうがよい。
    ================================================================== */
 import { users, billing, learning, pushlogs, entitlements, lapses } from "../repo/index.mjs";
-import { PACKAGES, TRIAL_DAYS } from "../repo/billing.mjs";
+import { PACKAGES, TRIAL_DAYS, TRIAL_UPSELL_DAY } from "../repo/billing.mjs";
 import { TRACKS, TRACK_LABELS, TOTAL_DAYS, isTrack } from "../repo/learning.mjs";
 import { createCheckoutSession } from "../stripe.mjs";
 import { pushMessage, replyMessage, isUnreachable } from "../line.mjs";
@@ -128,8 +128,8 @@ export async function sellableTracks(conn) {
   return out;
 }
 
-/* ---- 体験 2 日目の夕方の勧誘（2026-08-06 指示書 C4）------------------
-   体験中・current_day = 2 の人へ、復習の後ろに 1 通。
+/* ---- 体験の終わり前日（TRIAL_UPSELL_DAY）の夕方の勧誘（2026-08-06 指示書 C4）--
+   体験中・current_day = TRIAL_UPSELL_DAY の人へ、復習の後ろに 1 通。
    販売が閉じていても送る ── ただし文面を分ける。「買える」は
 
      salesAllowedFor(user) かつ sellablePackages ≥ 1
@@ -141,12 +141,15 @@ export async function sellableTracks(conn) {
    「整いましたらお知らせします」とは**書かない** ── 販売が開いた日に
    待っている人へ知らせる機能はコードに無い。約束した瞬間、文書が
    コードより先へ出る（この置き場が 4 回踏んだ形）。 */
-export function trialUpsellNotice(track, { canBuy = false } = {}) {
+export function trialUpsellNotice(track, {
+  canBuy = false,
+  currentDay = TRIAL_UPSELL_DAY
+} = {}) {
   const l = TRACK_LABELS[track];
   const head = [
     `無料でお試しいただける ${TRIAL_DAYS} 日分のうち、明日が最後の 1 日です。`,
     "",
-    `${l.ja}（${l.kr}）は 2 日目まで進みました。`,
+    `${l.ja}（${l.kr}）は ${currentDay} 日目まで進みました。`,
     ""
   ];
   if (!canBuy) {

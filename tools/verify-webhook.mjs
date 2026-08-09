@@ -785,6 +785,22 @@ await acheck("ウェルカムボードは相手で変わらない（지시서㉓
   return `${a[0].text.length} 文字が完全一致`;
 });
 
+await acheck("ウェルカムボードの体験日数が、実際に贈る日数と同じ", async () => {
+  /* このボードは 유입 1・2 の**両方**が受け取る 1 通目（지시서㉓ §0-A）。
+     ここが「3日間」のまま TRIAL_DAYS だけ 7 に上がると、すべての
+     新規利用者が最初の画面で嘘を読む ── しかも誰も気づかない。 */
+  const { TRIAL_DAYS } = await import("../server/lib/repo/billing.mjs");
+  const { welcomeMessages } = await import("../server/lib/handlers/follow.mjs");
+  const conn = fakeConn({ "FROM users": [] });
+  const [board] = await welcomeMessages(conn,
+    { id: 7, line_user_id: "U_new", status: "trial", name_kr: null });
+  const m = board.text.match(/無料の(\d+)日間体験/);
+  assert(m, `ボードに「無料の N 日間体験」がありません: ${board.text.slice(0, 60)}`);
+  assert(Number(m[1]) === TRIAL_DAYS,
+    `ボードは ${m[1]} 日、実際に贈るのは ${TRIAL_DAYS} 日です`);
+  return `${m[1]} 日間`;
+});
+
 await acheck("名前がある人にも、ボード＋次に訊くことが続く", async () => {
   const { r, sent } = await follow(NAMED);
   assert(sent && sent.length === 2, `返した通数: ${sent ? sent.length : 0}`);

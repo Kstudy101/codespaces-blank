@@ -213,10 +213,13 @@ check("migrate.mjs は time_zone が SYSTEM なら失敗にする", () => {
   return "+09:00 以外は失敗";
 });
 
-check("体験 3 日間の終わりは開始 +2 日", () => {
-  assert(addDays("2026-08-03", billing.TRIAL_DAYS - 1) === "2026-08-05",
-    "3 日間なのに終わりが合いません");
-  return "08-03 開始 → 08-05 終了";
+/* 期待値を addDays で計算し直すと、検査が自分自身を確かめることに
+   なって何も守らない。日付はリテラルのまま置き、代わりに検査名へ
+   日数を入れて、次に体験日数を変える人がここに気づくようにする。 */
+check(`体験 ${billing.TRIAL_DAYS} 日間の終わりは開始 +${billing.TRIAL_DAYS - 1} 日`, () => {
+  assert(addDays("2026-08-03", billing.TRIAL_DAYS - 1) === "2026-08-09",
+    `${billing.TRIAL_DAYS} 日間なのに終わりが合いません`);
+  return "08-03 開始 → 08-09 終了";
 });
 
 

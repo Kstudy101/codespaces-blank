@@ -200,10 +200,10 @@ try {
 
   const t1 = await billing.startTrial(pool, uid, T, jstDate());
   const e1 = await entitlements.get(pool, uid, T);
-  check("体験は 3 日。コースを選んでから始まる", () => {
+  check(`体験は ${billing.TRIAL_DAYS} 日。コースを選んでから始まる`, () => {
     assert(t1.created === true, "既にありました");
-    assert(e1 && e1.daysEntitled === 3, `${e1 && e1.daysEntitled} 日`);
-    return "beginner 3 日";
+    assert(e1 && e1.daysEntitled === billing.TRIAL_DAYS, `${e1 && e1.daysEntitled} 日`);
+    return `beginner ${billing.TRIAL_DAYS} 日`;
   });
 
   /* ---- 体験日数を行が持つ（migrations/007）--------------------------
@@ -220,7 +220,7 @@ try {
     return `trial_days ${s1.trial_days} / drift 0`;
   });
 
-  /* コースを変えても 2 度目は通らない。通ると 3 コース ×3 日 = 9 日を
+  /* コースを変えても 2 度目は通らない。通ると 3 コース ×7 日 = 21 日を
      無料で受け取れる。一意キーは subscriptions.user_id 1 本なので、
      1062 は「もう体験を使った」だけを意味すると確定できる。 */
   const t2 = await billing.startTrial(pool, uid, "intermediate");
@@ -235,9 +235,9 @@ try {
   check("初回の決済で +30 日", () => {
     assert(p1.created === true, "created=false でした");
     assert(p1.daysGranted === 30, `${p1.daysGranted} 日`);
-    assert(p1.entitlement.daysEntitled === 33,
-      `${p1.entitlement.daysEntitled} 日（3+30=33 のはず）`);
-    return "33 日";
+    assert(p1.entitlement.daysEntitled === billing.TRIAL_DAYS + 30,
+      `${p1.entitlement.daysEntitled} 日（${billing.TRIAL_DAYS}+30=${billing.TRIAL_DAYS + 30} のはず）`);
+    return `${billing.TRIAL_DAYS + 30} 日`;
   });
 
   const p2 = await billing.creditPurchase(pool, uid, T, "30days", { paymentRef: "pi_smoke_1" });
@@ -246,17 +246,17 @@ try {
     assert(p2.created === false,
       "created=true でした。一意制約違反（1062）を捕まえられていません");
     assert(p2.daysGranted === 0, `${p2.daysGranted} 日足しました`);
-    assert(e3.daysEntitled === 33,
+    assert(e3.daysEntitled === billing.TRIAL_DAYS + 30,
       `${e3.daysEntitled} 日に増えました。決済 1 件で二重に付与されています`);
-    return "33 日のまま";
+    return `${billing.TRIAL_DAYS + 30} 日のまま`;
   });
 
   const p3 = await billing.creditPurchase(pool, uid, T, "7days", { paymentRef: "pi_smoke_2" });
   check("別の取引 ID なら積み上がる", () => {
     assert(p3.created === true, "created=false でした");
-    assert(p3.entitlement.daysEntitled === 40,
-      `${p3.entitlement.daysEntitled} 日（33+7=40 のはず）`);
-    return "40 日";
+    assert(p3.entitlement.daysEntitled === billing.TRIAL_DAYS + 37,
+      `${p3.entitlement.daysEntitled} 日（${billing.TRIAL_DAYS + 30}+7=${billing.TRIAL_DAYS + 37} のはず）`);
+    return `${billing.TRIAL_DAYS + 37} 日`;
   });
 
   const purchases = await billing.listPurchases(pool, uid);

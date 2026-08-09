@@ -16,6 +16,7 @@
    repo とここの 2 箇所に散る。
    ================================================================== */
 import { users, entitlements } from "../repo/index.mjs";
+import { TRIAL_DAYS } from "../repo/billing.mjs";
 import { getProfile, replyMessage } from "../line.mjs";
 import { serviceGuide, nextStep, messageForStep } from "../onboarding.mjs";
 
@@ -52,7 +53,7 @@ function welcomeBoard() {
       "教科書の「ミンスさん」ではなく、例文の主語はあなたのお名前。",
       "朝の運勢も韓国語でついてきます。",
       "",
-      "👉 まずは無料の3日間体験へ。",
+      `👉 まずは無料の${TRIAL_DAYS}日間体験へ。`,
       "このまま LINE の中で、お名前の登録から始められます。",
       "",
       "くわしい名前診断はサイトでもできます：",

@@ -21,6 +21,7 @@ import { deliverOne, retryKey, tooEarly } from "../server/db/push-evening.mjs";
 import { retryKey as morningKey } from "../server/db/push-daily.mjs";
 import { listReviewTargets } from "../server/lib/repo/pushlogs.mjs";
 import { LineApiError } from "../server/lib/line.mjs";
+import { TRIAL_DAYS, TRIAL_UPSELL_DAY } from "../server/lib/repo/billing.mjs";
 
 let pass = 0;
 const fails = [];
@@ -293,18 +294,24 @@ await check("answer 分岐は advanceDay・days_used・current_day・push_logs �
 });
 
 
-console.log("\n[体験 2 日目の勧誘]  閉じていても送る ── ただし嘘は送らない");
+console.log(`\n[体験 ${TRIAL_UPSELL_DAY} 日目の勧誘]  閉じていても送る ── ただし嘘は送らない`);
 
-/* findDeliverable が返す形（DELIVERABLE_SQL + shape）。体験中・2 日目。 */
+/* findDeliverable が返す形（DELIVERABLE_SQL + shape）。
+   体験中・勧誘の日（TRIAL_UPSELL_DAY）。
+
+   ★ 数字を直に書かない。3→7 のとき、ここが「2」のままだと検査は
+   緑のまま通り、本番だけ勧誘が出なくなる（plan-trial-7days §7）。 */
 const TRIAL_ROW = {
   id: 7, line_user_id: "U_test", display_name: "田中",
   name_kanji: "田中", name_reading: "たなか", name_kr: "다나카", name_source: "web",
   status: "trial", track: "beginner",
-  current_day: 2, days_used: 2, current_semester: 1,
-  days_entitled: 3, remaining: 1,
+  current_day: TRIAL_UPSELL_DAY, days_used: TRIAL_UPSELL_DAY, current_semester: 1,
+  days_entitled: TRIAL_DAYS, remaining: TRIAL_DAYS - TRIAL_UPSELL_DAY,
   ohaeng_main: "목", raw_result_json: null, birth_confirmed: 0
 };
-const DAY2 = { ...TARGET, day_number: 2 };
+const DAY_UPSELL = { ...TARGET, day_number: TRIAL_UPSELL_DAY };
+const SENT_UPSELL = `送信+勧誘:${TRIAL_UPSELL_DAY}日目`;
+const SENT_ONLY   = `送信:${TRIAL_UPSELL_DAY}日目`;
 
 /* 勧誘の分岐まで届く既定の偽 DB。COUNT 系は形の違いで先に取る
    （並び順が先勝ち）。 */
@@ -333,8 +340,8 @@ await check("買える人には文面 A ── 復習の後ろに 1 通、日数
   withSales("open", async () => {
     const conn = fakeConn(upsellReady());
     let msgs = null;
-    const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
-    assert(r === "送信+勧誘:2日目", r);
+    const r = await deliverOne(conn, DAY_UPSELL, { send: async (_t, m) => { msgs = m; return {}; } });
+    assert(r === SENT_UPSELL, r);
     assert(msgs.length === 2, `${msgs.length} 通でした（問い 1 + 勧誘 1 のはず）`);
     const t = msgs[1].text;
     assert(/明日が最後の 1 日/.test(t), t);
@@ -352,8 +359,8 @@ await check("販売が閉じていれば文面 B ── quickReply 無し・約�
   withSales("closed", async () => {
     const conn = fakeConn(upsellReady());
     let msgs = null;
-    const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
-    assert(r === "送信+勧誘:2日目", r);
+    const r = await deliverOne(conn, DAY_UPSELL, { send: async (_t, m) => { msgs = m; return {}; } });
+    assert(r === SENT_UPSELL, r);
     const t = msgs[1].text;
     assert(/ただいま準備中です/.test(t), t);
     assert(/［受講料］/.test(t), "どこを見ればよいかが無い");
@@ -371,8 +378,8 @@ await check("販売が開いていても、原稿が最小パッケージ未満�
     const conn = fakeConn(upsellReady({
       "SELECT COUNT\\(\\*\\) AS n FROM content_templates": [{ n: 3 }] }));
     let msgs = null;
-    const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
-    assert(r === "送信+勧誘:2日目", r);
+    const r = await deliverOne(conn, DAY_UPSELL, { send: async (_t, m) => { msgs = m; return {}; } });
+    assert(r === SENT_UPSELL, r);
     assert(/ただいま準備中です/.test(msgs[1].text), msgs[1].text);
     assert(!msgs[1].quickReply, "買えないのに quickReply が付いています");
     return "sellablePackages = 0 → B";
@@ -384,8 +391,8 @@ await check("勧誘は通算 1 回だけ（trial_end の記録で二度目を止
       "SELECT COUNT\\(\\*\\) AS n FROM push_logs":
         (_sql, params) => [{ n: params.includes("trial_end") ? 1 : 0 }] }));
     let msgs = null;
-    const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
-    assert(r === "送信:2日目", r);
+    const r = await deliverOne(conn, DAY_UPSELL, { send: async (_t, m) => { msgs = m; return {}; } });
+    assert(r === SENT_ONLY, r);
     assert(msgs.length === 1, `${msgs.length} 通でした（問いだけのはず）`);
     return "trial_end=1 → 復習だけ";
   }));
@@ -394,35 +401,41 @@ await check("残り 0 の勧誘（upsell）とは数を分ける ── 互い�
   withSales("open", async () => {
     /* 承認時の修正 2。同じ種別を共有して day_number で見分ける形だと、
        片方の入れ方が変わった日にもう片方の「1 回だけ」が黙って壊れる。
-       upsell が何件あっても、trial_end が 0 なら 2 日目の勧誘は出る。 */
+       upsell が何件あっても、trial_end が 0 なら勧誘の日には出る。 */
     const conn = fakeConn(upsellReady({
       "SELECT COUNT\\(\\*\\) AS n FROM push_logs":
         (_sql, params) => [{ n: params.includes("trial_end") ? 0 : 5 }] }));
     let msgs = null;
-    const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
-    assert(r === "送信+勧誘:2日目", r);
+    const r = await deliverOne(conn, DAY_UPSELL, { send: async (_t, m) => { msgs = m; return {}; } });
+    assert(r === SENT_UPSELL, r);
     assert(msgs.length === 2, `${msgs.length} 通でした`);
     return "upsell=5 でも trial_end=0 なら出る";
   }));
 
-await check("体験でない人（購入者）の 2 日目には勧誘しない", () =>
+await check("体験でない人（購入者）には、勧誘の日でも勧誘しない", () =>
   withSales("open", async () => {
     const conn = fakeConn(upsellReady({
       "FROM users": [{ ...TRIAL_ROW, status: "active", days_entitled: 101, remaining: 99 }] }));
     let msgs = null;
-    const r = await deliverOne(conn, DAY2, { send: async (_t, m) => { msgs = m; return {}; } });
-    assert(r === "送信:2日目", r);
+    const r = await deliverOne(conn, DAY_UPSELL, { send: async (_t, m) => { msgs = m; return {}; } });
+    assert(r === SENT_ONLY, r);
     assert(msgs.length === 1, `${msgs.length} 通でした`);
     return "trial 以外 → 復習だけ";
   }));
 
-await check("2 日目以外の夕方は、勧誘の判定にすら入らない", async () => {
+await check("勧誘の日以外の夕方は、勧誘の判定にすら入らない", async () => {
+  /* TARGET は 4 日目。体験日数を変えて 4 が勧誘の日と重なると、この
+     検査は「引き直さない」を確かめられないまま緑になる ── 重なった
+     ことに気づけるよう、先に言う。 */
+  assert(TARGET.day_number !== TRIAL_UPSELL_DAY,
+    `TARGET の day_number が勧誘の日（${TRIAL_UPSELL_DAY}）と重なりました。`
+    + "この検査は無意味になっています ── TARGET の日を動かしてください");
   const conn = fakeConn(READY);
-  const r = await deliverOne(conn, TARGET, { send: async () => ({}) });   /* day 4 */
-  assert(/送信:4日目/.test(r), r);
+  const r = await deliverOne(conn, TARGET, { send: async () => ({}) });
+  assert(r === `送信:${TARGET.day_number}日目`, r);
   assert(!conn.sql().some((s) => /FROM users/i.test(s)),
-    "4 日目なのに 1 人ぶん引き直しています");
-  return "day ≠ 2 → 引き直しなし";
+    `${TARGET.day_number} 日目なのに 1 人ぶん引き直しています`);
+  return `day ≠ ${TRIAL_UPSELL_DAY} → 引き直しなし`;
 });
 
 console.log("\n[配る時刻]  cron ではなく、こちらで日本時間を見る");
@@ -510,6 +523,30 @@ await check("1 人で落ちても例外を外へ出さない", async () => {
   const r = await deliverOne(conn, TARGET, { send: async () => { throw new Error("落ちました"); } });
   assert(typeof r === "string", "例外が外へ出ました");
   return "残りは配れる";
+});
+
+await check("勧誘の日を「2」で判定している所が、ソースに残っていない", async () => {
+  /* §3-4 の「片方だけ直す」を止める唯一の装置。
+     判定は :118（引き直すか）と :172（そもそも呼ぶか）の 2 か所で
+     同じ日を二度見ており、片方だけ直すと ── 呼ばれないか、
+     呼ばれても null が返る。どちらも**ログに何も出ないまま**
+     勧誘が消える。誰も気づかず成約率だけ落ちる。 */
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../server/db/push-evening.mjs", import.meta.url), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+  const stale = [
+    [/current_day\)?\s*!==\s*2\b/,        "current_day を 2 と比べています"],
+    [/\bday\s*===\s*2\b/,                 "day === 2 で勧誘を出しています"],
+    [/dayNumber:\s*2\b/,                  "trial_end の記録に 2 を書いています"]
+  ].filter(([re]) => re.test(src)).map(([, m]) => m);
+  assert(!stale.length,
+    `体験日数を変えても動かない判定が残っています: ${stale.join(" / ")}`);
+  assert(/TRIAL_UPSELL_DAY/.test(src),
+    "push-evening が TRIAL_UPSELL_DAY を見ていません");
+  /* 「TRIAL_DAYS - 1」を現地で計算し直すのも、二つ目の出どころ。 */
+  assert(!/TRIAL_DAYS\s*-\s*1/.test(src),
+    "push-evening で TRIAL_DAYS - 1 を計算し直しています（出どころが 2 つになります）");
+  return "判定 3 か所とも定数から";
 });
 
 console.log(`\n${fails.length ? "✗" : "✓"} ${pass + fails.length} 項目中 ${pass} 件成功`);

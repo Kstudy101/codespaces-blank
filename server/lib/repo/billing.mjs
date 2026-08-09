@@ -27,7 +27,12 @@ export const PACKAGES = Object.freeze({
   "101days": { days: 101, price: 7480 }
 });
 
-export const TRIAL_DAYS = 3;
+export const TRIAL_DAYS = 7;
+
+/* 体験の終わり前日の夕方に 1 度だけ勧める。「2」を push-evening と
+   文面に別々に書くと、体験日数を変えた日に片方だけ古くなる ──
+   3→7 の実測で、その形が 4 か所出た（plan-trial-7days §2）。 */
+export const TRIAL_UPSELL_DAY = TRIAL_DAYS - 1;
 
 
 /* ---- 契約状態 ----------------------------------------------------- */

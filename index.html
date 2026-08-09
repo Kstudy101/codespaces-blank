@@ -626,19 +626,37 @@ a.sns-btn{color:var(--text)}   /* リンクにしても見た目はボタンの�
    この 1 行が無いと、hidden を付けても見えたまま ── 付いているのに
    閉じない、という一番気づきにくい壊れ方をする。 */
 .side-list[hidden]{display:none}
-.side-list a{
+.side-list a,.side-list button{
   display:block; padding:9px 11px; border-radius:9px; line-height:1.5;
   font-size:.86rem; font-weight:700; color:var(--text); text-decoration:none;
   transition:background .15s, color .15s;
 }
-.side-list a:hover{background:var(--surface-2); color:var(--accent)}
+/* 詳細窓を開く項目だけはボタン。押した先が外部ではなく同じページなので、
+   リンクにはしない。既定の見た目を消して、隣の a と同じ形に揃える。 */
+.side-list button{width:100%; text-align:left; font-family:inherit;
+  background:transparent; border:0; cursor:pointer}
+.side-list a:hover,.side-list button:hover{background:var(--surface-2); color:var(--accent)}
 .side-list a.on{background:var(--accent-soft); color:var(--accent)}
-.side-list a:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
-/* リンクの下に置く 1〜2 行の紹介。押せないので a とは別色にする。 */
-.side-list .side-note{margin:.2em 0 .6em; padding:0 11px; font-size:.82em;
-  line-height:1.5; color:var(--text-dim)}
+.side-list a:focus-visible,.side-list button:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
+/* 関連サイトの詳細窓。showModal に任せるので、焦点の閉じ込めと Esc は
+   ブラウザ側の仕事 ── 自前で書くと必ずどこかが抜ける。 */
+.rel-dlg{
+  max-width:min(92vw, 380px); padding:20px; color:var(--text);
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+}
+.rel-dlg::backdrop{background:rgba(43,33,36,.45)}
+.rel-dlg h2{margin:0 0 .5em; font-size:1rem; letter-spacing:0}
+.rel-dlg-desc{margin:0 0 .9em; font-size:.86rem; line-height:1.6; color:var(--text-dim)}
+.rel-dlg-url{display:block; margin-bottom:1.1em; font-size:.82rem;
+  word-break:break-all; color:var(--accent)}
+.rel-dlg-close{
+  width:100%; padding:9px 11px; font-family:inherit; font-size:.86rem; font-weight:700;
+  color:var(--text-dim); background:transparent;
+  border:1px solid var(--line); border-radius:9px; cursor:pointer;
+}
+.rel-dlg-close:hover{border-color:var(--accent); color:var(--accent)}
 @media (prefers-reduced-motion:reduce){
-  .nav-open,.nav-scrim,.side,.side-list a,.side-ttl,.side-ttl::after{transition:none}
+  .nav-open,.nav-scrim,.side,.side-list a,.side-list button,.side-ttl,.side-ttl::after{transition:none}
 }
 @media (min-width:1180px){
   body{padding-left:280px}
@@ -849,17 +867,25 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
     <a href="#about-free"   data-sec="about-free">生年月日なしで見られるページ</a>
   </nav>
 
-  <!-- 唯一の外部リンク。別タブで開くのは、ここで離脱させないため。
-       rel は noopener だけ ── noreferrer まで付けると向こうの集計で
-       「kstudy101 から来た人」が見えなくなる。同じページの他の
-       target="_blank"（共有ボタン・Google のポリシー）とは意図が違う。 -->
-  <button class="side-ttl" type="button" id="side-tog-sister"
-          aria-expanded="false" aria-controls="side-sister">姉妹サイト<small>자매 사이트</small></button>
-  <nav class="side-list" id="side-sister" aria-label="姉妹サイト" hidden>
-    <a href="https://sinokubo.pages.dev/" target="_blank" rel="noopener">📍 新大久保グルメガイド</a>
-    <p class="side-note">新大久保の韓国グルメを「本場度」で選ぶ、店ガイド。韓国語を学んだら、次は本場の味へ。</p>
+  <!-- 引き出しの中は名前だけ。押すと詳細窓が開く（代表指示 2026-08-09）──
+       外へ出る前に、何のサイトなのかを読んでから決められるようにするため。
+       外部へ出る唯一のリンクは、この引き出しではなく詳細窓の中にある。 -->
+  <button class="side-ttl" type="button" id="side-tog-related"
+          aria-expanded="false" aria-controls="side-related">関連サイト<small>관련사이트</small></button>
+  <nav class="side-list" id="side-related" aria-label="関連サイト" hidden>
+    <button type="button" id="rel-open-sinokubo">📍 新大久保グルメ</button>
   </nav>
 </aside>
+
+<!-- 関連サイトの詳細。rel は noopener だけ ── noreferrer まで付けると
+     向こうの集計で「kstudy101 から来た人」が見えなくなる。同じページの
+     他の target="_blank"（共有ボタン・Google のポリシー）とは意図が違う。 -->
+<dialog class="rel-dlg" id="rel-dlg" aria-labelledby="rel-dlg-ttl">
+  <h2 id="rel-dlg-ttl">新大久保グルメ</h2>
+  <p class="rel-dlg-desc">新大久保の韓国グルメを「本場度」で選ぶ、店ガイド。韓国語を学んだら、次は本場の味へ。</p>
+  <a class="rel-dlg-url" href="https://sinokubo.pages.dev/" target="_blank" rel="noopener">https://sinokubo.pages.dev/</a>
+  <button type="button" class="rel-dlg-close" id="rel-dlg-close">閉じる</button>
+</dialog>
 
 <div class="wrap">
 
@@ -3498,7 +3524,7 @@ scrim.addEventListener('click', () => closeSide());
 const sideSecs = [
   { btn: $('side-tog-pages'), list: $('side-pages') },
   { btn: $('side-tog-read'),  list: $('side-read')  },
-  { btn: $('side-tog-sister'), list: $('side-sister') },
+  { btn: $('side-tog-related'), list: $('side-related') },
 ];
 for (const s of sideSecs){
   s.btn.addEventListener('click', () => {
@@ -3511,13 +3537,23 @@ for (const s of sideSecs){
   });
 }
 
+/* 関連サイトは、引き出しから直に外へ出さず一度ここで見せる（代表指示
+   2026-08-09）。showModal に任せると焦点の閉じ込めと Esc が付いてくる。 */
+const relDlg = $('rel-dlg');
+$('rel-open-sinokubo').addEventListener('click', () => relDlg.showModal());
+$('rel-dlg-close').addEventListener('click', () => relDlg.close());
+/* 背景を押しても閉じる。背景は dialog 自身なので、中身の外側だけを見る。 */
+relDlg.addEventListener('click', (e) => { if (e.target === relDlg) relDlg.close(); });
+
 /* 狭い画面で開いたまま窓を広げると、脇柱に変わって閉じるボタンが消える。
    本文を固定したままだと、閉じる手段が無いのにスクロールできない画面が
    残るので、脇柱になった時点で外す。 */
 const wide = window.matchMedia('(min-width:1180px)');
 wide.addEventListener('change', () => { if (wide.matches) closeSide(false); });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && side.classList.contains('on')) closeSide();
+  /* 詳細窓が開いていれば Esc はそちらのもの。両方閉じると、詳細を読んで
+     メニューに戻るつもりの人が、メニューごと失う。 */
+  if (e.key === 'Escape' && !relDlg.open && side.classList.contains('on')) closeSide();
 });
 
 /* 読みものを 1 枚出す。#about ごと伏せてあるので、両方に .on が要る。 */

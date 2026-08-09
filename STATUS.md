@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-09 (무료 체험 **3일 → 7일** 2단계 구현 — 1단계 `main`, 2단계 브랜치 대기)
+최종 갱신: 2026-08-10 (`accel-day` 가속 시험 도구 구현 — [plan-accel-day](docs/plan-accel-day.md))
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -75,6 +75,24 @@ SELECT COUNT(*) AS 체험자, SUM(trial_days IS NULL) AS 미기입
 `index.html`·`tokushoho.html` 을 `billing.mjs` 와 대조하므로, 한쪽만 커밋하면 그
 커밋이 RED 입니다. `tokushoho.html` 은 특정상거래법 표기라 표기와 실제가 다른 것
 자체가 문제이기도 합니다(C4 재개 전 필수).
+
+### §0-◇ 가속 시험 `accel-day.mjs` — **구현** (2026-08-10)
+
+체험 7일·30일 절목 퀴즈까지 기다리지 않고 테스트 계정 1명으로 연속 확인.
+계획: [plan-accel-day](docs/plan-accel-day.md).
+
+```bash
+# 下見（朝文面のみ。夕はスキップ）
+node db/with-env.mjs db/accel-day.mjs --user=<ID> --to=30 \
+  --reset-to=0 --ensure-entitled=30
+
+# 実送信（テスト LINE のみ）
+node db/with-env.mjs db/accel-day.mjs --user=<ID> --to=30 \
+  --reset-to=0 --ensure-entitled=30 --send
+```
+
+부수 수정: `push-daily`/`push-evening` 의 `sent_at` 을 `--date` 의 07:00/18:00 에 맞춤,
+`push-evening --user=`, `logFailed` 의 `sentAt`. **본번 유저에 `--send` 금지.**
 
 ### §0-★ 친구추가 인사말 — **해결** (2026-08-09 밤)
 
@@ -392,6 +410,7 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | [docs/research-line-flow.md](docs/research-line-flow.md) | LINE 연동 요구사항별 실기 검증 |
 | [docs/plan-billing.md](docs/plan-billing.md) | 선불 횟수권 설계·구현 결과 |
 | [docs/plan-trial-7days.md](docs/plan-trial-7days.md) | 무료 체험 3일→7일 — 구현 완료·배포 대기 (§0-◆) |
+| [docs/plan-accel-day.md](docs/plan-accel-day.md) | 가속 시험 `accel-day.mjs` — 7일·30일 절목까지 (§0-◇) |
 | [docs/plan-audit-fixes.md](docs/plan-audit-fixes.md) | 전수 점검에서 나온 것의 수정 결과 |
 | [docs/plan-fortune-content.md](docs/plan-fortune-content.md) | 운세 콘텐츠 확장 (사이트 쪽) |
 | [docs/plan-fortune-daily.md](docs/plan-fortune-daily.md) | 운세 배신 |

@@ -104,6 +104,13 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(DATE)) {
   process.exit(1);
 }
 
+/* push_logs.sent_at を --date の朝に揃える。壁時計の「今」だと、
+   --date=別日 で朝を連続実行したあと夕方（listReviewTargets が
+   sent_at の暦日で絞る）が朝を見つけられない。accel-day と
+   --date 下見の両方のため。本番 cron は DATE=今日なので 07:00 台に
+   残るだけで、sentToday の半開区間には入ったまま。 */
+const LOG_AT = `${DATE} 07:00:00`;
+
 /* 何時に配るかを、cron ではなくこちらで決める。
    共用サーバーの cron はサーバーの地方時で動くが、その地方時が
    何かは借りている側から確かめにくく、移設や夏時間で黙って
@@ -316,13 +323,12 @@ async function askOnboarding(conn, u, step, { send = pushMessage } = {}) {
   try {
     await send(u.line_user_id, [message],
       { retryKey: retryKey(u.id, 0, `onboard${step}${asked}`) });
-    await pushlogs.logSent(conn, u.id, { pushType: "onboarding" });
+    await pushlogs.logSent(conn, u.id, { sentAt: LOG_AT, pushType: "onboarding" });
     return `${step} の確認`;
   } catch (e) {
     const gone = isUnreachable(e);
     if (gone) await users.markUnfollowed(conn, u.line_user_id);
-    await pushlogs.logFailed(conn, u.id,
-      { pushType: "onboarding", error: String(e.message || e).slice(0, 500) });
+    await pushlogs.logFailed(conn, u.id, { sentAt: LOG_AT, pushType: "onboarding", error: String(e.message || e).slice(0, 500) });
     return gone ? "届かない" : "送信失敗";
   }
 }
@@ -403,12 +409,11 @@ export async function deliverOne(conn, u,
         try {
           await send(u.line_user_id, messages,
             { retryKey: retryKey(u.id, today, "learning") });
-          await pushlogs.logSent(conn, u.id, { dayNumber: today, pushType: "learning" });
+          await pushlogs.logSent(conn, u.id, { sentAt: LOG_AT, dayNumber: today, pushType: "learning" });
           return `再送信:${today}日目`;
         } catch (e) {
           if (isUnreachable(e)) await users.markUnfollowed(conn, u.line_user_id);
-          await pushlogs.logFailed(conn, u.id,
-            { dayNumber: today, pushType: "learning", error: String(e.message || e).slice(0, 500) });
+          await pushlogs.logFailed(conn, u.id, { sentAt: LOG_AT, dayNumber: today, pushType: "learning", error: String(e.message || e).slice(0, 500) });
           return "送信失敗";
         }
       }
@@ -432,12 +437,11 @@ export async function deliverOne(conn, u,
       const owned = (await entitlements.listByUser(conn, u.id)).map((e) => e.track);
       await send(u.line_user_id, [completionNotice(u.track, { owned })],
         { retryKey: retryKey(u.id, TOTAL_DAYS, "completion") });
-      await pushlogs.logSent(conn, u.id, { dayNumber: TOTAL_DAYS, pushType: "completion" });
+      await pushlogs.logSent(conn, u.id, { sentAt: LOG_AT, dayNumber: TOTAL_DAYS, pushType: "completion" });
       return "修了の案内";
     } catch (e) {
       if (isUnreachable(e)) await users.markUnfollowed(conn, u.line_user_id);
-      await pushlogs.logFailed(conn, u.id,
-        { dayNumber: TOTAL_DAYS, pushType: "completion", error: String(e.message || e).slice(0, 500) });
+      await pushlogs.logFailed(conn, u.id, { sentAt: LOG_AT, dayNumber: TOTAL_DAYS, pushType: "completion", error: String(e.message || e).slice(0, 500) });
       return "送信失敗";
     }
   }
@@ -466,10 +470,10 @@ export async function deliverOne(conn, u,
         try {
           await send(u.line_user_id, [upsellNotice(u.track, { lastDay: today })],
             { retryKey: retryKey(u.id, today, "upsell") });
-          await pushlogs.logSent(conn, u.id, { dayNumber: today, pushType: "upsell" });
+          await pushlogs.logSent(conn, u.id, { sentAt: LOG_AT, dayNumber: today, pushType: "upsell" });
         } catch (e) {
           if (isUnreachable(e)) await users.markUnfollowed(conn, u.line_user_id);
-          await pushlogs.logFailed(conn, u.id, { dayNumber: today, pushType: "upsell",
+          await pushlogs.logFailed(conn, u.id, { sentAt: LOG_AT, dayNumber: today, pushType: "upsell",
             error: String(e.message || e).slice(0, 500) });
         }
       }
@@ -497,8 +501,7 @@ export async function deliverOne(conn, u,
   const tpl = await learning.getTemplate(conn, u.track, next);
   if (!tpl) {
     if (!DRY && !DISABLED) {
-      await pushlogs.logFailed(conn, u.id,
-        { dayNumber: next, pushType: "learning", error: "原稿が未入稿" });
+      await pushlogs.logFailed(conn, u.id, { sentAt: LOG_AT, dayNumber: next, pushType: "learning", error: "原稿が未入稿" });
     }
     return "原稿なし";
   }
@@ -549,13 +552,12 @@ export async function deliverOne(conn, u,
       await send(u.line_user_id, [nameMissingNotice(next)],
         { retryKey: retryKey(u.id, next, `name${asked}`) });
       /* 日は進めないので、この記録が「何回促したか」になる。 */
-      await pushlogs.logSent(conn, u.id, { dayNumber: next, pushType: "learning" });
+      await pushlogs.logSent(conn, u.id, { sentAt: LOG_AT, dayNumber: next, pushType: "learning" });
       return "名前の案内";
     } catch (e) {
       const gone = isUnreachable(e);
       if (gone) await users.markUnfollowed(conn, u.line_user_id);
-      await pushlogs.logFailed(conn, u.id,
-        { dayNumber: next, pushType: "learning", error: String(e.message || e).slice(0, 500) });
+      await pushlogs.logFailed(conn, u.id, { sentAt: LOG_AT, dayNumber: next, pushType: "learning", error: String(e.message || e).slice(0, 500) });
       return gone ? "届かない" : "送信失敗";
     }
   }
@@ -689,18 +691,18 @@ export async function deliverOne(conn, u,
   try {
     await send(u.line_user_id, messages,
       { retryKey: retryKey(u.id, next, "learning") });
-    await pushlogs.logSent(conn, u.id, { dayNumber: next, pushType: "learning" });
+    await pushlogs.logSent(conn, u.id, { sentAt: LOG_AT, dayNumber: next, pushType: "learning" });
     /* 予告を出したことは別に数える。learning と同じ行にすると、
        「何日目を送ったか」と「どの残り数で予告したか」が混ざる。 */
     if (warned) {
       await pushlogs.logSent(conn, u.id,
-        { dayNumber: entitledNow, pushType: "expiring" });
+        { sentAt: LOG_AT, dayNumber: entitledNow, pushType: "expiring" });
     }
     /* 節目クイズを同封したことも別に残す（予告と同じ形）。
        読むのは P10 の集計だけだが、送った記録が learning しか無いと
        「30 日目の朝にクイズが出たか」を後から確かめる術が無い。 */
     if (checkpointQuiz) {
-      await pushlogs.logSent(conn, u.id, { dayNumber: next, pushType: "quiz" });
+      await pushlogs.logSent(conn, u.id, { sentAt: LOG_AT, dayNumber: next, pushType: "quiz" });
     }
     return `送信:${next}日目`;
   } catch (e) {
@@ -708,8 +710,7 @@ export async function deliverOne(conn, u,
        失敗として残すのは同じ ── 「その日は届いていない」は事実。 */
     const gone = isUnreachable(e);
     if (gone) await users.markUnfollowed(conn, u.line_user_id);
-    await pushlogs.logFailed(conn, u.id,
-      { dayNumber: next, pushType: "learning", error: String(e.message || e).slice(0, 500) });
+    await pushlogs.logFailed(conn, u.id, { sentAt: LOG_AT, dayNumber: next, pushType: "learning", error: String(e.message || e).slice(0, 500) });
     return gone ? "届かない" : "送信失敗";
   }
 }

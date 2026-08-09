@@ -50,13 +50,15 @@ export async function logSent(conn, userId, { dayNumber = null, pushType = "lear
 /* 失敗も必ず残す。残さないと「配信が止まっている」に気づくのが
    利用者からの問い合わせになる。error_msg は原因の 1 行目だけで
    足りる ── LINE API の応答はそこに理由が入る。 */
-export async function logFailed(conn, userId, { dayNumber = null, pushType = "learning", error = "" } = {}) {
+export async function logFailed(conn, userId, {
+  dayNumber = null, pushType = "learning", error = "", sentAt = null
+} = {}) {
   assertType(pushType);
   const msg = String(error && error.message ? error.message : error).slice(0, 1000);
   const r = await run(conn,
     `INSERT INTO push_logs (user_id, day_number, push_type, sent_at, status, error_msg)
      VALUES (?, ?, ?, ?, 'failed', ?)`,
-    [userId, nn(dayNumber), pushType, jstDateTime(), msg]);
+    [userId, nn(dayNumber), pushType, sentAt || jstDateTime(), msg]);
   return r.insertId;
 }
 

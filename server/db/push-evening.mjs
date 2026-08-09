@@ -59,6 +59,12 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(DATE)) {
   process.exit(1);
 }
 
+/* 朝と同じく --date の 18:00 に揃える（accel-day / listReviewTargets）。 */
+const LOG_AT = `${DATE} 18:00:00`;
+
+/* 1 人だけ（accel-day · 手元検証）。付いているあいだ全員ループは走らない。 */
+const ONLY_USER = Number(value("user", 0)) || 0;
+
 /* 朝と同じ判定。共用サーバーの cron は地方時で動くので、
    日本の 18 時かどうかはこちらで見る。「18 時以降」にしてあるのは、
    18 時の回が落ちた日に 19 時が拾えるようにするため。 */
@@ -183,10 +189,11 @@ export async function deliverOne(conn, u,
 
   try {
     await send(u.line_user_id, bundle, { retryKey: retryKey(u.id, day, "review") });
-    await pushlogs.logSent(conn, u.id, { dayNumber: day, pushType: "review" });
+    await pushlogs.logSent(conn, u.id, { sentAt: LOG_AT, dayNumber: day, pushType: "review" });
     if (upsell) {
       /* 出したことを別に残す ── これが「通算 1 回」の判定そのもの。 */
-      await pushlogs.logSent(conn, u.id, { dayNumber: TRIAL_UPSELL_DAY, pushType: "trial_end" });
+      await pushlogs.logSent(conn, u.id,
+        { sentAt: LOG_AT, dayNumber: TRIAL_UPSELL_DAY, pushType: "trial_end" });
       return `送信+勧誘:${day}日目`;
     }
     return `送信:${day}日目`;
@@ -194,7 +201,8 @@ export async function deliverOne(conn, u,
     const gone = isUnreachable(e);
     if (gone) await users.markUnfollowed(conn, u.line_user_id);
     await pushlogs.logFailed(conn, u.id,
-      { dayNumber: day, pushType: "review", error: String(e.message || e).slice(0, 500) });
+      { sentAt: LOG_AT, dayNumber: day, pushType: "review",
+        error: String(e.message || e).slice(0, 500) });
     return gone ? "届かない" : "送信失敗";
   }
 }
@@ -211,6 +219,22 @@ async function main() {
     const key = k.replace(/:\d+日目$/, "");
     tally.set(key, (tally.get(key) || 0) + 1);
   };
+
+  /* ---- --user: 1 人だけの別の道（朝と同じ理由）-------------------- */
+  if (ONLY_USER) {
+    console.log(`★ --user=${ONLY_USER} ── この 1 人だけ。全員のループは走りません`);
+    let rows = await pushlogs.listReviewTargets(pool, DATE);
+    rows = rows.filter((r) => Number(r.id) === ONLY_USER);
+    if (!rows.length) {
+      console.log("  対象外です（今朝の learning がこの --date に無いか、user が違います）");
+      await closePool();
+      return;
+    }
+    const r = await deliverOne(pool, rows[0]);
+    console.log(`  結果: ${r}`);
+    await closePool();
+    return;
+  }
 
   let rows = await pushlogs.listReviewTargets(pool, DATE);
   if (LIMIT) rows = rows.slice(0, LIMIT);

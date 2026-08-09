@@ -129,13 +129,19 @@ export async function handleFollow(conn, event,
        次の行動が見えない（7-3）。質問そのものは nextStep が導く
        （PENDING.reading が「サイト名の選択肢が無い人」を拾う。
        lib/onboarding.mjs）。 */
-    /* 流入 1・2 とも同じウェルカムボード（지시서㉓ §0-A）。分岐は無い。
-       guide:false は 2026-08-09 のまま ── ボードのすぐ後ろに
-       serviceGuide が続くと歓迎が 2 通並び、友だち追加しただけの人に
-       「連携できました」という事実でない一文が出る。講座の案内は
-       リッチメニュー［講座の案内］と、末尾のコース選択画面に在る。 */
-    const messages = [welcomeBoard(),
-                      ...(await onboardingMessages(conn, user, { guide: false }))];
+    /* ここでボードは送らない（2026-08-09 대표 확정）。友だち追加の瞬間の
+       1 通目は **LINE のあいさつメッセージ**が出す ── LINE 側から出るので、
+       こちらのサーバーが落ちていても、webhook が塞がっていても必ず届く。
+       今日それが両方起きて、入ったのに何も出ない画面ができた。
+
+       だから両方送ると 2 通並ぶ。ここは次の質問だけにする。
+       ★ LINE 公式アカウントマネージャーのあいさつメッセージに、
+         welcomeBoard() と同じ文面が入っていることが前提。空のまま
+         配置すると、新規の人は説明なしで質問だけを受け取る。
+
+       器を置き直す経路（recoverUser）では今もボードを送る ── すでに
+       友だちの人にあいさつメッセージは二度と出ないため。 */
+    const messages = await onboardingMessages(conn, user, { guide: false });
     if (messages.length) {
       try {
         await reply(event.replyToken, messages);

@@ -755,72 +755,66 @@ async function follow(rows, extra = {}) {
   return { r, sent, conn };
 }
 
-await acheck("名前が無い人には、診断への案内を返す", async () => {
+/* 【2026-08-09 대표 확정】友だち追加の 1 通目（ウェルカムボード）は
+   **LINE のあいさつメッセージ**が出す。こちらのサーバーが落ちていても
+   webhook が塞がっていても届く ── 今日その両方が起きて、入ったのに
+   何も出ない画面ができたため。
+
+   その結果、1 通目はもう関門の手が届かない（LINE の管理画面にある）。
+   ここで見られるのは「こちらが二重に送っていないか」と「次の質問が
+   ちゃんと続くか」の 2 つだけになる。文面そのものの見張りは
+   welcomeMessages（器の置き直しで今も使う）側に移した。 */
+
+await acheck("名前が無い人には、次の質問が続く（ボードは LINE 側）", async () => {
   /* 1 日目から名前を使うので、名前が入るまで講座は進まない。
-     黙っていると、翌朝いきなり「お名前を登録してください」だけが
+     質問まで黙ると、翌朝いきなり「お名前を登録してください」だけが
      届いて、何のことか分からないまま体験が終わる。 */
   const { r, sent } = await follow(NAMELESS);
-  assert(sent, "何も返していません");
-  assert(/kstudy101/.test(sent[0].text), "診断ページの場所が入っていません");
-  assert(/お名前/.test(sent[0].text), "名前のことに触れていません");
-  /* 歓迎は 1 通だけ。welcomeBoard のあとに serviceGuide が続くと、
-     同じ説明を 2 度読ませたうえ、友だち追加しただけの人に
-     「連携できました」という事実でない一文が出る（代表指摘 2026-08-09）。 */
+  assert(sent && sent.length === 1, `返した通数: ${sent ? sent.length : 0}（質問 1 通のはず）`);
+  assert(/読み方|お名前/.test(sent[0].text), `質問ではありません: ${sent[0].text.slice(0, 40)}`);
+  /* あいさつメッセージと二重にしない。ここでボードを送ると、
+     友だち追加した人に同じ説明が 2 通並ぶ。 */
+  assert(!/はじめまして/.test(sent[0].text),
+    "ボードをこちらからも送っています ── あいさつメッセージと 2 通になります");
   assert(!sent.some((m) => /連携できました/.test(m.text || "")),
-    "友だち追加なのに「連携できました」が出ています ── 歓迎が 2 通になっています");
+    "友だち追加なのに「連携できました」が出ています");
   assert(r.welcomed === true, JSON.stringify(r));
-  return "サイトへ案内";
+  return "質問 1 通";
 });
 
-await acheck("流入 1 と流入 2 のウェルカムボードが 1 文字も違わない（지시서㉓ §0-A）", async () => {
-  /* この指示の核心。「どちらにも はじめまして が入っている」のような
-     部分一致では、あとで片方だけ直したときに素通りする。代表確定が
-     「完全に同じ文字列」なので、機械もそのまま突き合わせる。
-
-     ここが割れると、直す人は毎回「いまどちらの画面の話をしているのか」を
-     覚えていなければならない ── 実際、割れていた間は流入 1 だけが
-     ウェルカムを丸ごと受け取れていなかった。 */
-  const a = await follow(NAMELESS);
-  const b = await follow(NAMED);
-  assert(a.sent && b.sent, "どちらかが何も返していません");
-  assert(a.sent[0].text === b.sent[0].text,
-    "1 通目が食い違っています ── 流入で文面が割れています");
-  assert(a.sent[0].text.length > 100, "ウェルカムボードが短すぎます（別物では）");
-  return `${a.sent[0].text.length} 文字が完全一致`;
+await acheck("ウェルカムボードは相手で変わらない（지시서㉓ §0-A）", async () => {
+  /* 指示の核心は「流入 1 と 2 が完全に同じ文字列を受け取る」。
+     1 通目は LINE のあいさつメッセージへ移したので、こちらで見張れるのは
+     器の置き直しで送るボード ── そこが相手ごとに割れないことを
+     部分一致ではなく === で確かめる。部分一致にすると、あとで片方だけ
+     直したときに素通りする。 */
+  const { welcomeMessages } = await import("../server/lib/handlers/follow.mjs");
+  const conn = fakeConn({ "FROM users": [] });
+  const a = await welcomeMessages(conn, { id: 7, line_user_id: "U_new", status: "trial", name_kr: null });
+  const b = await welcomeMessages(conn, { id: 8, line_user_id: "U_old", status: "active", name_kr: "다나카" });
+  assert(a[0].text === b[0].text, "ボードが相手ごとに割れています");
+  assert(a[0].text.length > 100, "ボードが短すぎます（別物では）");
+  /* LINE の管理画面に貼ってあるのと同じ文面。片方だけ直すと割れるが、
+     向こうは関門から見えない ── コードを正本にする、が唯一の約束。 */
+  assert(/はじめまして/.test(a[0].text), "ボードの書き出しが変わっています");
+  return `${a[0].text.length} 文字が完全一致`;
 });
 
-await acheck("名前がある人にも、同じボードと次に訊くことを返す", async () => {
+await acheck("名前がある人にも、次に訊くことが続く", async () => {
   /* 以前はここで「何も返さない」ことを確かめていた。名前があるなら
      案内は済んでいるはず、という前提だったが、実際には**サイトで
      連携しただけの人**がここに来る ── その人にとって LINE 側は
-     ずっと無言で、最初のメッセージが翌朝の「1 日目」だった。
-     何に登録したのか分からないまま本文が始まる。
-
-     いまはボード 1 通と、始める前に決まっていないこと 1 通を返す。
-     講座の案内（serviceGuide）はここには続けない ── 歓迎が 2 通
-     並ぶため（代表指摘 2026-08-09）。中身はリッチメニュー
-     ［講座の案内］と、末尾のコース選択画面に在る。 */
+     ずっと無言で、最初のメッセージが翌朝の「1 日目」だった。 */
   const { r, sent } = await follow(NAMED);
-  assert(sent && sent.length >= 1, `返した通数: ${sent ? sent.length : 0}`);
-
-  const board = sent[0].text;
-  assert(/名前/.test(board), "名前で進む講座であることに触れていません");
-  assert(/7時/.test(board) && /6時/.test(board), "朝夕の時刻が書かれていません");
-  assert(/kstudy101/.test(board), "診断ページの場所が入っていません");
-  assert(!/連携できました/.test(board), "歓迎の位置に「連携できました」が来ています");
-
-  /* 2 通目は「次に訊くこと」。コースはもう段に無い（買うときに選ぶ）。
-     saju の無い人にはトークで生年月日から訊き直せるようになった
-     （plan-line-onboarding ── この NAMED は saju 行が無いのでそちら）。 */
-  if (sent.length === 2) {
-    const ask = sent[1];
-    assert(/お名前の確認|生年月日の確認|生年月日を教えてください/.test(ask.text),
-      `2 通目が確認・質問ではありません: ${ask.text.slice(0, 40)}`);
-    assert(!/action=track&pick=/.test(JSON.stringify(ask)),
-      "コース選択のボタンが残っています（買う所へ行けません）");
-  }
+  assert(sent && sent.length === 1, `返した通数: ${sent ? sent.length : 0}`);
+  const ask = sent[0];
+  assert(/お名前の確認|生年月日の確認|生年月日を教えてください/.test(ask.text),
+    `確認・質問ではありません: ${ask.text.slice(0, 40)}`);
+  assert(!/はじめまして/.test(ask.text), "ボードをこちらからも送っています");
+  assert(!/action=track&pick=/.test(JSON.stringify(ask)),
+    "コース選択のボタンが残っています（買う所へ行けません）");
   assert(r.welcomed === true, JSON.stringify(r));
-  return `ボード${sent.length === 2 ? " + 確認" : "のみ"}`;
+  return "確認 1 通";
 });
 
 await acheck("コースが決まっている人には、もう訊かない", async () => {
@@ -838,11 +832,14 @@ await acheck("コースが決まっている人には、もう訊かない", asy
     { reply: async (_t, m) => { sent = m; return {}; },
       profile: async () => ({ displayName: "テスト" }) });
 
-  /* 案内だけ。ブロック→再追加のたびにコースを訊き直すと、
-     12 日目まで来た人に「①から始めます」と言うことになる。 */
-  assert(sent && sent.length === 1, `返した通数: ${sent ? sent.length : 0}`);
-  assert(!sent[0].quickReply, "決まっているのにボタンを出しました");
-  return "案内 1 通だけ";
+  /* 訊くことが無いので、こちらからは 1 通も出さない。ブロック→再追加の
+     たびにコースを訊き直すと、12 日目まで来た人に「①から始めます」と
+     言うことになる ── そこは前から変わらない。
+
+     変わったのは通数。ボードを LINE のあいさつメッセージへ移したので、
+     再追加した人が受け取るのはそちらの 1 通だけになる（2026-08-09）。 */
+  assert(!sent || sent.length === 0, `返した通数: ${sent ? sent.length : 0}（0 のはず）`);
+  return "こちらからは 0 通（あいさつは LINE 側）";
 });
 
 await acheck("返信できなくても、友だち追加は成立する", async () => {

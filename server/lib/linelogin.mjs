@@ -47,7 +47,22 @@ export function loginConfig() {
    scope は profile だけ。openid を足すと id_token が付いてくるが、
    userId は profile で取れるので要らない ── 使わない情報を
    要求すると、同意画面の項目が増えて離脱が増える。 */
-export function authorizeUrl(state, { prompt = null } = {}) {
+/* botPrompt（友だち追加オプション・LINE Login v2.1）
+
+   LINE Login は「誰か」を教えるだけで、**友だちにはしない**。この 2 つは
+   別物で、友だちでなければこちらからは 1 通も送れない ── 連携は済んで
+   いるのに何も届かない人が、こちらの台帳にだけ残る。
+
+   これまでは連携完了ページの「LINE で友だち追加する」ボタン 1 つに
+   頼っていた（lib/pages.mjs）。押さずに閉じればそこで終わりで、
+   しかもそのボタンの URL は 2026-08-09 まで 404 だった。
+
+   aggressive は同意画面の**あと**に専用の追加画面を出す。normal は
+   同意画面の中の項目になる。前者を使う ── 項目は読み飛ばされる。
+
+   ★ Login チャネルに Official Account が紐づいていないと無視される
+     （LINE Developers → Login チャネル → Linked LINE Official Account）。 */
+export function authorizeUrl(state, { prompt = null, botPrompt = null } = {}) {
   const cfg = loginConfig();
   const q = new URLSearchParams({
     response_type: "code",
@@ -57,6 +72,7 @@ export function authorizeUrl(state, { prompt = null } = {}) {
     scope: "profile"
   });
   if (prompt) q.set("prompt", prompt);
+  if (botPrompt) q.set("bot_prompt", botPrompt);
   return `${AUTHORIZE()}?${q.toString()}`;
 }
 

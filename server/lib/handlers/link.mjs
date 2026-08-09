@@ -122,7 +122,12 @@ export async function startLink(conn, input) {
   return {
     ok: true,
     state,
-    authorizeUrl: authorizeUrl(state),
+    /* 同意のあとに「友だち追加しますか」の画面を出す。連携だけして
+       友だちにならない人が出ないように ── 友だちでなければ 1 通も
+       送れないので、その人はこちらの台帳にだけ残る（lib/linelogin.mjs）。
+       プロフィール編集（handlers/profile.mjs）には付けない。あちらは
+       もう友だちの人が使う口で、出しても素通りするだけ。 */
+    authorizeUrl: authorizeUrl(state, { botPrompt: "aggressive" }),
     expiresInSeconds: links.TTL_MINUTES * 60
   };
 }

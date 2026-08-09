@@ -665,7 +665,8 @@ const NEWFMT = {
   dialogue_template: [
     { who: "面接官", kr: "자기소개를 부탁합니다.", ja: "自己紹介をお願いします。" },
     { who: "{NAME_JP}", kr: "저는 {NAME}입니다.", ja: "私は{NAME_JP}です。" },
-    { who: "面接官", kr: "얼마나 공부하셨습니까?", ja: "どれくらい勉強されましたか。" }
+    { who: "面接官", kr: "얼마나 공부하셨습니까?", ja: "どれくらい勉強されましたか。" },
+    { who: "{NAME_JP}", kr: "일 년쯤 공부했습니다.", ja: "一年ほど勉強しました。" }
   ],
   vocab_3: [
     { kr: "면접", meaning: "面接〔面接〕", pos: "名詞" },
@@ -701,22 +702,23 @@ check("신양식 → 3통（1·2통 + ❓ 꼬리통）・tip 은 形/使/落로 
   const m = renderDay(NEWFMT, KEN);
   assert(m.length === 3, `${m.length} 통`);
   assert(m[0].text.startsWith(`📘 Day 51 : -(스)ㅂ니다`), m[0].text.split("\n")[0]);
-  /* 形 행은 🔗 아래, 使·落는 ・접두어로 💡 아래 ── 접두어 문자
-     자체（形　…）는 출력에 남지 않는다. */
+  /* 形 행은 🔗 아래 + 💡 의 ・形: . 使·落도 ・접두어로 💡 아래.
+     원고 접두어（形　…）자체는 출력에 남지 않는다. */
   assert(/🔗 接続 \(活用ルール\)\nパッチム無/.test(m[0].text), "形 행이 🔗 아래에 없습니다");
+  assert(/・形: パッチム無/.test(m[0].text), "形 행이 ・形: 로 나오지 않습니다");
   assert(/・使: ニュース・面接・職場/.test(m[0].text), "使 행이 ・使: 로 나오지 않습니다");
   assert(/・落: -아요\/-어요/.test(m[0].text), "落 행이 ・落: 로 나오지 않습니다");
   assert(!/形　/.test(m[0].text), "分解 후에도 形　접두어가 남았습니다");
   return "1통=문법·회화 / 2통=단어 / 꼬리통=퀴즈";
 });
 
-check("vocab 6개가 품사별 2·2·2 로 묶여 1〜6 연번으로 출력", () => {
+check("vocab 6개가 품사별 2·2·2 로 묶여 1〜6 연번·세로 나열로 출력", () => {
   const m = renderDay(NEWFMT, KEN);
   const v = m[1].text;
-  assert(/【名詞】 1\. 면접　面接〔面接〕　2\. 자기소개/.test(v), v);
-  assert(/【形容詞】3\. 바쁘다　忙しい　4\. 즐겁다/.test(v), v);
-  assert(/【動詞】 5\. 다니다　通う・勤める　6\. 일하다/.test(v), v);
-  return "【名詞】12 /【形容詞】34 /【動詞】56";
+  assert(/【名詞】\n1\. 면접　面接〔面接〕\n2\. 자기소개/.test(v), v);
+  assert(/【形容詞】\n3\. 바쁘다　忙しい\n4\. 즐겁다/.test(v), v);
+  assert(/【動詞】\n5\. 다니다　通う・勤める\n6\. 일하다/.test(v), v);
+  return "【名詞】12 /【形容詞】34 /【動詞】56 세로";
 });
 
 check("🍀 라벨이 「今日のひとこと」이고 bridge.ja 만 나온다（kr 은 비표시）", () => {
@@ -834,16 +836,19 @@ check("규칙 1: tip 에 形・使・落 가 다 없으면 거부", () => {
   return "落 누락이 걸림";
 });
 
-check("규칙 2: 대화가 3행이 아니면 거부（구양식 2행은 통과）", () => {
+check("규칙 2: 대화가 4행이 아니면 거부（구양식 2행은 통과）", () => {
   const two = checkDay({ ...NEWFMT,
     dialogue_template: NEWFMT.dialogue_template.slice(0, 2) }, new Set());
-  assert(two.some((m) => m.includes("정확히 3행")), two.join(" / "));
-  const four = checkDay({ ...NEWFMT, dialogue_template: [
+  assert(two.some((m) => m.includes("정확히 4행")), two.join(" / "));
+  const three = checkDay({ ...NEWFMT,
+    dialogue_template: NEWFMT.dialogue_template.slice(0, 3) }, new Set());
+  assert(three.some((m) => m.includes("정확히 4행")), three.join(" / "));
+  const five = checkDay({ ...NEWFMT, dialogue_template: [
     ...NEWFMT.dialogue_template,
     { who: "面接官", kr: "감사합니다.", ja: "ありがとうございます。" }
   ] }, new Set());
-  assert(four.some((m) => m.includes("정확히 3행")), four.join(" / "));
-  return "2행·4행 다 걸림";
+  assert(five.some((m) => m.includes("정확히 4행")), five.join(" / "));
+  return "2행·3행·5행 다 걸림";
 });
 
 check("규칙 3: vocab 6어・pos 필수・품사별 2개", () => {

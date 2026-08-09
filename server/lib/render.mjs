@@ -247,7 +247,9 @@ export function renderDay(template, user = {}, { quizSection = true } = {}) {
   const tip = parseTip(template.grammar_tip_kr);
   if (tip) {
     head.push("", "🔗 接続 (活用ルール)", ...tip.form);
+    /* 形도 学習ポイントに出す（2026-08-09 Day2 검수）── 接続と重複してよい. */
     head.push("", "💡 学習ポイント",
+      `・形: ${tip.form[0]}`, ...tip.form.slice(1),
       `・使: ${tip.use[0]}`, ...tip.use.slice(1),
       `・落: ${tip.fall[0]}`, ...tip.fall.slice(1));
   } else if (template.grammar_tip_kr) {
@@ -294,14 +296,13 @@ export function renderDay(template, user = {}, { quizSection = true } = {}) {
       for (const pos of POS) {
         const ws = vocab.filter((w) => w.pos === pos);
         if (!ws.length) continue;
-        const items = ws.map((w) => {
+        /* 품사 헤더 다음, 단어 1개 = 1행（2026-08-09 Day2 검수 · 가독성）. */
+        v.push(`【${pos}】`);
+        for (const w of ws) {
           n++;
           const note = w.note ? `（${w.note}）` : "";
-          return `${n}. ${w.kr}　${w.meaning}${note}`;
-        });
-        /* 【名詞】·【動詞】 뒤의 반각 공백은 【形容詞】와의 폭 맞춤
-           （§1-1 스케치 그대로）. */
-        v.push(`【${pos}】${pos.length === 2 ? " " : ""}${items.join("　")}`);
+          v.push(`${n}. ${w.kr}　${w.meaning}${note}`);
+        }
       }
     } else {
       for (const w of vocab) {

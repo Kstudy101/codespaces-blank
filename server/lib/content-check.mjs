@@ -187,12 +187,10 @@ export function checkDay(d, seen = new Set()) {
 
   /* --- 会話 --- */
   const dia = d.dialogue_template;
-  /* 규칙 2: 3행 드라마 고정（§0-3）. 행 수가 틀려도 아래 행별 검사는
-     그대로 돌린다 ── 개수만 고치고 재입고했더니 이번엔 행 내용으로
-     떨어지는 왕복을 만들지 않기 위해. kr·ja 필수는 기존 검사가
-     양식 공통으로 본다. */
-  if (isNew && Array.isArray(dia) && dia.length !== 3) {
-    at(`신양식: 대화는 정확히 3행입니다（지금 ${dia.length}행）`);
+  /* 규칙 2: 4행 드라마 고정（2026-08-09 Day2 검수 · 회화 완결）.
+     행 수가 틀려도 아래 행별 검사는 그대로 돌린다. */
+  if (isNew && Array.isArray(dia) && dia.length !== 4) {
+    at(`신양식: 대화는 정확히 4행입니다（지금 ${dia.length}행）`);
   }
   if (!Array.isArray(dia) || dia.length < 2) {
     at("dialogue_template は 2 文以上の配列にしてください");

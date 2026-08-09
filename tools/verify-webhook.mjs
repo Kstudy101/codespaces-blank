@@ -713,6 +713,11 @@ await acheck("名前が無い人には、診断への案内を返す", async () 
   assert(sent, "何も返していません");
   assert(/kstudy101/.test(sent[0].text), "診断ページの場所が入っていません");
   assert(/お名前/.test(sent[0].text), "名前のことに触れていません");
+  /* 歓迎は 1 通だけ。welcomeForNameless のあとに serviceGuide が続くと、
+     同じ説明を 2 度読ませたうえ、友だち追加しただけの人に
+     「連携できました」という事実でない一文が出る（代表指摘 2026-08-09）。 */
+  assert(!sent.some((m) => /連携できました/.test(m.text || "")),
+    "友だち追加なのに「連携できました」が出ています ── 歓迎が 2 通になっています");
   assert(r.welcomed === true, JSON.stringify(r));
   return "サイトへ案内";
 });

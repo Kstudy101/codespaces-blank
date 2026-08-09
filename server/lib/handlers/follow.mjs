@@ -134,7 +134,7 @@ export async function handleFollow(conn, event,
        「サイト名の選択肢が無い人」を拾う。lib/onboarding.mjs）。 */
     const messages = user.name_kr
       ? await onboardingMessages(conn, user)
-      : [welcomeForNameless(), ...(await onboardingMessages(conn, user))];
+      : [welcomeForNameless(), ...(await onboardingMessages(conn, user, { guide: false }))];
     if (messages.length) {
       try {
         await reply(event.replyToken, messages);
@@ -155,8 +155,13 @@ export async function handleFollow(conn, event,
 
 /* 講座の案内 ＋ 次に訊くこと 1 つ。訊くことが無ければ案内だけ。
    段は lib/onboarding.mjs が中身から導く（列で持たない）。
-   コースも段の一つ（track ── 選ぶとその場で体験が始まる）。 */
-async function onboardingMessages(conn, user) {
+   コースも段の一つ（track ── 選ぶとその場で体験が始まる）。
+
+   guide:false は「案内をもう送ってある」とき。名前の無い人には
+   welcomeForNameless が同じことを先に言うので、続けて serviceGuide を
+   出すと歓迎が 2 通並ぶ（代表指摘 2026-08-09）── しかも友だち追加の
+   時点で「連携できました」は事実でもない。 */
+async function onboardingMessages(conn, user, { guide = true } = {}) {
   const saju = await users.getSajuProfile(conn, user.id);
   /* ONBOARD_COLUMNS（lib/onboarding.mjs）を全部運ぶ ── ohaeng_main を
      落とすと、サイト経由の人が「直接流入」と読まれて新 4 段の質問を
@@ -172,7 +177,7 @@ async function onboardingMessages(conn, user) {
     track: user.active_track || null
   };
   return [
-    serviceGuide({ nameJa: user.name_reading || user.name_kanji }),
+    guide ? serviceGuide({ nameJa: user.name_reading || user.name_kanji }) : null,
     /* async・conn 必須（track 段）。await を欠くと Promise がそのまま
        LINE へ行く ── filter(Boolean) は Promise を通す。 */
     await messageForStep(nextStep(state), state, conn)

@@ -877,7 +877,8 @@ await acheck("コースを選ぶと体験が始まり、その場で 1 日目が
       deliver: async (_c, id) => { deliveredTo = id; return "送信:1日目"; } });
   assert(r.started === true, JSON.stringify(r));
   assert(sent && /で始めます！/.test(sent[0].text), sent && sent[0].text);
-  assert(/このあとすぐ「1 日目」/.test(sent[0].text), "開始案内の文面が違います");
+  /* 2026-08-09 に代表が「1 日目」→「1日目」へ詰めた。 */
+  assert(/このあとすぐ「1日目」/.test(sent[0].text), "開始案内の文面が違います");
   assert(deliveredTo === 7, `deliverNow が呼ばれていません: ${deliveredTo}`);
   assert(conn.calls.some((c) => /UPDATE users SET active_track/i.test(c.sql)),
     "active_track が立っていません");
@@ -1094,7 +1095,11 @@ check("messageForStep の呼び出しは全部 await + conn（Promise を LINE �
 });
 
 check("締めの 1 通はコースの有無で分かれる", () => {
-  assert(/受講料/.test(onboardingDone({ track: null }).text), "未購入者に導線がありません");
+  /* 見るのは「コースを選ぶ場所を名指ししているか」。以前は［受講料］の
+     4 文字を探していたが、2026-08-09 に代表が「下のメニューから」へ
+     文面を変えた ── 名指しの語が変わっただけで、導線は在る。
+     文面を変えるときは、ここも同じコミットで直すこと。 */
+  assert(/下のメニュー/.test(onboardingDone({ track: null }).text), "未購入者に導線がありません");
   assert(/明日の朝/.test(onboardingDone({ track: "beginner" }).text), "購入者に予告がありません");
   return "未購入 → 導線 / 購入済 → 予告";
 });

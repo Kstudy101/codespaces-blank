@@ -965,6 +965,15 @@ check("seed-content が「保全した件数」を黙らずに出す（지시서
   return "数えて、出す";
 });
 
+check("preview-day は送信・日数消費をしない（plan-preview-day）", () => {
+  const src = stripComments(read("server/db/preview-day.mjs"));
+  assert(/renderDay/.test(src), "renderDay を呼んでいません");
+  assert(!/pushMessage|advanceDay|pushlogs|push_logs/.test(src),
+    "送信または日数消費の経路が混ざっています");
+  assert(!/createServer|listen\(/.test(src), "HTTP に出しています");
+  return "stdout のみ";
+});
+
 await acheck("listQuizKeys は quiz のある日だけを返す（保全ログ用）", async () => {
   const conn = fakeConn(() => [
     { track: "beginner", day_number: 30 },

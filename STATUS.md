@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-10 (`accel-day` 가속 시험 도구 구현 — [plan-accel-day](docs/plan-accel-day.md))
+최종 갱신: 2026-08-10 (A안: 3의 배수 아침은 🔁 복습만 — [plan-quiz-review-on-multiple](docs/plan-quiz-review-on-multiple.md))
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -93,6 +93,9 @@ node db/with-env.mjs db/accel-day.mjs --user=<ID> --to=30 \
 
 부수 수정: `push-daily`/`push-evening` 의 `sent_at` 을 `--date` 의 07:00/18:00 에 맞춤,
 `push-evening --user=`, `logFailed` 의 `sentAt`. **본번 유저에 `--send` 금지.**
+
+**퀴즈 A안 (2026-08-10).** 신양식 3의 배수 아침은 데일리 ❓를 접고 `🔁`만
+([plan-quiz-review-on-multiple](docs/plan-quiz-review-on-multiple.md)). 배포 후 accel 재시험.
 
 ### §0-★ 친구추가 인사말 — **해결** (2026-08-09 밤)
 
@@ -411,6 +414,7 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | [docs/plan-billing.md](docs/plan-billing.md) | 선불 횟수권 설계·구현 결과 |
 | [docs/plan-trial-7days.md](docs/plan-trial-7days.md) | 무료 체험 3일→7일 — 구현 완료·배포 대기 (§0-◆) |
 | [docs/plan-accel-day.md](docs/plan-accel-day.md) | 가속 시험 `accel-day.mjs` — 7일·30일 절목까지 (§0-◇) |
+| [docs/plan-quiz-review-on-multiple.md](docs/plan-quiz-review-on-multiple.md) | 3의 배수 아침은 🔁만（A안） |
 | [docs/plan-audit-fixes.md](docs/plan-audit-fixes.md) | 전수 점검에서 나온 것의 수정 결과 |
 | [docs/plan-fortune-content.md](docs/plan-fortune-content.md) | 운세 콘텐츠 확장 (사이트 쪽) |
 | [docs/plan-fortune-daily.md](docs/plan-fortune-daily.md) | 운세 배신 |

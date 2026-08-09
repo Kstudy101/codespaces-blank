@@ -509,8 +509,9 @@ export async function deliverOne(conn, u,
   /* 節目（30/50/75）かどうかは 1 度だけ引いて、レッスンの 꼬리통・
      復習・節目クイズの三方が同じ答えを見る ── 別々に訊くと、
      表を直した朝に片方だけずれる。renderDay より先に引くのは、
-     절목의 아침에 데일리 ❓（무보존）를 접기 위해（지시서㉑）──
-     그날의 채점은 절목 퀴즈（기록 있음·말미）가 맡는다. */
+     절목·복습 아침에 데일리 ❓（무보존）를 접기 위해 ──
+     그날의 채점은 절목（기록）또는 복습（무보존）이 맡는다.
+     （A안 2026-08-10: 3의 배수엔 ❓ 대신 🔁 — plan-quiz-review-on-multiple） */
   const atCheckpoint = await learning.isCheckpoint(conn, next);
 
   /* 期限予告の朝も 꼬리통을 접는다（복습 뽑기의 결정④와 같은 이유,
@@ -526,10 +527,15 @@ export async function deliverOne(conn, u,
       && (await billing.hasPurchases(conn, u.id))
       && !(await pushlogs.countForDay(conn, u.id, entitledNow, "expiring"));
 
+  /* 3 の倍数（節目・予告以外）は復習の朝。デイリー ❓ を畳んで
+     下の pickReviewQuiz に 1 席を空ける（クイズ 2 件禁止は維持）。 */
+  const reviewMorning = next % 3 === 0 && !atCheckpoint && !warned;
+
   /* 文面を先に組む。利用者の行をそのまま渡す ── 名前も四柱も
      render 側が要るものだけ拾う。既定は入れない（全員が同じ名前・
      同じ五行で占われる）。 */
-  let messages = renderDay(tpl, u, { quizSection: !atCheckpoint && !warned });
+  let messages = renderDay(tpl, u,
+    { quizSection: !atCheckpoint && !warned && !reviewMorning });
 
   /* ---- 名前が要る日に、名前が無い人 -------------------------------
      はじめは「登録のお願いに差し替えて、日は進める」にしていた。
@@ -604,16 +610,16 @@ export async function deliverOne(conn, u,
   }
 
   /* ---- 3 日周期の復習クイズ（docs/plan-quiz.md）--------------------
-     送る日（next）が 3 の倍数の朝だけ。current_day では数えない ──
+     reviewMorning（上）の朝だけ。current_day では数えない ──
      あれは「昨日までに送った数」で、それで割ると 1 日ずれる。
 
      節目（30/50/75）は休む。30 % 3 = 0 で重なるが、同じ朝に
      クイズが 2 件出ると、どの答えがどの問題か混ざる ── その朝は
      節目クイズ（下）が出る。
 
-     신양식（꼬리통 ❓ 있음）의 아침도 같은 이유로 쉰다（지시서㉑）──
-     그날의 퀴즈는 이미 레슨이 나른다. 복습 뽑기가 계속 사는 것은
-     구양식（데일리 ❓ 없음）의 이행기 동안이다.
+     신양식도 복습 아침엔 데일리 ❓를 접는다（A안）── quizTail 이
+     비어 있어야 여기가 탄다. 평일 신양식은 ❓만（아래 !quizTail 은
+     평일에 복습이 겹치지 않게 하는 안전망）.
 
      期限の予告が付く朝も休む（承認時の決定④）。朝の便を常に
      最大 4 通に保つ ── LINE の上限は 5 で、予告と重ねると丁度 5 に
@@ -622,7 +628,7 @@ export async function deliverOne(conn, u,
 
      引けなければ（原稿なし・壊れ）何も足さない。本編は届く ──
      運勢（fortuneSection）と同じ態度。 */
-  if (next % 3 === 0 && !warned && !atCheckpoint && !quizTail) {
+  if (reviewMorning && !quizTail) {
     const quiz = await learning.pickReviewQuiz(conn, u.track, next);
     if (quiz) messages = [...messages, renderReviewQuiz(quiz)];
   }

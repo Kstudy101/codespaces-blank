@@ -865,11 +865,11 @@ await check("bridge 가 있는 아침 ── 레슨 말미（🍀）에 1회만,
   return "레슨에 1회・운세에 0회";
 });
 
-await check("신양식 아침 ── ❓ 꼬리통이 묶음 맨 끝（부적 뒤）에서 버튼을 연다", async () => {
-  /* pos 있는 6어 + quiz + bridge ── 6일째（3의 배수）로 두어
-     복습 뽑기가 쉬는 것도 함께 본다（같은 아침에 퀴즈 2건 금지）. */
+await check("신양식 평일 ── ❓ 꼬리통이 묶음 맨 끝（부적 뒤）에서 버튼을 연다", async () => {
+  /* pos 있는 6어 + quiz + bridge. 4일째（3의 배수 아님）── ❓만.
+     복습 뽑기는 돌지 않는다. */
   const NEWTPL = [{
-    day_number: 6, track: "beginner", semester: 1,
+    day_number: 4, track: "beginner", semester: 1,
     grammar_point: "-도（〜も）",
     grammar_tip_kr: "形　名詞 + 도\n使　「私も」— 同じであることを足す\n落　-은/는 と重ねられません",
     requires_name_slot: 1,
@@ -888,23 +888,62 @@ await check("신양식 아침 ── ❓ 꼬리통이 묶음 맨 끝（부적 �
   }];
   const conn = fakeConn({ ...READY, "FROM content_templates": NEWTPL });
   let msgs = null;
+  const r = await deliverOne(conn, { ...WITH_SAJU, current_day: 3, days_used: 3 },
+    { send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES });
+  assert(/送信:4日目/.test(r), r);
+
+  assert(msgs.length === 5, `${msgs.length} 통（1·2통+운세+부적+❓ = 5）`);
+  const last = msgs[msgs.length - 1];
+  assert(last.quickReply?.items?.every((i) => /^action=review&day=4&choice=\d$/.test(i.action.data)),
+    `말미가 ❓ 꼬리통이 아닙니다: ${JSON.stringify(last.quickReply?.items?.[0]?.action || last.type)}`);
+  assert(/❓ 今日のクイズ/.test(last.text), "❓ 헤더가 없습니다");
+  assert(/🍀 今日のひとこと\n「私も」と言ってみましょう。$/.test(last.text), "🍀 가 꼬리통 말미에 없습니다");
+  assert(msgs.findIndex((m) => /오늘의 운세/.test(m.text || "")) < msgs.length - 1, "운세가 꼬리통 뒤에 있습니다");
+  assert(msgs.some((m) => m.type === "flex"), "부적이 빠졌습니다（5통 이내인데）");
+  assert(!conn.sql().some((s) => /quiz IS NOT NULL/i.test(s)),
+    "평일 신양식에 복습 뽑기가 돌았습니다");
+  return "5통・❓ 말미・복습 쉼";
+});
+
+await check("신양식 3의 배수 ── ❓를 접고 🔁 복습만（A안）", async () => {
+  const NEWTPL = [{
+    day_number: 6, track: "beginner", semester: 1,
+    grammar_point: "-도（〜も）",
+    grammar_tip_kr: "形　名詞 + 도\n使　「私も」— 同じであることを足す\n落　-은/는 と重ねられません",
+    requires_name_slot: 1,
+    dialogue_template: JSON.stringify([
+      { kr: "저는 드라마를 좋아해요.", ja: "私はドラマが好きです。" },
+      { kr: "{NAME_EUN} 어때요?", ja: "{NAME_JP}はどうですか。" },
+      { kr: "저도 좋아해요.", ja: "私も好きです。" }
+    ]),
+    vocab_3: JSON.stringify([
+      { kr: "드라마", meaning: "ドラマ", pos: "名詞" }, { kr: "노래", meaning: "歌", pos: "名詞" },
+      { kr: "좋다", meaning: "よい", pos: "形容詞" }, { kr: "많다", meaning: "多い", pos: "形容詞" },
+      { kr: "보다", meaning: "見る", pos: "動詞" }, { kr: "듣다", meaning: "聞く", pos: "動詞" }
+    ]),
+    quiz: JSON.stringify({ question: "「私も行きます」は？", choices: ["저는도 가요", "저도 가요"], answer: 1 }),
+    fortune_bridge: JSON.stringify({ kr: "「나도」라고 말해 보세요.", ja: "「私も」と言ってみましょう。" })
+  }];
+  const conn = fakeConn({
+    ...READY,
+    "FROM content_templates": NEWTPL
+  });
+  let msgs = null;
   const r = await deliverOne(conn, { ...WITH_SAJU, current_day: 5, days_used: 5 },
     { send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES });
   assert(/送信:6日目/.test(r), r);
 
-  assert(msgs.length === 5, `${msgs.length} 통（1·2통+운세+부적+❓ = 5）`);
+  assert(msgs.length === 5, `${msgs.length} 통（1·2통+운세+부적+🔁 = 5）`);
   const last = msgs[msgs.length - 1];
-  assert(last.quickReply?.items?.every((i) => /^action=review&day=6&choice=\d$/.test(i.action.data)),
-    `말미가 ❓ 꼬리통이 아닙니다: ${JSON.stringify(last.quickReply?.items?.[0]?.action || last.type)}`);
-  assert(/❓ 今日のクイズ/.test(last.text), "❓ 헤더가 없습니다");
-  assert(/🍀 今日のひとこと\n「私も」と言ってみましょう。$/.test(last.text), "🍀 가 꼬리통 말미에 없습니다");
-  /* 운세·부적은 꼬리통보다 앞. */
-  assert(msgs.findIndex((m) => /오늘의 운세/.test(m.text || "")) < msgs.length - 1, "운세가 꼬리통 뒤에 있습니다");
-  assert(msgs.some((m) => m.type === "flex"), "부적이 빠졌습니다（5통 이내인데）");
-  /* 3의 배수인데 복습 뽑기（quiz IS NOT NULL）를 돌리지 않았다. */
-  assert(!conn.sql().some((s) => /quiz IS NOT NULL/i.test(s)),
-    "신양식 아침에 복습 뽑기가 돌았습니다（퀴즈 2건）");
-  return "5통・❓ 말미・복습 뽑기 쉼";
+  assert(/🔁 ふくしゅうクイズ/.test(last.text), `말미가 🔁 이 아닙니다: ${String(last.text || "").split("\n")[0]}`);
+  assert(!/❓ 今日のクイズ/.test(msgs.map((m) => m.text || "").join("\n")),
+    "3의 배수인데 데일리 ❓가 남았습니다");
+  assert(conn.sql().some((s) => /quiz IS NOT NULL/i.test(s)),
+    "복습 뽑기가 돌지 않았습니다");
+  assert(last.quickReply?.items?.length >= 2, "복습 버튼이 없습니다");
+  /* 🍀 는 레슨 쪽（❓ 꼬리통이 없으므로 2통 말미）. */
+  assert(msgs.some((m) => /🍀 今日のひとこと/.test(m.text || "")), "🍀 가 빠졌습니다");
+  return "5통・🔁 말미・❓ 접힘";
 });
 
 console.log(`\n${fails.length ? "✗" : "✓"} ${pass + fails.length} 項目中 ${pass} 件成功`);

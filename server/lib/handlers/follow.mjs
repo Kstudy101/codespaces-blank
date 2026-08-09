@@ -22,14 +22,17 @@ import { serviceGuide, nextStep, messageForStep } from "../onboarding.mjs";
 /* 診断ページの場所。LINE から案内するのはここだけ。 */
 const SITE_URL = process.env.SITE_URL || "https://www.kstudy101.jp";
 
-/* 友だち追加しただけの人には、名前がまだ無い。
-   この講座は名前で進むので、1 日目から名前を使う ── 名前が
-   入るまで進まない（db/push-daily.mjs）。黙っていると、
-   翌朝いきなり「お名前を登録してください」だけが届いて、
-   何のことか分からないまま終わる。ここで先に伝える。
+/* 流入 1（サイト診断 → 連携）と 流入 2（LINE 直行）の**両方**へ、
+   完全に同じ文字列で送る（지시서㉓ §0-A、2026-08-09 대표 확정）。
 
-   サイトを通ってきた人には送らない。その人はもう名前がある。 */
-function welcomeForNameless() {
+   名前の有無で分けていたのをやめた理由 ── 分ける限り、直す側が
+   「どちらの画面を見て話しているのか」を毎回覚えていなければならず、
+   一方だけ直った文面が残る。同じ 1 通なら、その心配ごと消える。
+
+   本文が名前の登録から書き出されるのは、この講座が 1 日目から名前を
+   使うから（db/push-daily.mjs ── 名前が入るまで進まない）。流入 1 の
+   人には要らない案内だが、それは承知のうえで文面を 1 つに揃えている。 */
+function welcomeBoard() {
   /* 代表文面（2026-08-09）+ 次の行動（お名前登録）と SITE_URL は
      関門 verify-webhook と運用上必須。体験開始は登録・コース選択のあと。 */
   return {
@@ -112,29 +115,27 @@ export async function handleFollow(conn, event,
     user.status = status;
   }
 
-  /* 何を返すかは、名前があるかで分かれる。
-
-     名前が無い  … 診断への案内（この講座は名前で進むので、
-                    先に名前を入れてもらわないと 1 日目が作れない）
-     名前がある  … 先にサイトで連携した人が、あとから友だち追加した。
-                    講座の案内と、次に訊くこと（コースなど）を返す
-
-     以前は後者に**何も返していなかった**。連携も友だち追加も
-     済んでいるのに LINE 側は無言で、最初のメッセージが翌朝の
-     「1 日目」だった。
+  /* 返すものは名前の有無で分けない（지시서㉓ §0-A）。以前は分けていて、
+     名前がある人（サイトで連携だけして、あとから友だち追加した人）には
+     **何も返していなかった**時期すらある ── その人にとって LINE 側は
+     ずっと無言で、最初のメッセージが翌朝の「1 日目」だった。
 
      返信に失敗しても友だち追加そのものは成立させる ── ここで
      throw すると LINE が webhook を失敗とみなして掛け直し、
      同じ人の追加処理が何度も走る。 */
   let welcomed = false;
   if (event?.replyToken) {
-    /* 名前の無い人にも、案内のすぐ後に**最初の質問**（読み仮名）を
-       続ける ── 案内だけで終わると次の行動が見えない（7-3）。
-       質問そのものは nextStep が導く（PENDING.reading が
-       「サイト名の選択肢が無い人」を拾う。lib/onboarding.mjs）。 */
-    const messages = user.name_kr
-      ? await onboardingMessages(conn, user)
-      : [welcomeForNameless(), ...(await onboardingMessages(conn, user, { guide: false }))];
+    /* ボードのすぐ後ろに**最初の質問**を続ける ── 案内だけで終わると
+       次の行動が見えない（7-3）。質問そのものは nextStep が導く
+       （PENDING.reading が「サイト名の選択肢が無い人」を拾う。
+       lib/onboarding.mjs）。 */
+    /* 流入 1・2 とも同じウェルカムボード（지시서㉓ §0-A）。分岐は無い。
+       guide:false は 2026-08-09 のまま ── ボードのすぐ後ろに
+       serviceGuide が続くと歓迎が 2 通並び、友だち追加しただけの人に
+       「連携できました」という事実でない一文が出る。講座の案内は
+       リッチメニュー［講座の案内］と、末尾のコース選択画面に在る。 */
+    const messages = [welcomeBoard(),
+                      ...(await onboardingMessages(conn, user, { guide: false }))];
     if (messages.length) {
       try {
         await reply(event.replyToken, messages);
@@ -158,7 +159,7 @@ export async function handleFollow(conn, event,
    コースも段の一つ（track ── 選ぶとその場で体験が始まる）。
 
    guide:false は「案内をもう送ってある」とき。名前の無い人には
-   welcomeForNameless が同じことを先に言うので、続けて serviceGuide を
+   welcomeBoard が同じことを先に言うので、続けて serviceGuide を
    出すと歓迎が 2 通並ぶ（代表指摘 2026-08-09）── しかも友だち追加の
    時点で「連携できました」は事実でもない。 */
 async function onboardingMessages(conn, user, { guide = true } = {}) {

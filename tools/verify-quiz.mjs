@@ -303,7 +303,12 @@ await check("正解 → その場で返事、DB には何も書かない", async
     { send: async (_t, m) => { replied = m; return {}; } });
   assert(r.passed === true, JSON.stringify(r));
   assert(replied && replied.length === 1, "返事が 1 通ではありません");
-  assert(/正解/.test(replied[0].text), replied[0].text);
+  /* 「正解」の 2 文字を要求していた。2026-08-09 に文面が
+     「⭕ よくできました！🎉」＋夕方の一言へ変わり（plan-quiz-correct-cheer C）、
+     この関門だけが取り残されてサイトと配信サーバーの配置を 3 コミット止めた。
+     確定した文面そのものを見る ── 次に文面を変えるときは、ここも同じ
+     コミットで直すこと。 */
+  assert(/よくできました/.test(replied[0].text), replied[0].text);
   assert(!conn.sql().some((s) => /^(INSERT|UPDATE|DELETE)/i.test(s)),
     "復習クイズが DB に書いています（合否の上書き事故のもと）");
   return "無状態";

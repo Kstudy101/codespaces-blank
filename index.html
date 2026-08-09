@@ -569,6 +569,12 @@ a.sns-btn{color:var(--text)}   /* リンクにしても見た目はボタンの�
   flex:1; min-width:0; font-size:.85rem; font-weight:700; color:var(--text);
   line-height:1.5;
 }
+/* LINE の作りでは、アプリが開いたあと本人が「追加」を押すまで友だちに
+   ならない ── 自動で追加する方法は API にも無い。先に言っておかないと、
+   プロフィールだけ見て戻る人がそのぶん出る。 */
+.linebar-txt small{
+  display:block; font-size:.8em; font-weight:400; color:var(--text-dim);
+}
 .linebar-go{flex:none; color:var(--accent); font-weight:700}
 @media (prefers-reduced-motion:reduce){
   .tipbar,.linebar{transition:none}
@@ -936,7 +942,8 @@ footer a{color:var(--accent); text-decoration:none; font-weight:700}
 <a class="linebar" href="https://lin.ee/SKZtS5k"
    target="_blank" rel="noopener"
    onclick="gtag('event','line_banner_click',{location:'below_tipbar'})">
-  <span class="linebar-txt">1日1分、LINEで始めるハングルマスターへの第一歩！🟢🇰🇷</span>
+  <span class="linebar-txt">1日1分、LINEで始めるハングルマスターへの第一歩！🟢🇰🇷
+    <small>友だち追加ですぐスタート</small></span>
   <span class="linebar-go" aria-hidden="true">→</span>
 </a>
 

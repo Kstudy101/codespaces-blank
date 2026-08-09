@@ -681,11 +681,15 @@ await acheck("戻り先 URL は設定が空でも既定値で埋まる（空文�
   delete process.env.LINE_ADD_FRIEND_URL;
   try {
     const u = ADD_FRIEND_URL();
-    assert(/^https:\/\/line\.me\//.test(u), `既定値が不正です: ${u}`);
+    /* lin.ee は LINE 公式の短縮。2026-08-09 に既定値をここへ移した ──
+       それまでの line.me/R/ti/p/@kstudy101 は**実際には 404** で、
+       ID の直打ちを取り違えていた（本物は @798oqmjl）。ドメインだけを
+       見るこの検査では 404 は捕まらないので、ID を直打ちに戻さないこと。 */
+    assert(/^https:\/\/(lin\.ee|line\.me)\//.test(u), `既定値が不正です: ${u}`);
   } finally {
     if (saved !== undefined) process.env.LINE_ADD_FRIEND_URL = saved;
   }
-  return "既定 = line.me（プロフィール。友だちなら 1:1 トークが開く）";
+  return "既定 = lin.ee / line.me（友だちなら 1:1 トークが開く）";
 });
 
 check("再開の案内は restart / continue とも 3 行以上（지시서⑧ §2-3）", () => {

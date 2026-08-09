@@ -21,10 +21,14 @@ import { TRIAL_DAYS } from "./repo/billing.mjs";
 
 /* LINE のトークへ戻る先。決済の成功・キャンセル（handlers/checkout.mjs、
    지시서⑧ §1）もここを読む ── 同じ値を別の名前で二度持たない。
-   プロフィール URL だが、既に友だちなら 1:1 トークが開く。既定値を
-   コードに置き、設定が空でも 404 へ落とさない。 */
+   既に友だちなら 1:1 トークが開く。既定値をコードに置き、設定が空でも
+   404 へ落とさない ── ただし**その既定値自体が 404 だった**
+   （2026-08-09）。line.me/R/ti/p/@kstudy101 を直打ちしていたが、実際の
+   ID は @798oqmjl で、この URL はどこからも開けなかった。ID は変わる
+   ので直打ちせず、公式の短縮（lin.ee）を置く。
+   同じ値が index.html のバーにもあり、verify-pages が突き合わせる。 */
 export const ADD_FRIEND_URL = () =>
-  process.env.LINE_ADD_FRIEND_URL || "https://line.me/R/ti/p/@kstudy101";
+  process.env.LINE_ADD_FRIEND_URL || "https://lin.ee/SKZtS5k";
 
 export function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({

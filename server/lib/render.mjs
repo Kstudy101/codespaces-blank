@@ -554,8 +554,8 @@ export function formatQuizReply(quiz, choice, {
     /* 正解のあとに夕方復習への一言（2026-08-09 代表 · plan-quiz-correct-cheer C）. */
     const cheer = [
       "",
-      "今夜の復習まで、のんびりいこう〜🌙",
-      "화이팅! 공부 열심히 해 💕"
+      "今夜また会いましょう！🌙",
+      "오늘 하루도 화이팅! 💕"
     ].join("\n");
     if (checkpointSemester != null) {
       return [

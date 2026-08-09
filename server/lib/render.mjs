@@ -551,10 +551,20 @@ export function formatQuizReply(quiz, choice, {
   checkpointSemester = null
 } = {}) {
   if (passed) {
+    /* 正解のあとに夕方復習への一言（2026-08-09 代表 · plan-quiz-correct-cheer C）. */
+    const cheer = [
+      "",
+      "今夜の復習まで、のんびりいこう〜🌙",
+      "화이팅! 공부 열심히 해 💕"
+    ].join("\n");
     if (checkpointSemester != null) {
-      return `⭕ 正解です！🎉\n第${checkpointSemester}学期の節目クイズ、合格です！`;
+      return [
+        "⭕ よくできました！🎉",
+        `第${checkpointSemester}学期の節目クイズ、合格です！`,
+        cheer
+      ].join("\n");
     }
-    return "⭕ 正解です！🎉";
+    return ["⭕ よくできました！🎉", cheer].join("\n");
   }
   const mark = (i) => CIRCLED[i] || `${Number(i) + 1}`;
   const yours = quiz?.choices?.[choice];

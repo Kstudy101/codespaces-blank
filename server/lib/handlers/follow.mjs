@@ -125,29 +125,28 @@ export async function handleFollow(conn, event,
      同じ人の追加処理が何度も走る。 */
   let welcomed = false;
   if (event?.replyToken) {
-    /* ボードのすぐ後ろに**最初の質問**を続ける ── 案内だけで終わると
-       次の行動が見えない（7-3）。質問そのものは nextStep が導く
-       （PENDING.reading が「サイト名の選択肢が無い人」を拾う。
-       lib/onboarding.mjs）。 */
-    /* ここでボードは送らない（2026-08-09 대표 확정）。友だち追加の瞬間の
-       1 通目は **LINE のあいさつメッセージ**が出す ── LINE 側から出るので、
-       こちらのサーバーが落ちていても、webhook が塞がっていても必ず届く。
-       今日それが両方起きて、入ったのに何も出ない画面ができた。
+    /* 1 通目は welcomeBoard（サーバー）。2026-08-09 に LINE の
+       あいさつメッセージへ移したが、実測で届かない経路が残り §0-★ に
+       なった ── コンソールのトグル一つで全員が沈黙する設計は危ない。
+       正本をサーバーに戻す（plan-follow-greeting-fix）。
 
-       だから両方送ると 2 通並ぶ。ここは次の質問だけにする。
-       ★ LINE 公式アカウントマネージャーのあいさつメッセージに、
-         welcomeBoard() と同じ文面が入っていることが前提。空のまま
-         配置すると、新規の人は説明なしで質問だけを受け取る。
+       ★ LINE Official Account Manager のあいさつメッセージは **オフ**。
+         オンのままだとボードが 2 通並ぶ。
 
-       器を置き直す経路（recoverUser）では今もボードを送る ── すでに
-       友だちの人にあいさつメッセージは二度と出ないため。 */
-    const messages = await onboardingMessages(conn, user, { guide: false });
+       ボードのすぐ後ろに最初の質問を続ける（7-3）。質問は nextStep。 */
+    const messages = [
+      welcomeBoard(),
+      ...(await onboardingMessages(conn, user, { guide: false }))
+    ];
     if (messages.length) {
       try {
         await reply(event.replyToken, messages);
         welcomed = true;
-      } catch {
-        /* 返信できなくても、翌朝の案内で拾える。 */
+      } catch (e) {
+        /* 返信できなくても友だち追加は成立させる。黙殺はしない ──
+           名前の無い人は翌朝の配信対象でもなく、ここで消えると永久に
+           何も届かない（§0-★ / ★-CATCH）。 */
+        console.error(`[follow] reply 失敗 user=${user.id}: ${e?.message || e}`);
       }
     }
   }

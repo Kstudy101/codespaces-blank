@@ -278,6 +278,28 @@ check("id が 1 ページに 2 つ以上ない", () => {
   return "重複なし";
 });
 
+check("サイドメニュー姉妹サイト — 見出し・引き出し・開閉配列の 3 点（지시서㉒ §1-2）", () => {
+  /* 開閉は sideSecs 配列が回している。ボタンだけ足して配列に足し忘れると、
+     見出しは出るのに押しても開かない ── 「押しても何も起きない」は、
+     見た目が完成しているぶん一番気づきにくい壊れ方。3 点を一緒に見る。 */
+  const s = src["index.html"];
+  assert(/id="side-tog-sister"/.test(s), "見出しボタン #side-tog-sister がありません");
+  assert(/id="side-sister"/.test(s), "引き出し #side-sister がありません");
+  assert(/\{ btn: \$\('side-tog-sister'\), list: \$\('side-sister'\) \}/.test(s),
+    "sideSecs 配列に姉妹サイトがありません ── 見出しは出るのに開きません");
+  return "見出し・引き出し・配列";
+});
+
+check("姉妹サイトのリンクは別タブ + rel=noopener（지시서㉒ §1-1）", () => {
+  /* サイトで唯一の外部リンク。noopener が無いと、開いた先から
+     window.opener でこちらのタブを差し替えられる。 */
+  const m = /<a href="https:\/\/sinokubo\.pages\.dev\/"([^>]*)>/.exec(src["index.html"]);
+  assert(m, "sinokubo.pages.dev へのリンクがありません");
+  assert(/target="_blank"/.test(m[1]), "別タブで開きません（ここで離脱させないため）");
+  assert(/rel="[^"]*\bnoopener\b/.test(m[1]), "rel に noopener がありません");
+  return "別タブ・noopener";
+});
+
 check("privacy に性別の文言が無い（지시서⑱ ── 集めない・書かない）", () => {
   /* 性別の収集をやめた。ポリシーに残っていれば「集めていないのに
      集めると書く」逆向きの食い違い ── 4 回踏んだ「방침과 코드의

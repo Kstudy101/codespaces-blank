@@ -101,12 +101,20 @@ done
 #    "kstudy" を含むもの全部を疑う書き方にしていたため、配信サーバーの
 #    URL を書いた時点でビルドが落ちた。別サービスの正当な宛先まで
 #    巻き込むのは、Clarity のときと同じ失敗の繰り返しだった。
+#
+#    現役の外部リンクで pages.dev に載っているものは、ここで名指しして
+#    除外する。姉妹サイト（新大久保グルメガイド）がそれで、移転前の
+#    置き場ではない ── 名指ししないと「旧ホストが残っています」で
+#    配置が止まる。api.kstudy101.jp を書いた時にビルドが落ちたのと同じ形。
+SISTER_HOSTS="sinokubo.pages.dev"
+
 host=$(grep -o 'rel="canonical" href="https://[^/"]*' "$OUT/index.html" | sed 's|.*https://||')
 apex=${host#www.}
 if [ -n "$host" ]; then
   for f in "$OUT"/*.html "$OUT"/sitemap.xml "$OUT"/robots.txt; do
     stale=$(grep -oE 'https://[A-Za-z0-9.-]+' "$f" | sed 's|https://||' | sort -u \
-            | grep -iE "(pages\.dev|github\.io)\$|^${apex}\$" | grep -vx "$host" || true)
+            | grep -iE "(pages\.dev|github\.io)\$|^${apex}\$" | grep -vx "$host" \
+            | grep -vxF "$SISTER_HOSTS" || true)
     if [ -n "$stale" ]; then
       echo "✗ $(basename "$f"): 旧ホストが残っています（正: $host）" >&2
       echo "$stale" | sed 's/^/    /' >&2

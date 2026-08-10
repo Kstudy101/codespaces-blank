@@ -129,9 +129,6 @@ export function loadLines(dir = path.join(SERVER_DIR, "content")) {
   return cached;
 }
 
-/* 検証から呼ぶ。読み込みを差し替えられるようにしておく。 */
-export function resetCache() { cached = undefined; }
-
 
 /* ---- 文にする ------------------------------------------------------
    出す順:

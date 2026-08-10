@@ -77,10 +77,3 @@ export async function countExpired(conn, { now }) {
   return row ? Number(row.n) : 0;
 }
 
-/* 監視用。溜まりはじめたら、認証まで進めていない人が多いということ。 */
-export async function countPending(conn, { now }) {
-  const row = await one(conn,
-    `SELECT COUNT(*) AS n FROM pending_links
-      WHERE consumed_at IS NULL AND expires_at > ?`, [now]);
-  return row ? Number(row.n) : 0;
-}

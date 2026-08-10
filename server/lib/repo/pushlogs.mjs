@@ -206,30 +206,6 @@ export async function listReviewTargets(conn, date = null) {
     .then((rows) => rows.map((r) => ({ ...r, raw_result_json: fromJson(r.raw_result_json) })));
 }
 
-/* その日の集計。P10 の通知が読む。
-   件数だけでなく種類別に出すのは、「朝は出たが夕方が丸ごと
-   落ちた」を合計だけ見ていると読み取れないため。 */
-export async function dailySummary(conn, date = null) {
-  const [from, to] = jstDayRange(date || jstDate());
-  return all(conn,
-    `SELECT push_type, status, COUNT(*) AS n
-       FROM push_logs
-      WHERE sent_at >= ? AND sent_at < ?
-      GROUP BY push_type, status
-      ORDER BY push_type, status`,
-    [from, to]);
-}
-
-export async function listFailures(conn, date = null) {
-  const [from, to] = jstDayRange(date || jstDate());
-  return all(conn,
-    `SELECT id, user_id, day_number, push_type, sent_at, error_msg
-       FROM push_logs
-      WHERE status = 'failed' AND sent_at >= ? AND sent_at < ?
-      ORDER BY sent_at`,
-    [from, to]);
-}
-
 /* 古いログを落とす。溜め続ける理由が無い表なので、
    db/maintain.mjs が日次で呼ぶ（削れるのは 400 日より前だけ）。
    既定を 400 日にしてあるのは、101 日を最後まで走った人の

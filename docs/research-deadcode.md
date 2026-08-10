@@ -297,8 +297,12 @@ LP 전환(`d9b9b33`)으로 index.html 에서 진단 기능이 빠질 때 `CLAUDE
       `verify-onboarding` 의 금지 목록을 §2.3 대로 **파일 전체 검사로 격상**하고,
       함수를 되돌려 넣어 실제로 빨개지는지 확인했다(`askBirth が残っています`).
       onboarding.mjs 519 → 345행. 검증: **관문 19종 통과**.
-- [ ] **5단계 — ② 나머지 8건** : `repo/` 조회 7건 + `resetCache`. **§2.2 대표 판단 후.**
-      `HANDLED_TYPES` 는 §2.0 대로 **제외**(관문이 씀). 검증: 관문 19종.
+- [x] **5단계 — ② 나머지 8건** : **대표 판단 = 삭제**(2026-08-10). `repo/` 조회 7건
+      (`listProgress`·`listTemplates`·`listCheckpoints`·`dailySummary`·`listFailures`·
+      `countPending`·`findByPaymentRef`) + `resetCache` 제거.
+      헬퍼(`one`·`all`·`jstDayRange`·`shapeTemplate`…)와 import 는 전부 다른 사용처가
+      남아 고아가 생기지 않았음을 확인. `HANDLED_TYPES` 는 §2.0 대로 **유지**.
+      검증: **관문 19종 통과**, 죽은 export 잔량 0(오탐 `HANDLED_TYPES` 제외).
 - [ ] **6단계 — ④ 거대 함수** : 착수 전 `docs/plan-refactor-handlers.md` 작성·승인.
       `deliverOne` 은 §4.1 경고를 계획서에 그대로 옮길 것.
 - [ ] **7단계 — ⑤ 배송 중복** : 착수 전 `docs/plan-refactor-push.md` 작성·승인.

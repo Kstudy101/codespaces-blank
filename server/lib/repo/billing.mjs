@@ -175,12 +175,6 @@ export async function hasPurchases(conn, userId) {
   return row !== null;
 }
 
-export async function findByPaymentRef(conn, paymentRef) {
-  return one(conn,
-    `SELECT id, user_id, track, package_type, days_granted, price_paid, purchased_at
-       FROM purchases WHERE payment_ref = ?`, [paymentRef]);
-}
-
 
 /* ---- 合計の突き合わせ ----------------------------------------------
    course_entitlements.days_entitled は

@@ -86,16 +86,6 @@ export async function getProgress(conn, userId, track) {
   return { ...row, quiz_pass_log: fromJson(row.quiz_pass_log) };
 }
 
-/* その人が持っている進み全部。「初級は終わった、中級は 12 日目」を
-   一度に出すのに使う。 */
-export async function listProgress(conn, userId) {
-  const rows = await all(conn,
-    `SELECT track, current_day, days_used, current_semester, last_sent_at
-       FROM learning_progress WHERE user_id = ?
-      ORDER BY FIELD(track, 'beginner','intermediate','advanced')`, [userId]);
-  return rows;
-}
-
 /* 0 日目の行を用意する。既にあれば触らない ── 上書きする形にすると、
    買い直しただけで進みが 0 に戻り、受け取った日が二度と来なくなる。
 
@@ -299,22 +289,6 @@ export async function getTemplate(conn, track, dayNumber) {
       WHERE track = ? AND day_number = ?`, [track, dayNumber]));
 }
 
-export async function listTemplates(conn, { track = null, semester = null } = {}) {
-  const where = [], args = [];
-  if (track !== null) {
-    if (!isTrack(track)) throw new Error(`未知の track: ${track}`);
-    where.push("track = ?"); args.push(track);
-  }
-  if (semester !== null) { where.push("semester = ?"); args.push(semester); }
-
-  const rows = await all(conn,
-    `SELECT day_number, track, semester, grammar_point, requires_name_slot
-       FROM content_templates
-       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
-      ORDER BY track, day_number`, args);
-  return rows.map(shapeTemplate);
-}
-
 /* 運営者の入力画面（P9）から呼ぶ。semester は渡さない ──
    day_number から一意に決まるものを人が入れられるようにすると、
    30 日目なのに 2 学期、のような組み合わせが入りうる。 */
@@ -444,10 +418,6 @@ export async function findMissingTemplateDays(conn, track = null) {
 /* ---- 節目 ---------------------------------------------------------
    30 / 50 / 75 日目。ここに載っている日は、朝の学習配信の「あとに」
    クイズを足す日であって、学習配信を置き換える日ではない。 */
-
-export async function listCheckpoints(conn) {
-  return all(conn, `SELECT day_number, semester FROM quiz_checkpoints ORDER BY day_number`);
-}
 
 export async function isCheckpoint(conn, dayNumber) {
   const row = await one(conn,

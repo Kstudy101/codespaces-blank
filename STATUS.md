@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-10 (LP 피벗 구현 완료 — [plan-lp-line-daily](docs/plan-lp-line-daily.md) · 관문 19 PASS · **배포 대기**)
+최종 갱신: 2026-08-10 (1주차 원고 입고 — [plan-content-weekly](docs/plan-content-weekly.md) §5)
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -8,6 +8,17 @@
 ---
 
 ## 0. 30초 요약
+
+### §0-◆◆◆ 주간 코스 1주차 + 초급 실전 톤 — **입고**（2026-08-10）
+
+| | |
+|---|---|
+| 1~7일 | 마이크로 포맷 💡📌💬🎯 / 🎬 / ❓ / ☕ |
+| 1~101일 | 대화 **실전 톤 전면 개필**（필러 `네,X 좋아요` / `아,정말 X 그렇네요` 제거） |
+| 정본 | `server/content/_days-data.json` → `_build-beginner.mjs` |
+| 검사 | beginner 101일 `content-check` 0건 |
+| 저녁 | **기존 `push-evening` 그대로** |
+| 다음 | 서버 seed 배포 · 2주째~ 마이크로 주간 포맷 확장 |
 
 ### §0-◆◆ 사업 피벗 LP — **구현 완료 · 배포 대기**（2026-08-10）
 

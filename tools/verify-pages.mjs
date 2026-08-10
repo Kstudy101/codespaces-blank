@@ -278,47 +278,12 @@ check("id が 1 ページに 2 つ以上ない", () => {
   return "重複なし";
 });
 
-check("サイドメニュー関連サイト — 見出し・引き出し・開閉配列の 3 点（지시서㉒ §1-2）", () => {
-  /* 開閉は sideSecs 配列が回している。ボタンだけ足して配列に足し忘れると、
-     見出しは出るのに押しても開かない ── 「押しても何も起きない」は、
-     見た目が完成しているぶん一番気づきにくい壊れ方。3 点を一緒に見る。 */
-  const s = src["index.html"];
-  assert(/id="side-tog-related"/.test(s), "見出しボタン #side-tog-related がありません");
-  assert(/id="side-related"/.test(s), "引き出し #side-related がありません");
-  assert(/\{ btn: \$\('side-tog-related'\), list: \$\('side-related'\) \}/.test(s),
-    "sideSecs 配列に関連サイトがありません ── 見出しは出るのに開きません");
-  return "見出し・引き出し・配列";
-});
-
-check("関連サイトは詳細窓を挟む — 引き出しから直に外へ出さない（代表指示 2026-08-09）", () => {
-  /* 引き出しの中に外部リンクを戻すと、詳細を読ませてから出すという
-     構造そのものが消える。見た目は同じように動くので、並べないと
-     気づけない ── ここで固定する。 */
-  const m = /<nav class="side-list" id="side-related"[^>]*>([\s\S]*?)<\/nav>/.exec(src["index.html"]);
-  assert(m, "引き出し #side-related がありません");
-  assert(!/href="https?:/.test(m[1]),
-    "引き出しの中に外部リンクが直に置かれています ── 詳細窓を挟む構造が崩れています");
-  assert(/id="rel-open-sinokubo"/.test(m[1]), "詳細窓を開くボタンがありません");
-  assert(/新大久保グルメ/.test(m[1]), "表示名「新大久保グルメ」がありません");
-  return "名前だけ → 詳細窓";
-});
-
-check("詳細窓に URL と説明があり、別タブ + rel=noopener で開く", () => {
-  /* サイトで唯一の外部リンク。noopener が無いと、開いた先から
-     window.opener でこちらのタブを差し替えられる。 */
-  const s = src["index.html"];
-  const dlg = /<dialog[^>]*id="rel-dlg"[\s\S]*?<\/dialog>/.exec(s);
-  assert(dlg, "詳細窓 #rel-dlg がありません");
-  const m = /<a[^>]*href="https:\/\/sinokubo\.pages\.dev\/"([^>]*)>/.exec(dlg[0]);
-  assert(m, "詳細窓に URL がありません");
-  assert(/target="_blank"/.test(m[1]), "別タブで開きません（ここで離脱させないため）");
-  assert(/rel="[^"]*\bnoopener\b/.test(m[1]), "rel に noopener がありません");
-  assert(/新大久保の韓国グルメを「本場度」で選ぶ/.test(dlg[0]), "説明文がありません");
-  /* Esc を両方が拾うと、詳細窓と一緒にメニューまで閉じる。 */
-  assert(/!relDlg\.open && side\.classList\.contains\('on'\)/.test(s),
-    "Esc が詳細窓とメニューを同時に閉じます");
-  return "URL・説明・別タブ・noopener・Esc";
-});
+/* サイドメニュー（ハンバーガー・引き出し・関連サイトの詳細窓）は
+   2026-08-10 に代表指示で撤去した。それを固定していた関門 3 種
+   ── 見出し・引き出し・開閉配列 / 引き出しから直に外へ出さない /
+   詳細窓の別タブ・noopener ── も一緒に消している。撤去した構造を
+   関門だけ残すと、LP の唯一の壊れ方が「関門が赤い」になってしまう。
+   関連サイトを戻すときは、この 3 種も一緒に戻すこと。 */
 
 check("LINE 直行バーは 1 本だけ・別タブ・rel=noopener（지시서㉓ §1）", () => {
   /* 2 本あると、押した人がどちらから来たのか GA4 で分けられない。

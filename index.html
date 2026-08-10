@@ -58,55 +58,6 @@ body{
 a{color:var(--accent)}
 .wrap{max-width:980px; margin:0 auto; padding:0 20px 120px}
 
-/* nav */
-.nav-open{
-  position:fixed; top:14px; left:14px; z-index:40;
-  display:inline-flex; align-items:center; gap:6px;
-  padding:10px 14px; border-radius:999px; border:1px solid var(--line);
-  background:rgba(255,255,255,.92); backdrop-filter:blur(8px);
-  font:inherit; font-weight:700; font-size:.88rem; color:var(--text); cursor:pointer;
-}
-.nav-open:focus-visible{outline:2px solid var(--line-green); outline-offset:2px}
-.nav-scrim{position:fixed; inset:0; background:rgba(20,30,26,.35); z-index:50; opacity:0; pointer-events:none; transition:opacity .2s}
-.nav-scrim.on{opacity:1; pointer-events:auto}
-.side{
-  position:fixed; top:0; left:0; bottom:0; width:min(320px,88vw); z-index:60;
-  background:var(--surface); border-right:1px solid var(--line);
-  transform:translateX(-105%); transition:transform .22s ease; padding:16px;
-  overflow:auto;
-}
-.side.on{transform:none}
-.side-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px}
-.side-head b{font-size:1rem}
-.side-head small{margin-left:6px; color:var(--text-dim); font-weight:500}
-.side-close{
-  border:1px solid var(--line); background:transparent; border-radius:8px;
-  width:36px; height:36px; cursor:pointer; font-size:1rem;
-}
-.side-ttl{
-  width:100%; text-align:left; margin:10px 0 4px; padding:10px 12px;
-  border:1px solid var(--line); border-radius:10px; background:var(--surface-2);
-  font:inherit; font-weight:700; cursor:pointer;
-}
-.side-ttl small{margin-left:6px; color:var(--text-dim); font-weight:500}
-.side-list{display:flex; flex-direction:column; gap:2px; margin:0 0 8px; padding:4px}
-.side-list[hidden]{display:none !important}
-.side-list a,.side-list button{
-  display:block; width:100%; text-align:left; padding:10px 12px; border:0; border-radius:8px;
-  background:transparent; color:var(--text); text-decoration:none; font:inherit; cursor:pointer;
-}
-.side-list a:hover,.side-list button:hover{background:var(--accent-soft); color:var(--accent)}
-.rel-dlg{
-  border:1px solid var(--line); border-radius:16px; padding:22px; max-width:420px;
-  box-shadow:var(--shadow);
-}
-.rel-dlg::backdrop{background:rgba(20,30,26,.4)}
-.rel-dlg-url{display:block; margin:10px 0 16px; word-break:break-all; color:var(--accent); font-weight:700}
-.rel-dlg-close{
-  border:1px solid var(--line); background:var(--surface-2); border-radius:10px;
-  padding:10px 16px; font:inherit; font-weight:700; cursor:pointer;
-}
-
 /* hero */
 .hero{
   display:grid; gap:28px; padding:72px 0 40px;
@@ -154,9 +105,9 @@ section{padding:48px 0 8px}
 section h2{margin:0 0 10px; font-size:clamp(1.35rem, 3vw, 1.75rem); line-height:1.4}
 .sec-lead{margin:0 0 22px; color:var(--text-dim)}
 
-.pain-grid,.feat-list,.price-list,.fit-list{display:grid; gap:12px}
+.pain-grid,.feat-list,.fit-list{display:grid; gap:12px}
 @media(min-width:760px){.pain-grid{grid-template-columns:repeat(3,1fr)}}
-.pain-item,.feat-item,.price-item{
+.pain-item,.feat-item{
   background:rgba(255,255,255,.72); border:1px solid var(--line); border-radius:var(--radius);
   padding:18px 16px;
 }
@@ -181,15 +132,6 @@ section h2{margin:0 0 10px; font-size:clamp(1.35rem, 3vw, 1.75rem); line-height:
   content:"✓"; position:absolute; left:14px; top:12px; width:22px; height:22px;
   border-radius:6px; background:var(--accent-soft); color:var(--accent);
   display:grid; place-items:center; font-weight:800; font-size:.85rem;
-}
-
-.price-free{border-color:var(--line-green); box-shadow:0 0 0 1px rgba(6,199,85,.25)}
-.price-item .lab{font-weight:800}
-.price-item .yen{font-size:1.35rem; font-weight:800; margin:4px 0}
-.price-item .off{color:var(--accent); font-size:.85rem; font-weight:700}
-.price-item .was{color:var(--text-dim); font-size:.82rem; text-decoration:line-through; margin-left:6px}
-@media(min-width:760px){
-  .price-list{grid-template-columns:repeat(5,1fr)}
 }
 
 .faq details{
@@ -236,44 +178,6 @@ footer a{font-weight:700; text-decoration:none}
 </head>
 <body>
 
-<button class="nav-open" id="nav-open" aria-expanded="false" aria-controls="side">
-  <span aria-hidden="true">☰</span>メニュー
-</button>
-<div class="nav-scrim" id="nav-scrim"></div>
-
-<aside class="side" id="side" aria-label="サイドバー">
-  <div class="side-head">
-    <b>メニュー<small>메뉴</small></b>
-    <button class="side-close" id="nav-close" aria-label="メニューを閉じる">✕</button>
-  </div>
-
-  <button class="side-ttl" type="button" id="side-tog-pages"
-          aria-expanded="false" aria-controls="side-pages">コンテンツ<small>콘텐츠</small></button>
-  <nav class="side-list" id="side-pages" aria-label="サイト内リンク" hidden>
-    <a href="#hero">🏠 トップ</a>
-    <a href="#price">💴 料金</a>
-    <a href="#faq">❓ FAQ</a>
-    <a href="/omikuji">🎋 おみくじ</a>
-    <a href="/gilbang">🧭 今日の吉方位</a>
-    <a href="/amulet">🪄 お守り</a>
-    <a href="/words">📗 単語帳</a>
-    <a href="/tips">💡 韓国語の豆知識</a>
-  </nav>
-
-  <button class="side-ttl" type="button" id="side-tog-related"
-          aria-expanded="false" aria-controls="side-related">関連サイト<small>관련사이트</small></button>
-  <nav class="side-list" id="side-related" aria-label="関連サイト" hidden>
-    <button type="button" id="rel-open-sinokubo">📍 新大久保グルメ</button>
-  </nav>
-</aside>
-
-<dialog class="rel-dlg" id="rel-dlg" aria-labelledby="rel-dlg-ttl">
-  <h2 id="rel-dlg-ttl">新大久保グルメ-準備中...</h2>
-  <p class="rel-dlg-desc">新大久保の韓国グルメを「本場度」で選ぶ、店ガイド。韓国語を学んだら、次は本場の味へ。</p>
-  <a class="rel-dlg-url" href="https://sinokubo.pages.dev/" target="_blank" rel="noopener">https://sinokubo.pages.dev/</a>
-  <button type="button" class="rel-dlg-close" id="rel-dlg-close">閉じる</button>
-</dialog>
-
 <div class="wrap">
 
 <header class="hero" id="hero">
@@ -283,12 +187,11 @@ footer a{font-weight:700; text-decoration:none}
     <h1>勉強しなくていい。<br>開くだけでいい。<br>LINEの1分韓国語。</h1>
     <p class="lede">アプリ不要。教科書不要。<br>毎日見ているLINEに、朝1分の韓国語が届きます。</p>
     <!-- .linebar クラス名は verify-pages（友だち追加URL・計測）が参照。見た目は .cta -->
-    <a class="linebar" href="https://lin.ee/SKZtS5k"
-       target="_blank" rel="noopener"
+<a class="linebar" href="https://lin.ee/SKZtS5k"
+   target="_blank" rel="noopener"
        onclick="gtag('event','line_banner_click',{location:'hero_cta'})">
       🟢 LINEで7日無料体験をはじめる
     </a>
-    <p class="note">まずは7日間、無料でお試し。友だち追加だけですぐスタート／いつでもブロックで停止できます</p>
   </div>
   <div class="mock" aria-hidden="true">
     <div class="mock-screen">
@@ -297,7 +200,7 @@ footer a{font-weight:700; text-decoration:none}
         <div class="bubble"><time>07:00</time>☀️ おはようございます！今日の1分韓国語です</div>
         <div class="bubble"><time>07:00</time>📘 今日のポイント：「〜해요」丁寧な話し方</div>
         <div class="bubble"><time>07:00</time>💬 「コーヒー一つお願いします」→ 커피 하나 주세요</div>
-      </div>
+    </div>
     </div>
   </div>
 </header>
@@ -317,7 +220,7 @@ footer a{font-weight:700; text-decoration:none}
     <div class="pain-item">
       <h3>ひとりだと、続かない</h3>
       <p>誰からも催促されない独学は、三日目に静かに終わりがちです。</p>
-    </div>
+  </div>
   </div>
 </section>
 
@@ -329,7 +232,7 @@ footer a{font-weight:700; text-decoration:none}
       <span class="n">01</span>
       <h3>1日1分のマイクロラーニング</h3>
       <p>その日に覚えることは、コアひとつだけ。詰め込みません。短く、はっきり、残ります。</p>
-    </div>
+</div>
     <div class="feat-item">
       <span class="n">02</span>
       <h3>朝レッスン × 夜クイズの2ステップ</h3>
@@ -339,8 +242,8 @@ footer a{font-weight:700; text-decoration:none}
       <span class="n">03</span>
       <h3>本物のトークみたいな会話文</h3>
       <p>教科書の棒読みではなく、LINEやカカオで使いそうな自然な言い回しで届けます。</p>
+      </div>
     </div>
-  </div>
 </section>
 
 <section id="week">
@@ -351,12 +254,12 @@ footer a{font-weight:700; text-decoration:none}
     <div class="week-row"><b>金</b><span>トーク室っぽい実戦会話 — メッセンジャー感覚で使える言い回し</span></div>
     <div class="week-row"><b>土</b><span>3秒で解けるLINEクイズ — タップするだけのインタラクティブ復習</span></div>
     <div class="week-row"><b>日</b><span>完走のお祝い＆リフレッシュ — がんばりすぎない回復日</span></div>
-  </div>
+    </div>
   <p style="margin-top:18px">
     <a class="cta" href="https://lin.ee/SKZtS5k" target="_blank" rel="noopener"
        onclick="gtag('event','line_banner_click',{location:'week_cta'})">🟢 まずは1週、無料で試す</a>
   </p>
-</section>
+    </section>
 
 <section id="fit">
   <h2>こんな方におすすめです</h2>
@@ -365,44 +268,12 @@ footer a{font-weight:700; text-decoration:none}
     <li>韓国旅行で、カフェの注文を自信を持ってしたい</li>
     <li>「勉強する時間がない」が口癖で、いつも三日で終わってしまう</li>
     <li>新しいアプリを増やすのは、もうこりごり</li>
-  </ul>
+          </ul>
   <p class="sec-lead" style="margin-top:16px">ひとつでも当てはまったら、向いています。まずは7日、朝のLINEを受け取ってみてください。</p>
 </section>
 
-<section id="price">
-  <h2>料金</h2>
-  <p class="sec-lead">まずは7日無料。そのあとは、1〜4週間から選べます。まとめるほど、ちょっとお得。</p>
-  <div class="price-list">
-    <div class="price-item price-free">
-      <div class="lab">7日間無料体験</div>
-      <div class="yen">¥0</div>
-      <div>友だち追加だけ</div>
-    </div>
-    <div class="price-item">
-      <div class="lab">1週間</div>
-      <div class="yen">¥500</div>
-    </div>
-    <div class="price-item">
-      <div class="lab">2週間</div>
-      <div class="yen">¥970</div>
-      <div class="off">3%OFF <span class="was">¥1,000</span></div>
-    </div>
-    <div class="price-item">
-      <div class="lab">3週間</div>
-      <div class="yen">¥1,410</div>
-      <div class="off">6%OFF <span class="was">¥1,500</span></div>
-    </div>
-    <div class="price-item">
-      <div class="lab">4週間</div>
-      <div class="yen">¥1,800</div>
-      <div class="off">10%OFF <span class="was">¥2,000</span></div>
-    </div>
-  </div>
-  <p class="note">自動で課金されません。必要なときだけ追加購入です。表示価格は税込。詳細は<a href="/tokushoho">特定商取引法に基づく表記</a>をご覧ください。</p>
-</section>
-
 <section id="faq" class="faq">
-  <h2>よくある質問</h2>
+    <h2>よくある質問</h2>
   <details>
     <summary>本当に、別のアプリを入れなくても大丈夫？</summary>
     <p class="ans">はい。LINEの友だち追加だけで始められます。学習用アプリのインストールは不要です。</p>
@@ -441,6 +312,15 @@ footer a{font-weight:700; text-decoration:none}
 
 <footer>
   <p><b>Kstudy101</b> — LINEで学ぶ 1日1分 簡単韓国語</p>
+  <!-- サイドメニュー撤去後、下層ページへの唯一の導線。
+       verify-amulet「トップから부적への導線がある」がここを見ている。 -->
+  <p class="foot-meta">
+    <a href="/omikuji">おみくじ</a>・
+    <a href="/gilbang">今日の吉方位</a>・
+    <a href="/amulet">お守り</a>・
+    <a href="/words">単語帳</a>・
+    <a href="/tips">韓国語の豆知識</a>
+  </p>
   <p class="foot-meta">
     <a href="/privacy">プライバシーポリシー</a>・
     <a href="/tokushoho">特定商取引法に基づく表記</a>・
@@ -459,49 +339,6 @@ footer a{font-weight:700; text-decoration:none}
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
-const side = $('side'), scrim = $('nav-scrim'), navOpen = $('nav-open');
-const relDlg = $('rel-dlg');
-
-function openSide(){
-  side.classList.add('on');
-  scrim.classList.add('on');
-  navOpen.setAttribute('aria-expanded', 'true');
-  document.body.style.overflow = 'hidden';
-  $('nav-close').focus();
-}
-function closeSide(){
-  side.classList.remove('on');
-  scrim.classList.remove('on');
-  navOpen.setAttribute('aria-expanded', 'false');
-  document.body.style.overflow = '';
-  navOpen.focus();
-}
-navOpen.addEventListener('click', () => side.classList.contains('on') ? closeSide() : openSide());
-$('nav-close').addEventListener('click', closeSide);
-scrim.addEventListener('click', closeSide);
-
-const sideSecs = [
-  { btn: $('side-tog-pages'), list: $('side-pages') },
-  { btn: $('side-tog-related'), list: $('side-related') },
-];
-for (const { btn, list } of sideSecs) {
-  btn.addEventListener('click', () => {
-    const open = list.hidden;
-    list.hidden = !open;
-    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-  });
-}
-
-$('rel-open-sinokubo').addEventListener('click', () => {
-  if (typeof relDlg.showModal === 'function') relDlg.showModal();
-});
-$('rel-dlg-close').addEventListener('click', () => relDlg.close());
-
-document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  if (relDlg.open) return;
-  if (!relDlg.open && side.classList.contains('on')) closeSide();
-});
 
 const sticky = $('sticky-cta');
 const final = $('final');

@@ -40,7 +40,7 @@ const TOTAL_DAYS = 101;
 
    섹션 헤더 이모지는 코드（render.mjs）소유 ── 원고에 있으면 거부.
    303일 × 헤더 복제를 원천 차단한다（§1-1）. */
-const HEADER_EMOJI = /[📘🔗💡💬📚❓🍀]/u;
+const HEADER_EMOJI = /[📘🔗💡💬📚❓🍀📌🎯🎬☕📱]/u;
 
 /* bridge 의 운세 단정（§0-7）. 지시서의 3문자열（運がよ·운이 좋·
    運勢がよ）에 한자 「良」 표기와 「운세가 좋」을 더했다 ── 같은
@@ -157,17 +157,34 @@ export function checkDay(d, seen = new Set()) {
   seen.add(key);
 
   /* 신·구 판정（§2 ── render.mjs 와 같은 한 문장）. 신양식이면
-     7규칙 전부, 구양식이면 기존 규칙만. */
+     7규칙 전부, 구양식이면 기존 규칙만. 마이크로는 tip 形/使/落 완화. */
   const isNew = isNewFormat(d);
+  const isMicro = !!(d.hook && d.formula && d.mission);
 
   if (!d.grammar_point) at("grammar_point がありません");
-  if (!d.grammar_tip_kr) at("grammar_tip_kr がありません");
+  if (!isMicro && !d.grammar_tip_kr) at("grammar_tip_kr がありません");
 
-  /* --- 규칙 1: tip 은 形/使/落 3행 정형（신양식） ---
-     분해는 렌더러（parseTip）와 같은 함수로 본다 ── 여기서 통과한
-     원고가 화면에서 분해되지 않는 일이 없도록. */
-  if (isNew && d.grammar_tip_kr && !parseTip(String(d.grammar_tip_kr))) {
+  /* --- 규칙 1: tip 은 形/使/落 3행 정형（신양식·비마이크로） ---
+     마이크로는 hook/formula/mission 이 본문. tip 은 저녁용으로 임의. */
+  if (isNew && !isMicro && d.grammar_tip_kr && !parseTip(String(d.grammar_tip_kr))) {
     at("신양식: grammar_tip_kr 은 形・使・落 3행 정형이어야 합니다");
+  }
+
+  if (isMicro) {
+    if (typeof d.hook !== "string" || !d.hook.trim()) at("마이크로: hook がありません");
+    if (typeof d.formula !== "string" || !d.formula.trim()) at("마이크로: formula がありません");
+    if (typeof d.mission !== "string" || !d.mission.trim()) at("마이크로: mission がありません");
+    for (const [name, s] of [["hook", d.hook], ["hook_body", d.hook_body],
+      ["formula", d.formula], ["mission", d.mission]]) {
+      if (s == null || s === "") continue;
+      if (HEADER_EMOJI.test(String(s))) {
+        at(`마이크로: ${name} 에 섹션 헤더 이모지가 들어 있습니다 ── 헤더는 코드 소유입니다`);
+      }
+    }
+    /* formula 는 전원 동일 문면 — 差し込み口 금지 */
+    if (ANY_BRACE.test(String(d.formula))) {
+      at("마이크로: formula に差し込み口は使えません");
+    }
   }
 
   /* --- 説明に差し込み口は使えない（2026-08-07 대표 승인）--------------
@@ -187,14 +204,24 @@ export function checkDay(d, seen = new Set()) {
 
   /* --- 会話 --- */
   const dia = d.dialogue_template;
-  /* 규칙 2: 4행 드라마 고정（2026-08-09 Day2 검수 · 회화 완결）.
-     행 수가 틀려도 아래 행별 검사는 그대로 돌린다. */
-  if (isNew && Array.isArray(dia) && dia.length !== 4) {
+  /* 규칙 2: 비마이크로 신양식은 4행. 마이크로는 2~4행（샘플 톡 2행）.
+     쉼일（refresh）은 대화 생략 가능. */
+  const kind = d.day_kind || (isMicro
+    ? (((Number(d.day_number) - 1) % 7) + 1 <= 4 ? "grammar"
+      : ((Number(d.day_number) - 1) % 7) + 1 === 5 ? "talk"
+      : ((Number(d.day_number) - 1) % 7) + 1 === 6 ? "quiz" : "refresh")
+    : "grammar");
+  if (isNew && !isMicro && Array.isArray(dia) && dia.length !== 4) {
     at(`신양식: 대화는 정확히 4행입니다（지금 ${dia.length}행）`);
   }
-  if (!Array.isArray(dia) || dia.length < 2) {
+  if (isMicro && kind !== "refresh" && kind !== "quiz") {
+    if (!Array.isArray(dia) || dia.length < 2 || dia.length > 4) {
+      at(`마이크로: 대화는 2〜4행입니다（지금 ${Array.isArray(dia) ? dia.length : "配列でない"}）`);
+    }
+  }
+  if (kind !== "refresh" && kind !== "quiz" && (!Array.isArray(dia) || dia.length < 2)) {
     at("dialogue_template は 2 文以上の配列にしてください");
-  } else {
+  } else if (Array.isArray(dia)) {
     dia.forEach((row, i) => {
       const where = `会話 ${i + 1} 行目`;
       if (!row?.kr) return at(`${where}: kr がありません`);
@@ -260,8 +287,10 @@ export function checkDay(d, seen = new Set()) {
      tip に書いた日が「欄が違う」と「申告が違う」の 2 つで落ちて、
      直す所がぼやける。本文（kr / ja）だけを見る。 */
   const bodyOnly = Array.isArray(dia)
-    ? dia.map((r) => [r?.kr, r?.ja]) : [];
-  const usesName = JSON.stringify(bodyOnly).includes("{NAME");
+    ? dia.map((r) => [r?.kr, r?.ja, r?.who]) : [];
+  const microText = [d.hook, d.hook_body, d.mission].filter((x) => x != null && x !== "");
+  const usesName = JSON.stringify(bodyOnly).includes("{NAME")
+    || JSON.stringify(microText).includes("{NAME");
   const declared = !!d.requires_name_slot;
   if (usesName && !declared) {
     at("名前を使っているのに requires_name_slot が false です");
@@ -305,10 +334,11 @@ export function checkDay(d, seen = new Set()) {
      answer の範囲外は「入ってしまうと直しにくい」の典型 ──
      配信側（pickReviewQuiz）は壊れた原稿を黙って抜くので、
      入稿時に止めないと「なぜかこの日だけクイズが出ない」になる。 */
+  /* 규칙 4: 신양식 퀴즈 — 문법·퀴즈일은 필수. 톡·쉼은 생략 가능
+     （마이크로 포맷. 저녁은 push-evening 이 별도）. */
   const qz = d.quiz;
-  /* 규칙 4（§0-5）: 신양식은 퀴즈 매일 필수 ── 없으면 그날만 ❓가
-     비고, 받는 쪽은 「이 코스는 원래 이런가」로 읽는다. */
-  if (isNew && (qz === undefined || qz === null)) {
+  const quizRequired = isNew && kind !== "refresh" && kind !== "talk";
+  if (quizRequired && (qz === undefined || qz === null)) {
     at("신양식: quiz 는 필수입니다（매일 1문）");
   }
   if (qz !== undefined && qz !== null) {
@@ -345,6 +375,10 @@ export function checkDay(d, seen = new Set()) {
     const spots = [
       ["grammar_point", d.grammar_point],
       ["grammar_tip_kr", d.grammar_tip_kr],
+      ["hook", d.hook],
+      ["hook_body", d.hook_body],
+      ["formula", d.formula],
+      ["mission", d.mission],
       ["dialogue_template", Array.isArray(dia) ? JSON.stringify(dia) : null],
       ["vocab_3", Array.isArray(voc) ? JSON.stringify(voc) : null],
       ["quiz", qz ? JSON.stringify(qz) : null],
@@ -352,7 +386,7 @@ export function checkDay(d, seen = new Set()) {
     ];
     for (const [name, s] of spots) {
       if (s && HEADER_EMOJI.test(String(s))) {
-        at(`신양식: ${name} 에 섹션 헤더 이모지（📘🔗💡💬📚❓🍀）가 들어 있습니다 ── 헤더는 코드 소유입니다`);
+        at(`신양식: ${name} 에 섹션 헤더 이모지（📘🔗💡📌💬🎯🎬❓☕📚🍀📱）가 들어 있습니다 ── 헤더는 코드 소유입니다`);
       }
     }
   }

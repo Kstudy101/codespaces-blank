@@ -698,6 +698,45 @@ check("신양식 → 섹션 헤더 7종이 코드가 붙인 것으로 출력에 
   return "📘🔗💡💬📚❓🍀 전부 코드 소유";
 });
 
+check("마이크로 포맷 → 💡📌💬🎯（📘 Day N 없음）", () => {
+  const MICRO = {
+    day_number: 1,
+    grammar_point: "-입니다（〜です）",
+    hook: "初対面でつまずく言い方！",
+    hook_body: "「-입니다」だけ覚えればOK。",
+    formula: "名詞 ＋ 입니다",
+    mission: "声に出して3回！",
+    requires_name_slot: false,
+    dialogue_template: [
+      { who: "A", kr: "한국인입니까?", ja: "韓国人ですか？" },
+      { who: "B", kr: "아니요, 일본인입니다.", ja: "いいえ、日本人です。" }
+    ],
+    vocab_3: [
+      { kr: "학생", meaning: "学生", pos: "名詞" },
+      { kr: "친구", meaning: "友だち", pos: "名詞" },
+      { kr: "좋다", meaning: "いい", pos: "形容詞" },
+      { kr: "바쁘다", meaning: "忙しい", pos: "形容詞" },
+      { kr: "가다", meaning: "行く", pos: "動詞" },
+      { kr: "오다", meaning: "来る", pos: "動詞" }
+    ],
+    quiz: { question: "改まった自己紹介は？", choices: ["학생이에요", "학생입니다"], answer: 1 },
+    fortune_bridge: { kr: "한 줄.", ja: "一行。" }
+  };
+  const raw = JSON.stringify(MICRO);
+  for (const h of ["💡", "📌", "💬", "🎯", "📘"]) {
+    assert(!raw.includes(h), `픽스처에 ${h}`);
+  }
+  const m = renderDay(MICRO, KEN);
+  assert(m[0].text.startsWith("💡 "), m[0].text.split("\n")[0]);
+  assert(m[0].text.includes("📌 核心公式"), "📌");
+  assert(m[0].text.includes("💬 実戦会話"), "💬");
+  assert(m[0].text.includes("🎯 5秒ミッション"), "🎯");
+  assert(!m[0].text.includes("📘 Day"), "📘 가 남았습니다");
+  assert(m.some((x) => x.text.includes("📚 今日の単語")), "📚");
+  assert(m[m.length - 1].quickReply, "문법일 ❓ quickReply");
+  return "마이크로 1통=💡📌💬🎯";
+});
+
 check("신양식 → 3통（1·2통 + ❓ 꼬리통）・tip 은 形/使/落로 분해", () => {
   const m = renderDay(NEWFMT, KEN);
   assert(m.length === 3, `${m.length} 통`);

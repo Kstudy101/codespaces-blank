@@ -147,15 +147,40 @@ export function fillSlots(text, user = {}) {
 }
 
 /* ---- 신양식（지시서㉑）의 부품 --------------------------------------
-   섹션 헤더（📘🔗💡💬📚❓🍀）는 전부 이 파일이 소유한다. 원고 JSON 에
-   넣으면 입고 검사（content-check §2-5）가 거부한다 ── 303일 × 헤더
-   복제를 원천 차단하기 위해서다.
+   섹션 헤더는 전부 이 파일이 소유한다. 원고 JSON 에 넣으면 입고 검사가
+   거부한다 ── 일자 × 헤더 복제를 원천 차단하기 위해서다.
+
+   · 구 신양식（📘）: 📘🔗💡💬📚❓🍀
+   · 마이크로（plan-content-weekly §5-0）: 💡📌💬🎯🎬❓☕ + 📚🍀
 
    신양식 판정은 §2 와 한 문장: vocab_3 항목에 pos 가 하나라도 있으면
    신양식. 판정을 두 군데에 두면 렌더러와 입고 검사가 다른 답을 낸다. */
 export function isNewFormat(template) {
   const v = Array.isArray(template?.vocab_3) ? template.vocab_3 : [];
   return v.some((w) => w && w.pos);
+}
+
+/* 마이크로 포맷: hook·formula·mission 이 있으면 1메시지 템플릿
+   （💡📌💬🎯）. 없으면 구 신양식（📘 Day N）경로. */
+export function isMicroFormat(template) {
+  return !!(template && template.hook && template.formula && template.mission);
+}
+
+/* 주내 위치 1~7（달력 요일 아님 — plan-content-weekly §3）. */
+export function weekSlot(dayNumber) {
+  const d = Number(dayNumber);
+  if (!Number.isFinite(d) || d < 1) return 0;
+  return ((d - 1) % 7) + 1;
+}
+
+export function dayKindOf(template) {
+  if (template?.day_kind) return String(template.day_kind);
+  if (!isMicroFormat(template)) return "grammar";
+  const s = weekSlot(template.day_number);
+  if (s <= 4) return "grammar";
+  if (s === 5) return "talk";
+  if (s === 6) return "quiz";
+  return "refresh";
 }
 
 /* pos 의 값이자 표시 순서. 원고는 이 세 값만 쓸 수 있고（content-check）,
@@ -204,42 +229,196 @@ export function usableQuiz(q) {
   return q;
 }
 
-/* ---- 1 日ぶんを組み立てる（지시서㉑ 신양식）--------------------------
-   레슨은 2통 + 신양식이면 꼬리통 1개.
+/* ---- 会話行を文字列化（マイクロ・📘 共通）-------------------------- */
+function dialogueLines(template, user) {
+  const dialogue = Array.isArray(template.dialogue_template) ? template.dialogue_template : [];
+  const body = [];
+  for (const row of dialogue) {
+    const kr = fillSlots(row.kr, user);
+    if (kr === null) return null;
+    const ja = row.ja ? fillSlots(row.ja, user) : "";
+    const label = row.who
+      ? (fillSlots(row.who, user) ?? String(row.who).replace(/\{[A-Z_]+\}/g, "あなた"))
+      : "";
+    const who = label ? `${label}：` : "";
+    body.push(ja ? `${who}${kr}\n  （${ja}）` : `${who}${kr}`);
+  }
+  return body;
+}
 
-     1 통目   📘 Day N : 문법 / [일본어부] / 🔗 接続 / 💡 学習ポイント / 💬 회화
-     2 通目   📚 今日の単語（신양식: 품사 2·2·2 묶음 / 구양식: 평면 목록）
-     꼬리통   ❓ 今日のクイズ + ①②③ + quickReply（신양식만）
+function vocabMessage(template) {
+  const vocab = Array.isArray(template.vocab_3) ? template.vocab_3 : [];
+  if (!vocab.length) return null;
+  const v = ["📚 今日の単語"];
+  if (vocab.every((w) => w && POS.includes(w.pos))) {
+    let n = 0;
+    for (const pos of POS) {
+      const ws = vocab.filter((w) => w.pos === pos);
+      if (!ws.length) continue;
+      v.push(`【${pos}】`);
+      for (const w of ws) {
+        n++;
+        const note = w.note ? `（${w.note}）` : "";
+        v.push(`${n}. ${w.kr}　${w.meaning}${note}`);
+      }
+    }
+  } else {
+    for (const w of vocab) {
+      const note = w.note ? `　（${w.note}）` : "";
+      v.push(`・${w.kr}　${w.meaning}${note}`);
+    }
+  }
+  return { type: "text", text: v.join("\n") };
+}
 
-   🍀 今日のひとこと（fortune_bridge.ja）는 레슨의 **마지막 통** 말미에
-   붙는다 ── 꼬리통이 있으면 거기, 없으면（구양식） 2통째. 표시는 ja 만
-   （§1-3 ── kr 은 집필·검수용으로 원고에 남는다）.
+function appendBridge(msgs, template) {
+  const bridge = template.fortune_bridge;
+  if (bridge && bridge.ja && msgs.length) {
+    msgs[msgs.length - 1].text += `\n\n🍀 今日のひとこと\n${bridge.ja}`;
+  }
+}
 
-   ★ 꼬리통의 quickReply 는 아침 묶음의 마지막 1통에서만 열린다（LINE
-   사양·절목 퀴즈가 말미로 가는 이유와 같다）. 그래서 push-daily 가
-   꼬리통을 뽑아 운세·부적 뒤（묶음 맨 끝）에 다시 붙인다. 판별은
-   「quickReply 를 가진 마지막 요소」── 1·2통째에는 quickReply 가 없다.
+function fillOrNull(s, user) {
+  if (s == null || s === "") return s;
+  return fillSlots(String(s), user);
+}
 
-   ★ 구양식 원고（tip 무정형·vocab 3어 pos 없음·quiz/bridge 부재）도
-   여기서 throw 하지 않는다（§1-2）. 신양식 검사는 입고 관문의 일이고,
-   렌더러는 있는 것을 무너지지 않게 보여준다. 구양식의 quiz 는 데일리
-   꼬리통을 만들지 않는다 ── 배포① 시점의 화면 변화를 「헤더 + bridge
-   위치」로 한정하기 위해（복습·절목 퀴즈의 현행 거동 유지）.
+/* マイクロ 1通（文法）: 💡フック → 説明 → 📌 → 💬 → 🎯 */
+function renderMicroGrammar(template, user) {
+  const hook = fillOrNull(template.hook, user);
+  if (hook === null) return null;
+  const body = fillOrNull(template.hook_body || "", user);
+  if (body === null) return null;
+  const mission = fillOrNull(template.mission, user);
+  if (mission === null) return null;
+  const dlg = dialogueLines(template, user);
+  if (dlg === null) return null;
 
-   quizSection: false 는 절목（30/50/75）의 아침 ── 그날은 절목 퀴즈
-   （기록 있음·action=quiz）가 말미에 오므로, 무보존의 데일리 ❓를
-   접는다. 같은 아침에 퀴즈 2건을 두지 않는 기존 원칙.
+  const lines = [`💡 ${hook}`];
+  if (String(body).trim()) lines.push("", String(body).trim());
+  lines.push("", "📌 核心公式", String(template.formula).trim());
+  if (dlg.length) lines.push("", "💬 実戦会話", dlg.join("\n\n"));
+  lines.push("", "🎯 5秒ミッション", String(mission).trim());
+  return lines.join("\n");
+}
 
-   返すのは LINE の messages 配列そのもの。送信は呼ぶ側の仕事で、
-   ここは文字列を作るだけにしておく ── そうしておくと、送らずに
-   中身だけ確かめられる。 */
+/* トーク日: 🎬 状況劇 */
+function renderMicroTalk(template, user) {
+  const hook = fillOrNull(template.hook, user);
+  if (hook === null) return null;
+  const body = fillOrNull(template.hook_body || "", user);
+  if (body === null) return null;
+  const mission = fillOrNull(template.mission, user);
+  if (mission === null) return null;
+  const dlg = dialogueLines(template, user);
+  if (dlg === null) return null;
+
+  const lines = [`🎬 ${hook}`];
+  if (String(body).trim()) lines.push("", String(body).trim());
+  if (dlg.length) lines.push("", dlg.join("\n\n"));
+  lines.push("", "✨ 今日の復習ポイント", String(mission).trim());
+  return lines.join("\n");
+}
+
+/* リフレッシュ日: ☕ */
+function renderMicroRefresh(template, user) {
+  const hook = fillOrNull(template.hook, user);
+  if (hook === null) return null;
+  const body = fillOrNull(template.hook_body || "", user);
+  if (body === null) return null;
+  const mission = fillOrNull(template.mission, user);
+  if (mission === null) return null;
+
+  const lines = [`☕ ${hook}`];
+  if (String(body).trim()) lines.push("", String(body).trim());
+  if (String(mission).trim()) lines.push("", String(mission).trim());
+  return lines.join("\n");
+}
+
+/* ---- 1 日ぶんを組み立てる --------------------------
+   マイクロ（hook+formula+mission）:
+     文法  💡📌💬🎯 → 📚 → ❓
+     トーク 🎬 → 📚（❓なし）
+     クイズ ❓+quickReply（本文もクイズ）→ 📚任意
+     休息  ☕（📚・❓なし、🍀のみ可）
+
+   구 신양식（📘）: 従来どおり. */
 export function renderDay(template, user = {}, { quizSection = true } = {}) {
   if (!template) throw new Error("template がありません");
 
-  const day  = Number(template.day_number);
+  if (isMicroFormat(template)) {
+    return renderMicroDay(template, user, { quizSection });
+  }
+  return renderClassicDay(template, user, { quizSection });
+}
+
+function renderMicroDay(template, user, { quizSection }) {
+  const day = Number(template.day_number);
+  const kind = dayKindOf(template);
+  const msgs = [];
+
+  if (kind === "quiz") {
+    const q = usableQuiz(template.quiz);
+    if (!q) throw new Error("マイクロ quiz 日に quiz がありません");
+    const hook = fillOrNull(template.hook, user);
+    if (hook === null) return null;
+    const body = fillOrNull(template.hook_body || "", user);
+    if (body === null) return null;
+    const head = [
+      `❓ ${hook}`,
+      "",
+      String(body || q.question).trim(),
+      "",
+      "👇 下のボタンを押して正解を確認しましょう！"
+    ].join("\n");
+    /* quizMessage は head+question を重ねるので、ここでは本文を頭に
+       載せた専用通にする ── question 重複を避ける. */
+    msgs.push({
+      type: "text",
+      text: [
+        head,
+        "",
+        ...q.choices.slice(0, 4).map((c, i) => `${["①", "②", "③", "④"][i]} ${c}`)
+      ].join("\n"),
+      quickReply: {
+        items: q.choices.slice(0, 4).map((c, i) => ({
+          type: "action",
+          action: {
+            type: "postback",
+            label: `${["①", "②", "③", "④"][i]} ${String(c)}`.slice(0, 20),
+            data: `action=review&day=${day}&choice=${i}`,
+            displayText: `${["①", "②", "③", "④"][i]} ${String(c)}`.slice(0, 20)
+          }
+        }))
+      }
+    });
+  } else {
+    let text;
+    if (kind === "talk") text = renderMicroTalk(template, user);
+    else if (kind === "refresh") text = renderMicroRefresh(template, user);
+    else text = renderMicroGrammar(template, user);
+    if (text === null) return null;
+    msgs.push({ type: "text", text });
+  }
+
+  if (kind !== "refresh") {
+    const v = vocabMessage(template);
+    if (v) msgs.push(v);
+  }
+
+  if (quizSection && kind === "grammar") {
+    const q = usableQuiz(template.quiz);
+    if (q) msgs.push(quizMessage("❓ 今日のクイズ", "review", day, q));
+  }
+
+  appendBridge(msgs, template);
+  return msgs;
+}
+
+function renderClassicDay(template, user, { quizSection }) {
+  const day = Number(template.day_number);
   const texts = [];
 
-  /* --- 1 通目 --- */
   const gp = splitGrammarPoint(template.grammar_point);
   const head = [`📘 Day ${day} : ${gp.kr}`];
   if (gp.ja) head.push(`[${gp.ja}]`);
@@ -247,88 +426,29 @@ export function renderDay(template, user = {}, { quizSection = true } = {}) {
   const tip = parseTip(template.grammar_tip_kr);
   if (tip) {
     head.push("", "🔗 接続 (活用ルール)", ...tip.form);
-    /* 形도 学習ポイントに出す（2026-08-09 Day2 검수）── 接続と重複してよい. */
     head.push("", "💡 学習ポイント",
       `・形: ${tip.form[0]}`, ...tip.form.slice(1),
       `・使: ${tip.use[0]}`, ...tip.use.slice(1),
       `・落: ${tip.fall[0]}`, ...tip.fall.slice(1));
   } else if (template.grammar_tip_kr) {
-    /* 구양식: 분해하지 않고 💡 아래 통째로（§1-2）. */
     head.push("", "💡 学習ポイント", template.grammar_tip_kr);
   }
 
-  /* 会話は 1 往復ごとに空行で離す。詰めて並べると、韓国語と訳が
-     交互に続いて、どこまでが一人の台詞か読めなくなる。
-     일본어 역은 「  （…）」── 들여쓰기 + 전각 괄호（§1-1 스케치）.
-
-     who は任意。付いていれば「A：」のように頭に置く。
-     無いと、問いかけと答えが同じ人の独り言に見える ── 実際
-     組み上げて読むまで気づかなかった。列は JSON なので、
-     使う日だけ付ければよく、原稿側の負担にはならない。 */
-  const dialogue = Array.isArray(template.dialogue_template) ? template.dialogue_template : [];
-  const body = [];
-  for (const row of dialogue) {
-    const kr = fillSlots(row.kr, user);
-    if (kr === null) return null;              /* 名前が要るのに無い */
-    const ja  = row.ja ? fillSlots(row.ja, user) : "";
-
-    /* 話者の札。名前が無い人には「あなた」を置く。
-       ここに既定を置くのは、名前に既定を置くのとは別のこと ──
-       札は役どころで、本文の「저는 ○○입니다」とは違う。
-       置かないと {NAME_JP} という 9 文字がそのまま画面に出る。 */
-    const label = row.who
-      ? (fillSlots(row.who, user) ?? String(row.who).replace(/\{[A-Z_]+\}/g, "あなた"))
-      : "";
-    const who = label ? `${label}：` : "";
-    body.push(ja ? `${who}${kr}\n  （${ja}）` : `${who}${kr}`);
-  }
+  const body = dialogueLines(template, user);
+  if (body === null) return null;
   if (body.length) head.push("", "💬 実際に使ってみよう", body.join("\n\n"));
   texts.push(head.join("\n"));
 
-  /* --- 2 通目 --- */
-  const vocab = Array.isArray(template.vocab_3) ? template.vocab_3 : [];
-  if (vocab.length) {
-    const v = ["📚 今日の単語"];
-    /* 전 항목에 아는 pos 가 있어야 묶는다. 섞여 있으면（입고 검사가
-       막지만, 만에 하나 들어와도） 단어를 잃지 않게 평면으로 낸다. */
-    if (vocab.every((w) => w && POS.includes(w.pos))) {
-      let n = 0;
-      for (const pos of POS) {
-        const ws = vocab.filter((w) => w.pos === pos);
-        if (!ws.length) continue;
-        /* 품사 헤더 다음, 단어 1개 = 1행（2026-08-09 Day2 검수 · 가독성）. */
-        v.push(`【${pos}】`);
-        for (const w of ws) {
-          n++;
-          const note = w.note ? `（${w.note}）` : "";
-          v.push(`${n}. ${w.kr}　${w.meaning}${note}`);
-        }
-      }
-    } else {
-      for (const w of vocab) {
-        const note = w.note ? `　（${w.note}）` : "";
-        v.push(`・${w.kr}　${w.meaning}${note}`);
-      }
-    }
-    texts.push(v.join("\n"));
-  }
-
   const msgs = texts.map((text) => ({ type: "text", text }));
+  const v = vocabMessage(template);
+  if (v) msgs.push(v);
 
-  /* --- 꼬리통（신양식 데일리 퀴즈）---
-     postback 은 기존 review 방（무보존·즉시 채점）을 그대로 쓴다
-     ── data 에 answer 를 싣지 않는 규칙도 quizMessage 가 그대로 진다. */
   if (quizSection && isNewFormat(template)) {
     const q = usableQuiz(template.quiz);
     if (q) msgs.push(quizMessage("❓ 今日のクイズ", "review", day, q));
   }
 
-  /* --- 🍀 今日のひとこと ── 레슨 마지막 통의 말미 --- */
-  const bridge = template.fortune_bridge;
-  if (bridge && bridge.ja && msgs.length) {
-    msgs[msgs.length - 1].text += `\n\n🍀 今日のひとこと\n${bridge.ja}`;
-  }
-
+  appendBridge(msgs, template);
   return msgs;
 }
 
@@ -345,7 +465,7 @@ export function renderDay(template, user = {}, { quizSection = true } = {}) {
 
    はじめは 2 通同時だった ── 「2 通に分ければ思い出す間ができる」
    つもりが、LINE は配列を**同時に**表示するので、答えが問いのすぐ
-   下に並んで間は生まれていなかった（지시서⑨ §0）。
+   下に並んで間は生まれていなかった（지시서⑨ §0）.
 
    進みには触らない。復習は「保有日数を削らないボーナス」という
    取り決め（計画書 1-2）で、current_day を動かすのは朝だけ。

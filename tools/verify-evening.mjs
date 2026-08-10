@@ -284,7 +284,10 @@ await check("answer 分岐は advanceDay・days_used・current_day・push_logs �
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../server/lib/handlers/postback.mjs", import.meta.url), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "");
-  const block = src.match(/if \(action === "answer"\)[\s\S]*?(?=if \(action === ")/);
+  /* 以前は「次の分岐が現れるまで」を切っていたので、分岐の並び順に
+     頼っていた。関数になったので境界は波かっこ ── 並べ替えても
+     この検査は同じものを見る（plan-refactor-handlers.md §4.2.1）。 */
+  const block = src.match(/async function onAnswer\b[\s\S]*?\n}/);
   assert(block, "answer の分岐が見つかりません");
   assert(!/advanceDay|days_used|current_day/.test(block[0]),
     "answer 분기가 진도·일수를 건드립니다");

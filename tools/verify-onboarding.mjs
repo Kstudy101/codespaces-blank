@@ -778,13 +778,15 @@ check("反対方向の関門 ── trackpick に salesAllowedFor が**無い**�
      確かめる関門だけだと、無料の入口に誰かがゲートを足した日に
      「Stripe が閉じている限り誰も始められない」へ静かに戻る。 */
   const src = stripComments(read("server/lib/handlers/postback.mjs"));
-  const pick = src.match(/if \(action === "trackpick"\)[\s\S]*?(?=if \(action === "trial"\))/);
+  /* 分岐が関数になったので、境界は「次の分岐が現れるまで」ではなく
+     波かっこ。文字数で窓を切る必要も無くなった（§4.2.1）。 */
+  const pick = src.match(/async function onTrackpick\b[\s\S]*?\n}/);
   assert(pick, "trackpick の分岐が見つかりません");
   assert(!/salesAllowedFor/.test(pick[0]),
     "trackpick が販売ゲートを通っています ── 無料の入口が Stripe に縛られます");
-  for (const a of ["plans", "plan", "buy"]) {
-    const block = src.match(new RegExp(`if \\(action === "${a}"\\)[\\s\\S]{0,700}`))[0];
-    assert(/salesAllowedFor/.test(block), `${a} からゲートが消えています`);
+  for (const a of ["Plans", "Plan", "Buy"]) {
+    const block = src.match(new RegExp(`async function on${a}\\b[\\s\\S]*?\\n}`))[0];
+    assert(/salesAllowedFor/.test(block), `on${a} からゲートが消えています`);
   }
   return "trackpick 禁止 / plans・plan・buy 必須";
 });
@@ -1064,12 +1066,15 @@ check("オンボーディングは生年月日・性別を訊かない", () => {
 
   const pb2 = stripComments(read("server/lib/handlers/postback.mjs"));
   assert(!/saveSaju/.test(pb2), "saveSaju が残っています");
-  assert(!/upsertSajuProfile/.test(pb2.match(/if \(\["bdate"[\s\S]*?\n  }/)[0]),
-    "旧・生年月日チェーンが saju を保存しています");
-  const drop = pb2.match(/if \(\["bdate"[\s\S]*?\n  }/)[0];
+  /* 旧ボタンの一覧は DROPPED 定数へ、処理は onDropped へ分かれた。
+     一覧と処理を別々に見る（plan-refactor-handlers.md §4.2.2）。 */
+  const list = pb2.match(/const DROPPED = \[[^\]]*\]/)[0];
   for (const a of ["bdate", "btime", "bplace", "bcity", "bgender", "birth"]) {
-    assert(drop.includes(`"${a}"`), `dropped 一覧に ${a} がありません`);
+    assert(list.includes(`"${a}"`), `DROPPED 一覧に ${a} がありません`);
   }
+  const drop = pb2.match(/async function onDropped\b[\s\S]*?\n}/)[0];
+  assert(!/upsertSajuProfile/.test(drop),
+    "旧・生年月日チェーンが saju を保存しています");
   assert(/dropped:/.test(drop), "dropped 応答がありません");
   return "訊かない・書かない（旧ボタンは dropped + followUp）";
 });

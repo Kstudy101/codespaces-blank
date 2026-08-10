@@ -333,7 +333,9 @@ check("空・null の data で落ちない", () => {
 
 check("正答を data から読まない ── 読むと必ず正解にできる", () => {
   const src = stripComments(read("server/lib/handlers/postback.mjs"));
-  const fn = src.match(/export async function handlePostback[\s\S]*?\n}/)[0];
+  /* 採点は onQuiz に移った。handlePassback 本体を見ていた頃は
+     分岐が全部その中に居たが、いまは採点だけを名指しできる。 */
+  const fn = src.match(/async function onQuiz\b[\s\S]*?\n}/)[0];
   assert(!/params\.(answer|correct)/.test(fn),
     "data から正答を読んでいます。押す前に書き換えれば必ず正解になります");
   assert(/lookupAnswer/.test(fn), "サーバー側から正答を引いていません");

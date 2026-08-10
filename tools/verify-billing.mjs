@@ -275,7 +275,7 @@ head("[値段]  data は利用者の端末を通って戻る");
 
 check("pkg から値段を引く。data の金額を使わない", () => {
   const src = stripComments(read("server/lib/handlers/postback.mjs"));
-  const fn = src.match(/if \(action === "buy"\)[\s\S]*?\n  }/)[0];
+  const fn = src.match(/async function onBuy\b[\s\S]*?\n}/)[0];
   assert(/PACKAGES\[pkg\]/.test(fn), "PACKAGES で引き当てていません");
   assert(!/params\.(price|amount|yen)/.test(fn),
     "data から金額を読んでいます。書き換えれば 100 円で買えます");
@@ -513,9 +513,9 @@ check("特商法の表記と返金規定が無ければ売らない", () => {
 
 check("価格表を出す前に門を通る（SALES_MODE を重ねた salesAllowedFor）", () => {
   const src = stripComments(read("server/lib/handlers/postback.mjs"));
-  for (const a of ["plans", "plan", "buy"]) {
-    const fn = src.match(new RegExp(`if \\(action === "${a}"\\)[\\s\\S]*?\\n  }`))[0];
-    assert(/salesAllowedFor\(user\)/.test(fn), `action=${a} が門を通っていません`);
+  for (const a of ["Plans", "Plan", "Buy"]) {
+    const fn = src.match(new RegExp(`async function on${a}\\b[\\s\\S]*?\\n}`))[0];
+    assert(/salesAllowedFor\(user\)/.test(fn), `on${a} が門を通っていません`);
   }
   return "plans / plan / buy";
 });
@@ -598,9 +598,9 @@ check("原稿の日数を超えるパッケージは並ばない（§1-2）", ()
 
 check("buy と trial も原稿の上限で止まる（data 改竄への蓋）", () => {
   const src = stripComments(read("server/lib/handlers/postback.mjs"));
-  const buy = src.match(/if \(action === "buy"\)[\s\S]*?\n  }/)[0];
+  const buy = src.match(/async function onBuy\b[\s\S]*?\n}/)[0];
   assert(/countTemplates/.test(buy), "buy が原稿の日数を見ていません");
-  const trial = src.match(/if \(action === "trial"\)[\s\S]*?\n  }/)[0];
+  const trial = src.match(/async function onTrial\b[\s\S]*?\n}/)[0];
   assert(/countTemplates/.test(trial) && /TRIAL_DAYS/.test(trial),
     "trial が原稿の日数を見ていません");
   return "価格表に出ないものは、名乗られても売らない";
@@ -671,7 +671,10 @@ check("priceList は同期・純粋のまま（関門がネットワーク無し
 
 check("plan 分岐がセッションを並列で先に作る（押されてからではない）", () => {
   const src = stripComments(read("server/lib/handlers/postback.mjs"));
-  const plan = src.match(/if \(action === "plan"\)[\s\S]*?(?=if \(action === "buy"\))/)[0];
+  /* 以前は「plan の行から buy の行まで」を切っていた ── 分岐が
+     ソース上で隣り合っている前提だった。関数になったので、
+     境界は波かっこそのもの（plan-refactor-handlers.md §4.2.1）。 */
+  const plan = src.match(/async function onPlan\b[\s\S]*?\n}/)[0];
   assert(/Promise\.all/.test(plan), "並列（Promise.all）で作っていません ── reply token が死にます");
   assert(/startCheckout/.test(plan), "plan 分岐がセッションを作っていません");
   assert(/sellablePackages/.test(plan), "売れるぶんだけ、の判定を共有していません");

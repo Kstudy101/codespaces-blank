@@ -176,31 +176,66 @@ export async function handlePostback(conn, event, opts = {}) {
 [research-deadcode.md §3](research-deadcode.md) 에서 방금 정리한 「과잉 export」를
 16개 새로 만드는 셈이 된다.
 
-### 4.2 착수 전에 반드시 먼저 할 것 — 관문의 정적 검사 조사
+### 4.2 관문의 정적 검사 — 전수 조사 결과 (2026-08-10 실시)
 
-`verify-*` 는 소스를 **정규식으로** 읽는 검사를 여럿 갖고 있다. 확인된 것만:
+> **계획을 쓸 때 1건이라고 적었으나, 실제로는 7건이었다.** 착수 전 조사에서
+> 드러난 것을 그대로 남긴다. 이번 작업 비용의 대부분이 여기다.
+
+`verify-*` 는 `postback.mjs` 소스를 **정규식으로 잘라** 검사한다. `if (action === "X")` 라는
+**글자 모양**에 걸린 검사가 관문 3종에 7건 있다.
+
+| # | 위치 | 무엇을 지키는가 | 자르는 방식 |
+|---:|---|---|---|
+| 1 | [`verify-billing:278`](../tools/verify-billing.mjs#L278) | `buy` 가 값을 `PACKAGES` 에서 引き, `params.price` 를 안 믿는다 | `"buy"` → `
+  }` |
+| 2 | [`verify-billing:516`](../tools/verify-billing.mjs#L516) | `plans`·`plan`·`buy` **셋 다** 판매 게이트를 통과 | 각 action → `
+  }` |
+| 3 | [`verify-billing:601`](../tools/verify-billing.mjs#L601) | `buy`·`trial` 이 원고 상한(`countTemplates`)에서 멈춘다 | 각 action → `
+  }` |
+| 4 | [`verify-billing:674`](../tools/verify-billing.mjs#L674) | `plan` 이 세션을 **병렬로 미리** 만든다 | `"plan"` → **`"buy"` 가 나올 때까지** |
+| 5 | [`verify-onboarding:781`](../tools/verify-onboarding.mjs#L781) | `trackpick` 은 게이트를 **통과하면 안 된다**(무료 입구) | `"trackpick"` → **`"trial"` 이 나올 때까지** |
+| 6 | [`verify-onboarding:1066`](../tools/verify-onboarding.mjs#L1066) | 생년월일 계열 6개가 `dropped` 목록에 있다 | `if (["bdate"` → `
+  }` |
+| 7 | [`verify-evening:286`](../tools/verify-evening.mjs#L286) | `answer` 가 진도·일수·`push_logs` 를 **안 건드린다** | `"answer"` → **다음 `if (action === "` 까지** |
+
+#### 4.2.1 3건은 「분기가 소스에서 이 순서로 붙어 있다」에 기대고 있다
+
+4·5·7 번은 **한 분기부터 다음 분기가 나올 때까지**를 잘라낸다.
 
 ```js
-tools/verify-onboarding.mjs:1057
-  const pb2 = stripComments(read("server/lib/handlers/postback.mjs"));
-  assert(!/saveSaju/.test(pb2), …);
-  assert(!/upsertSajuProfile/.test(pb2.match(/if \(\["bdate"[\s\S]*?\n  }/)[0]), …);
-  const drop = pb2.match(/if \(\["bdate"[\s\S]*?\n  }/)[0];
-  for (const a of ["bdate","btime","bplace","bcity","bgender","birth"])
-    assert(drop.includes(`"${a}"`), …);
+/* verify-billing:674 */
+src.match(/if \(action === "plan"\)[\s\S]*?(?=if \(action === "buy"\))/)
 ```
 
-이 검사는 **`if (["bdate", … ].includes(action)) { … }` 라는 글자 모양 자체**에 걸려 있다.
-§3.1처럼 `DROPPED` 배열로 바꾸면 `pb2.match(...)` 가 `null` 이 되어
-`[0]` 에서 **TypeError 로 터진다**(빨개지긴 하나 이유가 안 보인다).
+즉 `plan` 바로 뒤에 `buy` 가 오도록 **소스 순서가 고정**돼 있다. 분기 사이에 다른 것을
+끼우기만 해도 잘리는 범위가 달라진다. 5번은 「`trackpick` 다음은 `trial`」,
+7번은 「`answer` 다음에 아무 분기나」에 같은 식으로 기대고 있다.
 
-→ **작업 순서를 이렇게 못박는다.**
+**이 결합은 이번 작업이 없애 준다.** `async function onPlan(ctx) { … }` 로 옮기면
+경계가 함수의 여닫는 괄호가 되어, 순서와 무관하게 정확히 그 분기만 잘린다.
 
-1. `postback.mjs` 를 읽는 모든 관문 검사를 grep 해 목록을 만든다
-   (`read("server/lib/handlers/postback.mjs")` · `PB_SRC` 등)
-2. 각 검사가 **무엇을 지키려는 것인지**를 한 줄로 적는다
-3. 코드를 옮긴 뒤, 그 의도를 **새 모양에 맞춰** 다시 쓴다
-4. 옮기기 전 `git stash` 상태에서 관문이 초록임을 확인 → 옮긴 뒤 다시 초록
+#### 4.2.2 옮기는 방식 — 의도를 그대로, 자르는 곳만 바꾼다
+
+```js
+- const fn = src.match(/if \(action === "buy"\)[\s\S]*?
+  }/)[0];
++ const fn = src.match(/async function onBuy[\s\S]*?
+}/)[0];
+```
+
+단언(`assert`)은 **한 줄도 고치지 않는다.** 바뀌는 것은 「어디부터 어디까지를 그 분기로
+볼 것인가」뿐이다. 4·5·7 번의 `(?=if \(action === …)` 선행탐색은 **없앤다** —
+함수 경계가 그 역할을 대신하고, 더 정확하다.
+
+#### 4.2.3 고친 관문이 실제로 무는지 7건 전부 확인한다
+
+정규식을 잘못 쓰면 `match(...)` 가 `null` 이 되어 `[0]` 에서 터지거나(빨개짐, 안전),
+**너무 넓게 잡혀 다른 분기의 코드까지 포함**될 수 있다(초록인 채 무의미해짐, 위험).
+후자는 눈으로 안 보인다.
+
+→ **7건 각각에 대해, 지키려는 것을 일부러 깨뜨려 빨개지는지 확인한다.**
+`research-deadcode.md` 4단계에서 `askBirth` 로 했던 것과 같은 절차다.
+확인 없이 통과한 검사는 「고쳤다」고 하지 않는다.
 
 「검사가 통과하도록 정규식을 느슨하게 한다」는 **금지**다. 그건 관문을 끄는 것이다.
 
@@ -249,21 +284,42 @@ tools/verify-onboarding.mjs:1057
 
 ---
 
-## 7. 검증
+## 7. 검증 — 완료 (2026-08-10)
 
-- [ ] 착수 전 `git stash` 상태에서 관문 19종 초록 확인
-- [ ] `postback.mjs` 를 읽는 관문 검사 전수 목록화(§4.2 1~2)
-- [ ] 옮긴 뒤 관문 19종
-- [ ] **action 대조** — 옮기기 전후로 아래를 돌려 목록이 같은지 본다
-  ```bash
-  git show HEAD:server/lib/handlers/postback.mjs \
-    | grep -oE 'action === "[a-z]+"' | sort -u > /tmp/before.txt
-  grep -oE '^  [a-z]+:' server/lib/handlers/postback.mjs | sort -u > /tmp/after.txt
-  ```
-- [ ] `handlePostback` 이 30행 이하인지 확인
-- [ ] 새로 `export` 된 심볼이 0인지 확인(§4.1) — `research-deadcode.md` 의 검출기 재실행
+- [x] 착수 전 관문 19종 초록 확인
+- [x] `postback.mjs` 를 읽는 관문 검사 전수 목록화 → §4.2. **1건이라 적었으나 실제 8건**
+      (조사에서 7건, 옮긴 뒤 `verify-webhook` 1건이 더 드러남)
+- [x] 옮긴 뒤 **관문 19종 통과**
+- [x] **분기가 한 글자도 안 바뀌었는지** — 옮기기 전 파일을 떠 두고, 분기 15개의
+      본문을 공백 제거 후 1:1 대조. **15개 전부 일치.**
+      유일한 차이는 `onUnknown` 의 주석을 함수 위로 올린 것(내용 보존)
+- [x] `handlePostback` **514 → 33행**
+- [x] 새로 `export` 된 심볼 0 (§4.1) — 죽은 export 검출기 재실행, 잔량은
+      `HANDLED_TYPES` 하나뿐이고 이는 [research-deadcode.md §2.0](research-deadcode.md) 의 오탐
+- [x] **고친 관문 8건이 실제로 무는지 전수 확인**(§4.2.3) — 지키는 대상을 하나씩
+      일부러 깨뜨려 해당 관문이 빨개지는지 봤다. **8건 전부 빨개졌다.** 확인 후 원복
 
----
+  | # | 깨뜨린 것 | 빨개진 관문 |
+  |---:|---|---|
+  | 1 | `onBuy` 가 `params.price` 를 읽게 함 | `verify-billing` |
+  | 2 | `onPlans` 에서 `salesAllowedFor` 제거 | `verify-billing` |
+  | 3 | `onTrial` 이 `countTemplates` 를 안 보게 함 | `verify-billing` |
+  | 4 | `onPlan` 에서 `Promise.all` 제거 | `verify-billing` |
+  | 5 | `onTrackpick` 에 판매 게이트 추가 | `verify-onboarding` |
+  | 6 | `DROPPED` 에서 `bcity` 제거 | `verify-onboarding` |
+  | 7 | `onAnswer` 가 `advanceDay` 를 참조 | `verify-evening` |
+  | 8 | `onQuiz` 가 `lookupAnswer` 를 안 쓰게 함 | `verify-webhook` |
+
+### 7.1 작업 중 한 번 잘못했다가 되돌린 것
+
+분기 본문을 2칸 왼쪽으로 당기는 처리를 **quiz 꼬리에도 적용**해 버렸다.
+그 부분은 원래 `if` 안이 아니라 `handlePostback` 바로 밑(들여쓰기 2)이라,
+당기면 본문이 0열로 내려가 **안쪽 닫는 괄호가 열 0 의 `}`** 가 된다.
+관문의 `/[\s\S]*?
+}/` 가 거기서 끊긴다 — 검사가 함수의 일부만 보게 된다.
+
+대조 절차가 이것을 잡았다. 되돌리고 꼬리는 당기지 않도록 고쳤다.
+**「옮기기만 했다」는 눈으로 확인할 수 없다**는 것이 이 작업의 교훈이다.
 
 ## 8. 제외 (scope 밖)
 

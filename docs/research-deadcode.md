@@ -303,9 +303,9 @@ LP 전환(`d9b9b33`)으로 index.html 에서 진단 기능이 빠질 때 `CLAUDE
       헬퍼(`one`·`all`·`jstDayRange`·`shapeTemplate`…)와 import 는 전부 다른 사용처가
       남아 고아가 생기지 않았음을 확인. `HANDLED_TYPES` 는 §2.0 대로 **유지**.
       검증: **관문 19종 통과**, 죽은 export 잔량 0(오탐 `HANDLED_TYPES` 제외).
-- [ ] **6단계 — ④ 거대 함수** : 착수 전 `docs/plan-refactor-handlers.md` 작성·승인.
+- [x] **6단계 — ④ 거대 함수** : 착수 전 `docs/plan-refactor-handlers.md` 작성·승인.
       `deliverOne` 은 §4.1 경고를 계획서에 그대로 옮길 것.
-- [ ] **7단계 — ⑤ 배송 중복** : 착수 전 `docs/plan-refactor-push.md` 작성·승인.
+- [x] **7단계 — ⑤ 배송 중복** : 착수 전 `docs/plan-refactor-push.md` 작성·승인.
 
 ### 범위 밖(scope 밖) — 이번에 건드리지 않는다
 

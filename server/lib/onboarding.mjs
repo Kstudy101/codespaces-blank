@@ -24,8 +24,6 @@
    なので段は持たず、毎回そのつど中身から導く（nextStep）。
    導けるものを保存しない、が唯一ずれない書き方。
    ================================================================== */
-const SITE_URL = process.env.SITE_URL || "https://www.kstudy101.jp";
-
 import { askCourse, notReady } from "./handlers/checkout.mjs";
 import { TRACKS, TRACK_LABELS, countTemplates } from "./repo/learning.mjs";
 import { TRIAL_DAYS } from "./repo/billing.mjs";
@@ -194,20 +192,16 @@ export function askReading() {
   };
 }
 
-/* かなで読めなかったときの返し。案内はもう 1 度だけ挟み、
-   サイトは**最後の手段**として添える（元の「必ずサイトへ戻す」が
-   離脱のもとだったので、主役にはしない）。 */
+/* かなで読めなかったときの返し。案内をもう 1 度だけ挟む。
+   サイトへは戻さない ── 元の「必ずサイトへ戻す」が離脱のもとだった。 */
 export function readingRetry() {
   return {
     type: "text",
     text: [
       "読み取れませんでした。",
-      "ひらがな か カタカナ**だけ**で、もう一度お送りください。",
+      "ひらがなかカタカナで入力してください。",
       "",
-      "　例）はなこ ／ ハナコ",
-      "",
-      "うまくいかない場合は、サイトの診断からも登録できます！",
-      SITE_URL
+      "　例）はなこ / ハナコ"
     ].join("\n")
   };
 }

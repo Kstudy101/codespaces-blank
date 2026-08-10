@@ -3,8 +3,9 @@
 작성: 2026-08-10 / 대상: `Kstudy101/codespaces-blank` (`a8b669a`)
 근거: [research-deadcode.md §4](research-deadcode.md)
 
-> **이 문서는 계획이다. 승인 전에는 코드를 쓰지 않는다.**
-> 대표님 메모를 달아 주시면 전부 반영해 갱신한다.
+> **승인됨 (2026-08-10, 대표).** §5 의 제안대로 `deliverOne()` 은 **영구 제외**로 결정.
+> 이 결정은 이번 작업 한정이 아니다 — 앞으로도 「읽기 좋게 나눈다」를 이유로는 손대지 않는다.
+> 손댈 이유가 생긴다면 그것은 기능 변경이고, 그때 별도 계획서를 쓴다.
 
 관련: [research-deadcode.md](research-deadcode.md) · `CLAUDE.md` 「이 저장소에서 특히 조심할 것」
 

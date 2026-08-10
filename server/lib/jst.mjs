@@ -66,3 +66,24 @@ export function addDays(dateStr, n) {
 export function jstDayRange(dateStr) {
   return [`${dateStr} 00:00:00`, `${addDays(dateStr, 1)} 00:00:00`];
 }
+
+/* 何時になったら配ってよいか。cron は 1 時間ごとに呼ぶので、
+   日本の時刻で判定するのはこちら側の仕事になる（このファイルが
+   独立している理由と同じ ── 借りたサーバーの TZ に頼らない）。
+
+   「N 時ちょうどだけ」ではなく「N 時以降」にしてあるのは、N 時の回が
+   落ちた日に N+1 時の回が拾えるようにするため。二度送らないのは
+   push_logs の sentToday が見ている。
+
+   朝（--not-before=7）も夕（=18）も判定はまったく同じで、渡す値だけ
+   違う。以前は push-daily.mjs と push-evening.mjs が同じ 7 行を 1 本ずつ
+   持っていた ── 片方の境界だけ直した日に、朝は出て夕は出ない、が
+   起こる。しかもログには何の異常も出ない（plan-refactor-push.md §1）。 */
+export function tooEarly(jstHour, notBefore) {
+  if (notBefore === null || notBefore === undefined || notBefore === "") return false;
+  const want = Number(notBefore);
+  if (!Number.isInteger(want) || want < 0 || want > 23) {
+    throw new Error(`--not-before は 0〜23 で渡してください: ${notBefore}`);
+  }
+  return Number(jstHour) < want;
+}

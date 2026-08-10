@@ -28,11 +28,11 @@
    cron は朝と同じ 1 時間ごと。何時に配るかは --not-before=18 で
    こちらが決める（借りたサーバーの地方時に頼らない）。
    ================================================================== */
-import { createHash } from "node:crypto";
 import { getPool, closePool } from "../lib/db.mjs";
 import { users, learning, pushlogs } from "../lib/repo/index.mjs";
 import { pushMessage, isUnreachable } from "../lib/line.mjs";
-import { jstDate, jstDateTime } from "../lib/jst.mjs";
+import { jstDate, jstDateTime, tooEarly } from "../lib/jst.mjs";
+import { makeRetryKey } from "../lib/pushkey.mjs";
 import { renderReview, renderReviewQuestion } from "../lib/render.mjs";
 import { salesAllowedFor, sellablePackages, trialUpsellNotice } from "../lib/handlers/checkout.mjs";
 import { TRIAL_UPSELL_DAY } from "../lib/repo/billing.mjs";
@@ -65,17 +65,10 @@ const LOG_AT = `${DATE} 18:00:00`;
 /* 1 人だけ（accel-day · 手元検証）。付いているあいだ全員ループは走らない。 */
 const ONLY_USER = Number(value("user", 0)) || 0;
 
-/* 朝と同じ判定。共用サーバーの cron は地方時で動くので、
-   日本の 18 時かどうかはこちらで見る。「18 時以降」にしてあるのは、
-   18 時の回が落ちた日に 19 時が拾えるようにするため。 */
-export function tooEarly(jstHour, notBefore) {
-  if (notBefore === null || notBefore === undefined || notBefore === "") return false;
-  const want = Number(notBefore);
-  if (!Number.isInteger(want) || want < 0 || want > 23) {
-    throw new Error(`--not-before は 0〜23 で渡してください: ${notBefore}`);
-  }
-  return Number(jstHour) < want;
-}
+/* 朝とまったく同じ判定なので、実物は lib/jst.mjs に 1 本だけ置く。
+   こちらは --not-before=18 を渡すだけ。ここから出しているのは、
+   関門が push-evening 側から取るため。 */
+export { tooEarly } from "../lib/jst.mjs";
 
 if (NOT_BEFORE !== null) {
   const hour = Number(jstDateTime().slice(11, 13));
@@ -89,17 +82,10 @@ if (NOT_BEFORE !== null) {
   }
 }
 
-/* 朝と同じ作り方で、種別だけ違う。同じ人・同じ日・同じ種別なら
-   毎回同じ UUID になるので、こちらの記録が残る前に落ちても
-   LINE 側で二重配信を弾ける。 */
-export function retryKey(userId, day, type) {
-  const h = createHash("sha256").update(`${userId}:${day}:${type}:${DATE}`).digest("hex");
-  const b = h.slice(0, 32).split("");
-  b[12] = "5";
-  b[16] = "89ab"[parseInt(b[16], 16) % 4];
-  const s = b.join("");
-  return `${s.slice(0,8)}-${s.slice(8,12)}-${s.slice(12,16)}-${s.slice(16,20)}-${s.slice(20,32)}`;
-}
+/* 朝と同じ作り方で、種別だけ違う。実物は lib/pushkey.mjs ──
+   写しを 2 本持つと、片方だけ直した日に一方だけ二重配信を弾けない。
+   --date をここで束ねるので、呼び出しは 3 引数のまま。 */
+export const retryKey = makeRetryKey(DATE);
 
 
 /* ---- 体験 2 日目の勧誘（2026-08-06 指示書 C4）----------------------

@@ -3,7 +3,11 @@
 작성: 2026-08-10 / 대상: `Kstudy101/codespaces-blank` (`a8b669a`)
 근거: [research-deadcode.md §5](research-deadcode.md)
 
-> **이 문서는 계획이다. 승인 전에는 코드를 쓰지 않는다.**
+> **승인됨 (2026-08-10, 대표).** 제안한 4건 그대로 결정:
+> ① `deliverOne` 통합 **반대** — §5 대로 합치지 않는다.
+> ② `makeRetryKey` 는 **새 파일 `server/lib/pushkey.mjs`** — §1.3 의 제안대로.
+> ③ CLI 인자 골격 4행은 **그대로 둔다** — §4.
+> ④ (`deliverOne` 영구 제외는 [plan-refactor-handlers.md](plan-refactor-handlers.md) §5)
 
 관련: [plan-outage-billing.md](plan-outage-billing.md) · [plan-push-cost.md](plan-push-cost.md) ·
 `CLAUDE.md` 「이 저장소에서 특히 조심할 것」
@@ -266,24 +270,22 @@ tools/verify-evening.mjs:103
 
 ---
 
-## 7. 검증
+## 7. 검증 — 완료 (2026-08-10)
 
-- [ ] 착수 전 관문 19종 초록 확인
-- [ ] 옮긴 뒤 관문 19종 — **특히 `verify-push`·`verify-evening`**
-- [ ] `tooEarly`·`retryKey` 본체가 저장소에 **1개씩**인지 확인
-  ```bash
-  git grep -c "function tooEarly" -- '*.mjs'      # 1 이어야 한다
-  git grep -c "createHash(\"sha256\")" -- 'server/db/*.mjs'   # 0 이어야 한다
-  ```
-- [ ] **재시도 키의 값이 안 바뀌었는지** — 옮기기 전후로 같은 인자에 같은 UUID 가 나오는지
-  대조한다. 값이 바뀌면 그날 하루 이중 배송을 못 막는다
-- [ ] 두 진입점에서 여전히 import 가능한지 확인(재수출)
-  ```bash
-  node -e "import('./server/db/push-daily.mjs').then(m=>console.log(typeof m.tooEarly))"
-  ```
-- [ ] `research-deadcode.md` §5 의 「약 70행」을 §0 대로 정정
+- [x] 착수 전 `verify-push`·`verify-evening` 초록 확인
+- [x] 옮긴 뒤 **관문 19종 통과**. 관문 파일은 한 줄도 고치지 않았다(§3 예상대로)
+- [x] `tooEarly` 본체가 저장소에 1개 — `git grep -c "function tooEarly"` → `server/lib/jst.mjs:1`
+- [x] `server/db/*.mjs` 의 `createHash` 0건 (양쪽 사본이 사라졌다는 뜻)
+- [x] **재시도 키의 값이 안 바뀌었는지** — 옮기기 전후로 같은 인자에 같은 UUID:
 
----
+  | 인자 | 전 · 후 |
+  |---|---|
+  | `(7, 3, "learning")` | `0e36eb32-1642-5a56-a3bb-85ac26cb4258` |
+  | `(7, 0, "onboardnameweb")` | `cbc32310-3560-52b3-b2a2-fc8f340ebd66` |
+  | `(99, 101, "completion")` | `ac13ad45-7e35-51c3-be4f-6b676d52f142` |
+
+  값이 바뀌었다면 그날 하루 이중 배송을 못 막는다. 3건 모두 동일.
+- [x] 두 진입점에서 여전히 `retryKey`·`tooEarly` 를 가져올 수 있음(재수출)
 
 ## 8. 제외 (scope 밖)
 

@@ -36,11 +36,11 @@
    バッチ側でロックを持たない ── 持つと、落ちたときに
    ロックだけが残る。
    ================================================================== */
-import { createHash } from "node:crypto";
 import { getPool, closePool } from "../lib/db.mjs";
 import { users, learning, pushlogs, entitlements, lapses, billing } from "../lib/repo/index.mjs";
 import { pushMessage, isUnreachable } from "../lib/line.mjs";
-import { jstDate, jstDateTime } from "../lib/jst.mjs";
+import { jstDate, jstDateTime, tooEarly } from "../lib/jst.mjs";
+import { makeRetryKey } from "../lib/pushkey.mjs";
 import { renderDay, renderReviewQuiz, renderCheckpointQuiz, nameMissingNotice } from "../lib/render.mjs";
 import { TOTAL_DAYS } from "../lib/repo/learning.mjs";
 import { blockingStep, messageForStep } from "../lib/onboarding.mjs";
@@ -115,20 +115,10 @@ const LOG_AT = `${DATE} 07:00:00`;
    共用サーバーの cron はサーバーの地方時で動くが、その地方時が
    何かは借りている側から確かめにくく、移設や夏時間で黙って
    ずれる。日本の 7 時に配りたいのであって、この機械の 7 時に
-   配りたいのではない。
-   cron は 1 時間ごとに呼び、日本の時刻はここで見る。
-
-   「7 時ちょうどだけ」ではなく「7 時以降」にしてあるのは、
-   7 時の回が落ちたときに 8 時の回が拾えるようにするため。
-   二度送らないのは push_logs の sentToday が見ている。 */
-export function tooEarly(jstHour, notBefore) {
-  if (notBefore === null || notBefore === undefined || notBefore === "") return false;
-  const want = Number(notBefore);
-  if (!Number.isInteger(want) || want < 0 || want > 23) {
-    throw new Error(`--not-before は 0〜23 で渡してください: ${notBefore}`);
-  }
-  return Number(jstHour) < want;
-}
+   配りたいのではない。--not-before=7 がその 7 で、判定そのものは
+   夕の便と同じなので lib/jst.mjs にある（写しを持たない）。
+   ここから出しているのは、関門が push-daily 側から取るため。 */
+export { tooEarly } from "../lib/jst.mjs";
 
 /* 「その日の配達は何時までか」を商品として明文化する（承認 C の B）。
    再照準(A)で焼却は 0 になったが、15 時に LINE が復旧すれば 15 時に
@@ -167,19 +157,10 @@ if (NOT_AFTER !== null) {
   }
 }
 
-/* LINE の重複防止キー。無作為な UUID ではなく、誰の何日目かから
-   毎回同じ値になるように作る ── バッチごと掛け直したとき、
-   こちら側の記録が残る前に落ちていても LINE 側で弾ける。
-   形式は UUID でなければ受け取ってもらえないので、ハッシュを
-   8-4-4-4-12 に切って版とバリアントのビットだけ整える。 */
-export function retryKey(userId, day, type) {
-  const h = createHash("sha256").update(`${userId}:${day}:${type}:${DATE}`).digest("hex");
-  const b = h.slice(0, 32).split("");
-  b[12] = "5";                                   /* 版 5（名前から作った） */
-  b[16] = "89ab"[parseInt(b[16], 16) % 4];       /* バリアント */
-  const s = b.join("");
-  return `${s.slice(0,8)}-${s.slice(8,12)}-${s.slice(12,16)}-${s.slice(16,20)}-${s.slice(20,32)}`;
-}
+/* LINE の重複防止キー。作り方は lib/pushkey.mjs にある ── 夕の便と
+   同じものなので、写しを 2 本持たない。--date をここで束ねるので、
+   呼び出しは今までどおり retryKey(userId, day, type) の 3 引数。 */
+export const retryKey = makeRetryKey(DATE);
 
 /* ---- 3 通目の運勢 ---------------------------------------------------
    レッスンの後ろに足す（plan-fortune-daily.md §5 の (가)）。

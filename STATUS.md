@@ -21,7 +21,7 @@
 | 관문 | **19종 PASS** |
 | 다음 | 대표가 `main` push（사이트）+ 서버 배포（008）. Stripe 콘솔 가격 맞춤은 C4 전 |
 
-**다음（대표）:** LP·패키지 배포. 체험7일 §0-◆ 순서와 겹치면 DB 백업 후 서버 쪽을 먼저.
+**다음（대표）:** LP·패키지 **배포 완료**（사이트 Xserver · 서버 ChemiCloud `008`）. Stripe 콘솔 상품가를 새 표에 맞추는 것은 C4 전 실기.
 
 - 사이트(정적)는 **Xserver에서 가동 중** — https://www.kstudy101.jp/
   `main` 에 push 하면 GitHub Actions 가 자동 배포합니다

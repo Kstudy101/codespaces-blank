@@ -489,6 +489,7 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | [docs/plan-side-menu.md](docs/plan-side-menu.md) | 사이드 메뉴 개편 — 완료 (B2) |
 | [docs/plan-newformat.md](docs/plan-newformat.md) | 레슨 신양식 ㉑ — 렌더러·검사 배포 완료, 상급 원고 교체 후보 대기 (§5·§7) |
 | [docs/plan-content-51-101.md](docs/plan-content-51-101.md) | 초급 51〜101 착수점 — 완료 (D1b) |
+| [docs/marketing.md](docs/marketing.md) | 마케팅 — 채널·오퍼·규제·우선순위 (2026-08-10). 코드 착수 전 계획서 필요 |
 | [docs/system-overview.txt](docs/system-overview.txt) | 시스템 전반 |
 
 ---

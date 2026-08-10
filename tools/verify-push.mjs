@@ -18,6 +18,10 @@
    ================================================================== */
 import { deliverOne, retryKey, tooEarly, tooLate, fortuneSection } from "../server/db/push-daily.mjs";
 import { LineApiError } from "../server/lib/line.mjs";
+/* 読みを訊く文面は実物と突き合わせる ── 「読み方」という語を探す形だと、
+   文言を練り直すたびに関門が赤くなる。守りたいのは語ではなく
+   「askReading そのものが送られたか」（verify-kana も同じ）。 */
+import { askReading } from "../server/lib/onboarding.mjs";
 
 let pass = 0;
 const fails = [];
@@ -650,7 +654,7 @@ await check("読み仮名を待つ人には、読み方の質問を送り直す"
     { ...USER, name_source: "line", name_kr: null, name_reading: null },
     { send: async (_t, m) => { msgs = m; return {}; } });
   assert(/reading/.test(r), `${r}（blockingStep が読み仮名待ちを見ていません）`);
-  assert(msgs && /読み方/.test(msgs[0].text),
+  assert(msgs && msgs[0].text === askReading().text,
     `送った文面が読み方の質問ではありません: ${msgs ? msgs[0].text.split("\n")[0] : "（無し）"}`);
   /* 選び直しの画面を送ってはいけない ── もう選んだ人なので、
      もう一度選ばせると答えたはずの質問が戻ってくる。 */

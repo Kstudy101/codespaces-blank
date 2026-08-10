@@ -23,6 +23,11 @@ import vm from "node:vm";
 import * as srv from "../server/lib/kana2hangul.mjs";
 import { handlePostback } from "../server/lib/handlers/postback.mjs";
 import { handleMessage } from "../server/lib/handlers/message.mjs";
+/* 読みを訊く文面は実物と突き合わせる ── 「読み方」という語を探す形だと、
+   文言を練り直すたびに関門が赤くなる。守りたいのは語ではなく
+   「askReading そのものが送られたか」。 */
+import { askReading } from "../server/lib/onboarding.mjs";
+const ASK_READING = askReading().text;
 
 let pass = 0;
 const fails = [];
@@ -183,7 +188,7 @@ await check("表示名がかなでない → 読みを 1 行たのむ。サイ�
   const r = await handlePostback(conn, PB("action=name&use=line"),
     { send: async (_t, m) => { replied = m; return {}; } });
   assert(r.askedReading, JSON.stringify(r));
-  assert(replied[0].text.includes("読み方"), replied[0].text);
+  assert(replied[0].text === ASK_READING, replied[0].text);
   assert(!replied[0].text.includes("kstudy101.jp"), "最初の案内にサイトを出しています（最後の手段のはず）");
   return "John🎸 → 読み仮名の入力へ";
 });
@@ -193,7 +198,7 @@ await check("「べつの名前にする」も読みの入力へ", async () => {
   let replied = null;
   const r = await handlePostback(conn, PB("action=name&use=other"),
     { send: async (_t, m) => { replied = m; return {}; } });
-  assert(r.askedReading && replied[0].text.includes("読み方"), JSON.stringify(r));
+  assert(r.askedReading && replied[0].text === ASK_READING, JSON.stringify(r));
   return "第 3 の名前も同じ道";
 });
 
@@ -248,7 +253,7 @@ await check("「入れ直す」→ 候補を消して、もう一度読みから
   const ups = nameUpdates(conn);
   assert(ups.length === 1 && ups[0].params[1] === null && ups[0].params[2] === null,
     "候補が消えていません");
-  assert(replied[0].text.includes("読み方"), replied[0].text);
+  assert(replied[0].text === ASK_READING, replied[0].text);
   return "やり直しは読みから";
 });
 

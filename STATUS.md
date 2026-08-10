@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-10 (A안: 3의 배수 아침은 🔁 복습만 — [plan-quiz-review-on-multiple](docs/plan-quiz-review-on-multiple.md))
+최종 갱신: 2026-08-10 (LP 피벗 구현 완료 — [plan-lp-line-daily](docs/plan-lp-line-daily.md) · 관문 19 PASS · **배포 대기**)
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -8,6 +8,20 @@
 ---
 
 ## 0. 30초 요약
+
+### §0-◆◆ 사업 피벗 LP — **구현 완료 · 배포 대기**（2026-08-10）
+
+| | |
+|---|---|
+| 컨셉 | LINEで学ぶ 1日1分 簡単韓国語（P1=C+히어로A · H1-B） |
+| index | 이름 진단 **삭제** → LP 전면 |
+| 가나 정본 | `js/name-learn-data.js`（verify-kana/name · 서버 사본 대조） |
+| 요금 | 7/14/21/28일 = ¥500/970/1410/1800 · tokushoho·`PACKAGES`·migration `008` |
+| 하위 | tips/amulet/…/privacy/contact 명칭 통일 |
+| 관문 | **19종 PASS** |
+| 다음 | 대표가 `main` push（사이트）+ 서버 배포（008）. Stripe 콘솔 가격 맞춤은 C4 전 |
+
+**다음（대표）:** LP·패키지 배포. 체험7일 §0-◆ 순서와 겹치면 DB 백업 후 서버 쪽을 먼저.
 
 - 사이트(정적)는 **Xserver에서 가동 중** — https://www.kstudy101.jp/
   `main` 에 push 하면 GitHub Actions 가 자동 배포합니다

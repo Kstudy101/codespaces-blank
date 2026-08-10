@@ -532,61 +532,36 @@ check("repo/links.mjs も node の組み込みに触らない（P1 の約束）"
 
 
 /* ================================================================== */
-head("[サイト側]  このサイトで唯一、入力がサーバーへ出ていくボタン");
+head("[サイト側]  LP 化後 — 診断→LINE Login 連携は廃止。友だち追加 CTA のみ");
 
 const INDEX = read("index.html");
 const PRIVACY = read("privacy.html");
 
-/* 「送信しない」と書いてあるうちは、送信するボタンを出してはいけない。
-   人の注意ではなく、ここで順番を固定する。 */
-/* 行頭に固定する。注釈の中の「例: const LINE_LINK_API = 'https://…'」を
-   拾うと、設定していないのに設定済みと読んでしまう。 */
-const apiSet = (() => {
-  const m = INDEX.match(/^const LINE_LINK_API\s*=\s*['"]([^'"]*)['"]/m);
-  assert(m, "index.html に LINE_LINK_API の宣言がありません");
-  return m[1].trim();
-})();
+/* 2026-08-10: index は LP。LINE_LINK_API / linkFields / #s-line は置かない。
+   流入は lin.ee 友だち追加。保存の説明は privacy 第2項が正本のまま。 */
+check("診断連携フォームを置いていない（LP）", () => {
+  assert(!/^const LINE_LINK_API\s*=/m.test(INDEX),
+    "LINE_LINK_API が残っています ── 診断連携は廃止済みです");
+  assert(!/id="s-line"/.test(INDEX), "#s-line カードが残っています");
+  assert(!/function linkFields\(/.test(INDEX), "linkFields が残っています");
+  assert(/lin\.ee\/SKZtS5k/.test(INDEX), "友だち追加 URL がありません");
+  return "診断連携なし・友だち追加 CTA";
+});
 
-/* 以前ここは「サーバーに送信されず」という一文が残っていたら止める、
-   という見方をしていた。文言を直した今は、それでは荒すぎる ──
-   その一文は診断機能については今も本当で、消すほうが嘘になる。
-   実際に守りたいのは「送るなら、送ると書いてあること」なので、
-   そちらを見る。
-
-   ボタンを押すまで送信は起きないので、第1項の約束は
-   「押さない人」には最後まで当てはまる。だから第1項は残したまま、
-   例外への案内と、第2項の中身を要求する。 */
 const LINE_SECTION = /<h2>\d+\.\s*LINE 配信サービスについて<\/h2>/;
 
-check("連携先を設定するなら、privacy.html が保存すると書いてある", () => {
-  if (!apiSet) return "LINE_LINK_API 未設定 → カードは出ない";
-
+check("privacy.html に LINE 配信の保存説明がある", () => {
   assert(LINE_SECTION.test(PRIVACY),
-    "LINE_LINK_API が設定されているのに、privacy.html に\n"
-    + "      「LINE 配信サービスについて」の項がありません");
-
+    "privacy.html に「LINE 配信サービスについて」の項がありません");
   assert(/サーバーに保存します/.test(PRIVACY),
     "LINE の項はあるのに、保存すると書いていません");
-
-  /* 第1項の「送信されず」を読んだ人が、例外に気づけること。
-     気づけないなら、書いてあっても読まれない場所にあるのと同じ。 */
-  const claim = PRIVACY.indexOf("サーバーに送信されず、保存もされません");
-  const note  = PRIVACY.indexOf("ひとつだけ例外があります");
-  const sect  = PRIVACY.search(LINE_SECTION);
-  assert(claim >= 0 && note > claim && note < sect,
-    "第1項の「送信されず」と第2項のあいだに、例外への案内がありません");
-
-  /* 消し方が書いていない保存は、預かりっぱなしになる。 */
   assert(/すべて消したい場合/.test(PRIVACY) && /\/contact/.test(PRIVACY),
     "削除の求め方が書かれていません");
-
-  return `連携先 ${apiSet} / 第2項・例外案内・削除経路あり`;
+  return "第2項・削除経路あり";
 });
 
 check("LINE の項は、保存するものを 1 つずつ挙げている", () => {
-  if (!LINE_SECTION.test(PRIVACY)) return "第2項なし（連携も未設定）";
-  /* schema にある個人的な列は、名前で挙げてあること。
-     「等」でまとめると、何が残るのか読んだ人には分からない。 */
+  if (!LINE_SECTION.test(PRIVACY)) return "第2項なし";
   for (const [what, re] of [
     ["名前",       /お名前・ふりがな・韓国語表記/],
     ["生年月日",   /生年月日・生まれた時刻/],
@@ -595,115 +570,9 @@ check("LINE の項は、保存するものを 1 つずつ挙げている", () =>
     ["配信の記録", /お届けの記録/],
     ["購入の記録", /ご購入の記録/]
   ]) assert(re.test(PRIVACY), `${what} が挙がっていません`);
-
-  /* ---- 性別 --------------------------------------------------------
-     ここは「訊いていないものは送らない、と書いてあること」を見ていた。
-     だが実際には送っている ── linkFields が gender:'U' を積み、
-     saju_profiles.gender に入る。書いてあることの方が事実と違っていた。
-
-     ポリシーを事実に合わせたので、検査もそちらへ寄せる。片方だけでは
-     足りない:
-
-       「訊いていない」だけ … 読んだ人は送っていないと受け取る
-       「送っている」だけ   … 何を送っているのかが分からない
-
-     両方を要る。前に一度、第1項の「保存しない」が第2項の実装と
-     食い違ったまま公開されかけた（docs/research.md §0.2）ので、
-     ここは緩めずに 2 本にしておく。 */
-  /* 2026-08-07 改定（지시서⑱）: 性別は集めない ── 目的（大運の計算に
-     将来用いる）が消えたので、質問・送信・保存・記載の 4 つとも消した。
-     ここは「性別の記載が**無い**こと」へ反転 ── 集めていないのに
-     ポリシーに残っていれば、方針とコードの食い違いの 5 回目になる。 */
   assert(!/性別/.test(PRIVACY), "性別の記載が残っています（もう集めていません）");
   assert(!/大運/.test(PRIVACY), "大運の説明が残っています");
   return "7 種を名指し・性別の記載 0";
-});
-
-check("カードは既定で伏せてある", () => {
-  assert(/<div class="card" id="s-line" hidden>/.test(INDEX),
-    "#s-line に hidden がありません");
-  return "hidden";
-});
-
-/* linkFields() だけを取り出して動かす。使うのは state と Saju.CITIES
-   だけなので、index.html 全体を読み込まなくても評価できる。 */
-const linkSrc = INDEX.match(/function linkFields\(b\)\{[\s\S]*?\n\}/);
-assert(linkSrc, "linkFields が見つかりません");
-
-const STATE = {
-  seiK: "武田", meiK: "花子", seiF: "たけだ", meiF: "はなこ",
-  fullH: "다케다 하나코", ohaengKo: "목", zodiac: "돼지", hanjaEum: { 武: "무" }
-};
-const SAJU = { CITIES: [{ id: "tokyo", ja: "東京", ko: "도쿄" }] };
-const BIRTH = { y: 1995, m: 4, d: 12, hour: 9, city: "tokyo" };
-const BIRTH_NO_HOUR = { y: 1995, m: 4, d: 12, hour: null, city: "tokyo" };
-
-const linkFields = new Function("state", "Saju", `${linkSrc[0]}; return linkFields;`)(STATE, SAJU);
-
-check("送る値は、すべて画面に出す名前を持っている ── gender は送らない", () => {
-  /* 性別は集めない（지시서⑱）。⑩까지는 「보내되 화면에 안 냄」의
-     예외 1건이 있었다 ── 예외째로 삭제. 서버 normalizeProfile 은
-     gender 누락을 기본값 'U'(未質問)로 채우므로 안 보내면 된다. */
-  const fields = linkFields(BIRTH);
-  assert(!fields.some((f) => f.key === "gender"),
-    "gender を送っています ── 目的の消えた個人情報を送る道は⑱で閉じました");
-  for (const f of fields) {
-    if (f.value === null || f.value === undefined) continue;
-    assert(f.label, `${f.key} を送るのに、画面に出す名前がありません`);
-    assert(f.shown, `${f.key} を送るのに、画面に出す値がありません`);
-  }
-  return `${fields.length} 項目・例外 0`;
-});
-
-check("生年月日は YYYY-MM-DD。日時つきの文字列を作らない", () => {
-  const p = Object.fromEntries(linkFields(BIRTH).map((f) => [f.key, f.value]));
-  assert(p.birthDate === "1995-04-12", p.birthDate);
-  assert(!/[TZ]/.test(p.birthDate),
-    `${p.birthDate} ── UTC の夜は JST では翌日なので、日柱が 1 日ずれます`);
-  assert(p.birthTime === "09:00:00", p.birthTime);
-  return "1995-04-12 / 09:00:00";
-});
-
-check("時刻を答えていない人は、時刻を送らない", () => {
-  const p = Object.fromEntries(linkFields(BIRTH_NO_HOUR).map((f) => [f.key, f.value]));
-  assert(p.birthTime === null, `${p.birthTime} を送ろうとしています`);
-  const shown = linkFields(BIRTH_NO_HOUR).find((f) => f.key === "birthTime").shown;
-  assert(!shown, "送らないものを画面に出しています");
-  return "null";
-});
-
-check("診断結果に、画面へ出していないものが混ざっていない", () => {
-  const f = linkFields(BIRTH).find((x) => x.key === "rawResult");
-  const keys = Object.keys(f.value);
-  /* rawResult の中身は 1 行にまとめて出している。増やすときは
-     shown の文も直すこと。 */
-  assert(keys.length === 4 && keys.every((k) =>
-    ["zodiac", "ohaeng", "city", "hanjaEum"].includes(k)),
-    `中身が変わっています: ${keys.join(", ")}`);
-  assert(/出生地/.test(f.shown), "出生地を送るのに、画面に出していません");
-  return keys.join(" / ");
-});
-
-check("描画は esc() を通す（名前は利用者が入れた文字）", () => {
-  const fn = INDEX.match(/function describeLinkPayload\(b\)\{[\s\S]*?\n\}/)[0];
-  assert(/esc\(f\.label\)/.test(fn) && /esc\(f\.shown\)/.test(fn),
-    "エスケープせずに埋めています");
-  return "label / shown とも esc";
-});
-
-check("送信に失敗しても、診断結果は消さない", () => {
-  const fn = INDEX.match(/async function startLineLink\(\)\{[\s\S]*?\n\}/)[0];
-  assert(/catch/.test(fn), "失敗を拾っていません");
-  assert(/btn\.disabled = false/.test(fn), "押し直せなくなります");
-  assert(!/location\.reload|innerHTML\s*=\s*['"]/.test(fn), "画面を作り直しています");
-  return "やり直せる";
-});
-
-check("「別の名前で試す」で、前の人の名前が残らない", () => {
-  const fn = INDEX.match(/\$\('again'\)\.addEventListener[\s\S]*?\n\}\);/)[0];
-  assert(/s-line-what'\)\.innerHTML = ''/.test(fn), "送信内容の表示が残ります");
-  assert(/\$\('s-line'\)\.hidden = true/.test(fn), "カードが出たままになります");
-  return "消してから伏せる";
 });
 
 

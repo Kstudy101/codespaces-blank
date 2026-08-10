@@ -126,11 +126,11 @@ await acheck("同じ Session を二度処理しても日数は増えない", asy
                                    current_day: 0, remaining: 30 }]
   });
 
-  const first = await billing.creditPurchase(conn, 7, "beginner", "30days",
+  const first = await billing.creditPurchase(conn, 7, "beginner", "28days",
     { paymentRef: "cs_test_ABC" });
   assert(first.created === true, "1 度目が入りませんでした");
 
-  const second = await billing.creditPurchase(conn, 7, "beginner", "30days",
+  const second = await billing.creditPurchase(conn, 7, "beginner", "28days",
     { paymentRef: "cs_test_ABC" });
   assert(second.created === false, "2 度目も新規として扱いました（日数が二度積まれます）");
   assert(second.daysGranted === 0, `2 度目で ${second.daysGranted} 日積みました`);
@@ -260,11 +260,11 @@ check("シークレット未設定なら webhook を止める", () => {
 check("未払いの completed は日数に替えない", () => {
   const paid = readCheckoutEvent({ type: "checkout.session.completed",
     data: { object: { id: "cs_1", payment_status: "paid",
-                      metadata: { user_id: "7", track: "beginner", package: "30days" } } } });
+                      metadata: { user_id: "7", track: "beginner", package: "28days" } } } });
   assert(paid && paid.sessionId === "cs_1", "払った分を落としました");
   const unpaid = readCheckoutEvent({ type: "checkout.session.completed",
     data: { object: { id: "cs_2", payment_status: "unpaid",
-                      metadata: { user_id: "7", track: "beginner", package: "30days" } } } });
+                      metadata: { user_id: "7", track: "beginner", package: "28days" } } } });
   assert(unpaid === null, "未払いを通しました（銀行振込などで起こります）");
   return "payment_status を見る";
 });
@@ -293,7 +293,7 @@ check("金額の出どころは PACKAGES の 1 か所だけ", () => {
 await acheck("知らない track / package は DB に届く前に弾く", async () => {
   const conn = fakeConn();
   let threw = 0;
-  try { await billing.creditPurchase(conn, 7, "Beginner", "30days", {}); } catch { threw++; }
+  try { await billing.creditPurchase(conn, 7, "Beginner", "28days", {}); } catch { threw++; }
   try { await billing.creditPurchase(conn, 7, "beginner", "90days", {}); } catch { threw++; }
   assert(threw === 2, `${threw} 件しか弾きませんでした`);
   assert(!conn.calls.length, "DB を触りました");
@@ -332,7 +332,7 @@ await acheck("createCheckoutSession は product_data[tax_code] を必ず載せ�
   try {
     await createCheckoutSession({
       userId: 7, track: "beginner", packageType: "7days",
-      days: 7, price: 980, productName: "初級（초급） 7日分",
+      days: 7, price: 500, productName: "初級（초급） 7日分",
       successUrl: "https://example.jp/thanks", cancelUrl: "https://example.jp/"
     });
     assert(captured, "リクエストが届いていません");
@@ -1005,7 +1005,7 @@ await acheck("決済の記録と日数は 1 つのトランザクションで書
   });
   let wrapped = 0;
   const r = await checkout.creditFromStripe(outer,
-    { sessionId: "cs_x", userId: 7, track: "beginner", packageType: "30days", amount: 2980 },
+    { sessionId: "cs_x", userId: 7, track: "beginner", packageType: "28days", amount: 1800 },
     { transact: async (fn) => { wrapped++; return fn(tx); },
       send: async () => ({}) });
   assert(wrapped === 1, `transact が ${wrapped} 回（1 回のはず）`);
@@ -1025,7 +1025,7 @@ await acheck("トランザクションが失敗したら、日数は 1 日も付
     "FROM users": [{ id: 7, line_user_id: "U_t", status: "active", active_track: null }]
   });
   const r = await checkout.creditFromStripe(outer,
-    { sessionId: "cs_y", userId: 7, track: "beginner", packageType: "30days", amount: 2980 },
+    { sessionId: "cs_y", userId: 7, track: "beginner", packageType: "28days", amount: 1800 },
     { transact: async (fn) => {
         const tx = fakeConn({ "INSERT INTO course_entitlements": () => {
           throw new Error("死んだ（grant 直前）"); } });
@@ -1066,7 +1066,7 @@ await acheck("逆方向の突き合わせ ── 行ごと無い half-done を�
 
 check("async_payment_succeeded を受ける（コンビニ・振込の入金）", () => {
   const base = { data: { object: { id: "cs_1", payment_status: "paid",
-    metadata: { user_id: "7", track: "beginner", package: "30days" }, amount_total: 2980 } } };
+    metadata: { user_id: "7", track: "beginner", package: "28days" }, amount_total: 1800 } } };
   const a = readCheckoutEvent({ ...base, type: "checkout.session.async_payment_succeeded" });
   assert(a && a.sessionId === "cs_1", "async_payment_succeeded を捨てています（入金したのに日数 0）");
   /* completed(unpaid) は従来どおり捨てる ── 振込の「まだ払っていない」 */

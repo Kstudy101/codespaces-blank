@@ -231,7 +231,7 @@ try {
     return "1 回だけ";
   });
 
-  const p1 = await billing.creditPurchase(pool, uid, T, "30days", { paymentRef: "pi_smoke_1" });
+  const p1 = await billing.creditPurchase(pool, uid, T, "28days", { paymentRef: "pi_smoke_1" });
   check("初回の決済で +30 日", () => {
     assert(p1.created === true, "created=false でした");
     assert(p1.daysGranted === 30, `${p1.daysGranted} 日`);
@@ -240,7 +240,7 @@ try {
     return `${billing.TRIAL_DAYS + 30} 日`;
   });
 
-  const p2 = await billing.creditPurchase(pool, uid, T, "30days", { paymentRef: "pi_smoke_1" });
+  const p2 = await billing.creditPurchase(pool, uid, T, "28days", { paymentRef: "pi_smoke_1" });
   const e3 = await entitlements.get(pool, uid, T);
   check("同じ取引 ID の再送は加算しない ← ここが本番で効く", () => {
     assert(p2.created === false,

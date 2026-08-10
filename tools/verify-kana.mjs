@@ -1,13 +1,16 @@
 /* ==================================================================
    verify-kana.mjs — かな→ハングル変換の移植と、名前教正の対話
 
-   server/lib/kana2hangul.mjs は index.html の変換部の**写し**で、
-   この repo で写しは本来禁じ手（ウェブと LINE で同じ名前が違う
-   ハングルになったら、どちらももっともらしいので並べるまで
-   気づけない）。写しを許した唯一の担保がこの関門 ──
+   server/lib/kana2hangul.mjs は js/name-learn-data.js（旧 index 診断の
+   変換部）の**写し**で、この repo で写しは本来禁じ手（ウェブと LINE で
+   同じ名前が違うハングルになったら、どちらももっともらしいので並べる
+   まで気づけない）。写しを許した唯一の担保がこの関門 ──
 
-     index.html から実物を vm で切り出し、移植版と突き合わせる。
+     js/name-learn-data.js から実物を vm で切り出し、移植版と突き合わせる。
      全表 + 規則の境界。1 件でも違えば配置が止まる。
+
+   2026-08-10 LP 化で index.html から正本を外した。正本の置き場だけが
+   変わったので、切り出し先をこちらに移した（中身の規則は同じ）。
 
    後半は step① の対話（2026-08-04 Phase 1 指示書）。守るものは:
      ・サイトへ戻さない（そこで離脱が起きていた）
@@ -35,12 +38,12 @@ async function check(label, fn) {
 }
 function assert(cond, msg) { if (!cond) throw new Error(msg || "満たしていません"); }
 
-/* ---- 実物を index.html から切り出す（verify-name と同じやり方）---- */
-const IDX = fs.readFileSync("index.html", "utf8");
+/* ---- 実物を js/name-learn-data.js から切り出す ---- */
+const IDX = fs.readFileSync("js/name-learn-data.js", "utf8");
 const from = IDX.indexOf("const CHO = [");
 const to   = IDX.indexOf("const HANJA = {");
 if (from < 0 || to <= from) {
-  console.error("✗ index.html から変換部を切り出せません（節の見出しが変わった可能性）");
+  console.error("✗ js/name-learn-data.js から変換部を切り出せません（節の見出しが変わった可能性）");
   process.exit(1);
 }
 const box = {};
@@ -48,7 +51,7 @@ vm.createContext(box);
 vm.runInContext(IDX.slice(from, to)
   + "\n;globalThis.KANA1=KANA1;globalThis.KANA2=KANA2;"
   + "globalThis.isKana=isKana;globalThis.toHira=toHira;",
-  box, { filename: "index.html<kana>" });
+  box, { filename: "name-learn-data.js<kana>" });
 
 const web = (s) => box.kanaToHangul(s).join("");
 const mod = (s) => srv.kanaToHangul(s).join("");

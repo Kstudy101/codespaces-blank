@@ -1,20 +1,18 @@
 #!/usr/bin/env node
 /* ==================================================================
-   verify-name.mjs — index.html にインラインで書かれた学習データ
+   verify-name.mjs — js/name-learn-data.js に書かれた学習データ
 
      使い方:  node tools/verify-name.mjs
 
-   STEP 1〜6 が出しているものは、ほぼ全部 index.html の中の表。
+   STEP 1〜6 が出しているものは、ほぼ全部 name-learn-data.js の中の表
+   （2026-08-10 まで index.html インライン。LP 化で正本を移した）。
 
      かな → ハングル   KANA1 / KANA2 + kanaToHangul()
      漢字 → 韓国漢字音 HANJA（手書き 222 字）
      漢数詞           sino()（1995 → 천구백구십오）
      十二支・五行     ZODIAC / OHAENG（saju.js 側にも同じものがある）
 
-   どちらもこの저장소の中では何とも突き合わせていなかった。README に
-   「jsdom で 53 ケース」と書いてあるが、それはここに無く、二度と走らない。
-
-   かなの変換関数は DOM に触らない純関数なので、index.html から
+   かなの変換関数は DOM に触らない純関数なので、正本から
    その範囲だけ切り出して動かす。切り出す目印は「1. ハングル 組み立て」の
    先頭（const CHO）から「3. 漢字 →」の HANJA まで。
    ================================================================== */
@@ -41,25 +39,25 @@ const check = (label, fn) => {
 const assert = (c, m) => { if (!c) throw new Error(m); };
 const head = (s) => console.log(`\n${s}`);
 
-const IDX = fs.readFileSync("index.html", "utf8");
+const IDX = fs.readFileSync("js/name-learn-data.js", "utf8");
 const KANJI = JSON.parse(fs.readFileSync("kanji.json", "utf8"));
 
 /* ---- 変換関数を切り出す --------------------------------------------- */
 const from = IDX.indexOf("const CHO = [");
 const to   = IDX.indexOf("const HANJA = {");
 if (from < 0 || to < 0 || to <= from) {
-  console.error("\u2717 index.html から変換部を切り出せません（節の見出しが変わった可能性）");
+  console.error("\u2717 js/name-learn-data.js から変換部を切り出せません（節の見出しが変わった可能性）");
   process.exit(1);
 }
 const box = {};
 vm.createContext(box);
 
-/** index.html から見出しの間を切り出す。見出しが変われば落ちる ── そのとき
+/** name-learn-data.js から見出しの間を切り出す。見出しが変われば落ちる ── そのとき
     黙って検査を素通りするより、切り出せないと言って止まるほうがよい。 */
 function slice(startMark, endMark) {
   const a = IDX.indexOf(startMark), b = IDX.indexOf(endMark, a + 1);
   if (a < 0 || b <= a) {
-    console.error(`\u2717 index.html から切り出せません: ${startMark}`);
+    console.error(`\u2717 js/name-learn-data.js から切り出せません: ${startMark}`);
     process.exit(1);
   }
   let out = IDX.slice(a, b);
@@ -436,7 +434,7 @@ const UNVERIFIED = ["伊", "﨑", "阿", "嶋", "菅", "柴", "翔", "智", "楓
 
 function curated() {
   const from = IDX.indexOf("const HANJA = {");
-  assert(from >= 0, "index.html に HANJA 表が見つかりません");
+  assert(from >= 0, "js/name-learn-data.js に HANJA 表が見つかりません");
   const to = IDX.indexOf("4. 五行", from);
   assert(to > from, "HANJA 表の終わりが見つかりません");
   const out = {};

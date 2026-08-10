@@ -20,11 +20,10 @@ import * as entitlements from "./entitlements.mjs";
    持つと、片方だけ値上げしたときに「払った額と増えた日数が
    合わない」が起き、しかも請求は通っているので気づかない。 */
 export const PACKAGES = Object.freeze({
-  "7days":   { days: 7,   price:  980 },
-  "14days":  { days: 14,  price: 1680 },
-  "30days":  { days: 30,  price: 2980 },
-  "60days":  { days: 60,  price: 4980 },
-  "101days": { days: 101, price: 7480 }
+  "7days":   { days: 7,   price:  500 },
+  "14days":  { days: 14,  price:  970 },
+  "21days":  { days: 21,  price: 1410 },
+  "28days":  { days: 28,  price: 1800 },
 });
 
 export const TRIAL_DAYS = 7;

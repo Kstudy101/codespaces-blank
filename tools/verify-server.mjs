@@ -419,17 +419,17 @@ check("smoke.mjs が migrate を 2 回続けて流す", () => {
 /* ================================================================== */
 head("[金額]  二度届いた決済で、保有日数を二度足さない");
 
-check("価格表が計画書 1-1 と一致する", () => {
-  const want = { "7days": [7, 980], "14days": [14, 1680], "30days": [30, 2980],
-                 "60days": [60, 4980], "101days": [101, 7480] };
+check("価格表が週次パッケージ表と一致する", () => {
+  const want = { "7days": [7, 500], "14days": [14, 970], "21days": [21, 1410],
+                 "28days": [28, 1800] };
   for (const [k, [days, price]] of Object.entries(want)) {
     const p = billing.PACKAGES[k];
     assert(p, `${k} がありません`);
     assert(p.days === days && p.price === price,
-      `${k}: ${p.days}日/¥${p.price}（計画書は ${days}日/¥${price}）`);
+      `${k}: ${p.days}日/¥${p.price}（表は ${days}日/¥${price}）`);
   }
-  assert(Object.keys(billing.PACKAGES).length === 5, "パッケージが 5 つではありません");
-  return "5 種一致";
+  assert(Object.keys(billing.PACKAGES).length === 4, "パッケージが 4 つではありません");
+  return "4 種一致";
 });
 
 check("1 日あたりの単価が長いほど安い ── 価格表の建て付けそのもの", () => {
@@ -450,18 +450,18 @@ await acheck("初めての決済 → 購入を記録し、保有日数を足す"
     if (/INSERT INTO purchases/.test(sql)) return { affectedRows: 1, insertId: 11 };
     if (/INSERT INTO course_entitlements/.test(sql)) return { affectedRows: 1 };
     if (/UPDATE subscriptions/.test(sql)) return { affectedRows: 1 };
-    return [{ track: "beginner", days_entitled: 30, days_used: 0, current_day: 0, remaining: 30 }];
+    return [{ track: "beginner", days_entitled: 28, days_used: 0, current_day: 0, remaining: 28 }];
   });
-  const r = await billing.creditPurchase(conn, 1, "beginner", "30days", { paymentRef: "pi_ABC" });
+  const r = await billing.creditPurchase(conn, 1, "beginner", "28days", { paymentRef: "pi_ABC" });
   assert(r.created === true, "created が false です");
-  assert(r.daysGranted === 30, `daysGranted=${r.daysGranted}`);
+  assert(r.daysGranted === 28, `daysGranted=${r.daysGranted}`);
   /* 日数はコース別の表へ積む（migrations/002）。subscriptions は
      体験の記録だけになったので、そちらは触らない。 */
   const grant = conn.calls.find((c) => /INSERT INTO course_entitlements/.test(c.sql));
   assert(grant, "course_entitlements に積んでいません");
   assert(grant.params[1] === "beginner", `コースが ${grant.params[1]} です`);
-  assert(grant.params[2] === 30, `足した日数が ${grant.params[2]} です`);
-  return "+30 日 / beginner";
+  assert(grant.params[2] === 28, `足した日数が ${grant.params[2]} です`);
+  return "+28 日 / beginner";
 });
 
 await acheck("同じ payment_ref が再送 → 日数を足さない", async () => {
@@ -469,7 +469,7 @@ await acheck("同じ payment_ref が再送 → 日数を足さない", async () 
     if (/INSERT INTO purchases/.test(sql)) throw dupError();
     return [{ track: "beginner", days_entitled: 33, days_used: 0, current_day: 0, remaining: 33 }];
   });
-  const r = await billing.creditPurchase(conn, 1, "beginner", "30days", { paymentRef: "pi_ABC" });
+  const r = await billing.creditPurchase(conn, 1, "beginner", "28days", { paymentRef: "pi_ABC" });
   assert(r.created === false, "created が true です");
   assert(r.daysGranted === 0, `daysGranted=${r.daysGranted}`);
   assert(!conn.calls.some((c) => /INSERT INTO course_entitlements/.test(c.sql)),

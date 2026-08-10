@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS saju_profiles (
 CREATE TABLE IF NOT EXISTS purchases (
   id              BIGINT PRIMARY KEY AUTO_INCREMENT,
   user_id         BIGINT NOT NULL,
-  package_type    ENUM('7days','14days','30days','60days','101days') NOT NULL,
+  package_type    ENUM('7days','14days','21days','28days','30days','60days','101days') NOT NULL,
   days_granted    INT    NOT NULL,                 -- 7/14/30/60/101
   price_paid      INT    NOT NULL,                 -- 円。小数の無い通貨なので整数
   purchased_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

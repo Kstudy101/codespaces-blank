@@ -184,8 +184,8 @@ console.log("\n[サイト本体との一致]");
 
 /* index.html の fillName / ieyo / ega と同じ結果になるか。
    ソースから規則を読み出して、写し間違いではなく実物と比べる。 */
-check("index.html の助詞規則と同じ", () => {
-  const src = readFileSync(join(ROOT, "index.html"), "utf8");
+check("サイト本体（name-learn-data）の助詞規則と同じ", () => {
+  const src = readFileSync(join(ROOT, "js/name-learn-data.js"), "utf8");
   const site = {};
   for (const [re, slot] of [
     [/\.replace\(\/\\\{ieyo\\\}\/g,\s*j \? '([^']+)' : '([^']+)'\)/, "NAME_IEYO"],
@@ -193,7 +193,7 @@ check("index.html の助詞規則と同じ", () => {
     [/\.replace\(\/\\\{ga\\\}\/g,\s*j \? '([^']+)' : '([^']+)'\)/,    "NAME_GA"]
   ]) {
     const m = re.exec(src);
-    assert(m, `index.html から ${slot} の規則を読めません`);
+    assert(m, `js/name-learn-data.js から ${slot} の規則を読めません`);
     site[slot] = { yes: m[1], no: m[2] };
   }
   for (const [slot, r] of Object.entries(site)) {

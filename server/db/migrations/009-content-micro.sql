@@ -1,0 +1,15 @@
+-- ===================================================================
+-- 009-content-micro.sql
+--
+-- 週次マイクロ原稿（💡📌💬🎯 / 🎬 / ❓ / ☕）用の列。
+--
+--   { "hook": "…", "hook_body": "…", "formula": "…", "mission": "…" }
+--
+-- NULL 許可 ── 旧クラシック原稿（📘）には無い。render.mjs の
+-- isMicroFormat は hook+formula+mission の有無で切り替えるので、
+-- 列が NULL なら従来どおりクラシック経路になる。
+--
+-- 個別列にしないのは、差し込み口（{NAME} など）を含む短文が
+-- 4 つあるだけで、quiz / fortune_bridge と同じく JSON 1 列の方が
+-- seed・検査の配線が短く済むため。
+ALTER TABLE content_templates ADD COLUMN micro JSON NULL;

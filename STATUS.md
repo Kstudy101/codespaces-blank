@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-최종 갱신: 2026-08-10 (1주차 원고 입고 — [plan-content-weekly](docs/plan-content-weekly.md) §5)
+최종 갱신: 2026-08-10 (micro JSON 열 009 — seed 반영 수정)
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -8,6 +8,14 @@
 ---
 
 ## 0. 30초 요약
+
+### §0-◆◆◆ 마이크로 seed 미반영 수정 — **009 micro 열**（2026-08-10）
+
+| | |
+|---|---|
+| 원인 | `hook`/`formula`/`mission` 이 DB에 안 들어가 `isMicroFormat` 항상 false |
+| 수정 | `009-content-micro.sql` + upsert/seed/getTemplate |
+| 다음 | **코드 배포(migrate) → beginner 재 seed**（이미 받은 LINE은 안 바뀜） |
 
 ### §0-◆◆◆ 주간 코스 1주차 + 초급 실전 톤 — **입고**（2026-08-10）
 
@@ -18,7 +26,7 @@
 | 정본 | `server/content/_days-data.json` → `_build-beginner.mjs` |
 | 검사 | beginner 101일 `content-check` 0건 |
 | 저녁 | **기존 `push-evening` 그대로** |
-| 다음 | 서버 seed 배포 · 2주째~ 마이크로 주간 포맷 확장 |
+| 다음 | **코드 배포(migrate 009) → beginner 재 seed** |
 
 ### §0-◆◆ 사업 피벗 LP — **구현 완료 · 배포 대기**（2026-08-10）
 

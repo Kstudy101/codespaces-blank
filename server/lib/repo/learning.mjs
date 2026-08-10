@@ -231,8 +231,41 @@ export async function setQuizResult(conn, userId, track, semester, passed) {
 
 /* ---- 配信する原稿 ------------------------------------------------- */
 
+/* 009。micro JSON → レンダが読む平らな欄。isMicroFormat は
+   template.hook / formula / mission を見る。列のまま渡すと
+   ネストのままになって 📘 に落ちる。 */
+function unpackMicro(raw) {
+  const m = fromJson(raw);
+  if (!m || typeof m !== "object" || Array.isArray(m)) {
+    return { hook: null, hook_body: null, formula: null, mission: null };
+  }
+  return {
+    hook: m.hook ?? null,
+    hook_body: m.hook_body ?? null,
+    formula: m.formula ?? null,
+    mission: m.mission ?? null
+  };
+}
+
+/* seed / 運営入力から来る micro。不完全なら null（クラシック扱い）。
+   どれかだけ在る状態を DB に残すと、isMicroFormat が false なのに
+   片側だけ古い文が残って対照しづらい。 */
+export function packMicro(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const hook = input.hook != null ? String(input.hook) : "";
+  const formula = input.formula != null ? String(input.formula) : "";
+  const mission = input.mission != null ? String(input.mission) : "";
+  if (!hook.trim() || !formula.trim() || !mission.trim()) return null;
+  const out = { hook, formula, mission };
+  if (input.hook_body != null && String(input.hook_body).trim()) {
+    out.hook_body = String(input.hook_body);
+  }
+  return out;
+}
+
 function shapeTemplate(row) {
   if (!row) return null;
+  const micro = unpackMicro(row.micro);
   return {
     ...row,
     dialogue_template: fromJson(row.dialogue_template),
@@ -245,12 +278,15 @@ function shapeTemplate(row) {
     fortune_bridge: fromJson(row.fortune_bridge),
     /* 003。節目の採点（handlers/postback.mjs の tpl.quiz）と
        復習クイズの両方がここを読む。 */
-    quiz: fromJson(row.quiz)
+    quiz: fromJson(row.quiz),
+    /* 009。平らに広げる。生の micro 列は残さない（二重の出所を防ぐ）。 */
+    micro: undefined,
+    ...micro
   };
 }
 
 const TPL_COLS = `day_number, track, semester, grammar_point, grammar_tip_kr,
-                  dialogue_template, vocab_3, fortune_bridge, requires_name_slot, quiz`;
+                  dialogue_template, vocab_3, fortune_bridge, requires_name_slot, quiz, micro`;
 
 /* track を第 2 引数ではなく第 2 引数「として必須」にしてある。
    既定を 'beginner' にすると、渡し忘れた呼び出しが初級の原稿を
@@ -285,7 +321,7 @@ export async function listTemplates(conn, { track = null, semester = null } = {}
 export async function upsertTemplate(conn, {
   track, dayNumber, grammarPoint, grammarTipKr = null,
   dialogueTemplate = null, vocab3 = null, fortuneBridge = null,
-  requiresNameSlot = false, quiz = null
+  requiresNameSlot = false, quiz = null, micro = null
 }) {
   if (!isTrack(track)) {
     throw new Error(`未知の track: ${track}（${TRACKS.join(" / ")} のどれか）`);
@@ -296,11 +332,16 @@ export async function upsertTemplate(conn, {
   }
   if (!grammarPoint) throw new Error("grammar_point は必須です");
 
+  /* micro は原稿そのもの。無い日は NULL で上書きしてよい
+     （クラシックへ戻す再入稿）。quiz と違い「別ファイルで後付け」
+     しないので、保全 IF は付けない。 */
+  const packed = packMicro(micro);
+
   await run(conn,
     `INSERT INTO content_templates
        (track, day_number, semester, grammar_point, grammar_tip_kr,
-        dialogue_template, vocab_3, fortune_bridge, requires_name_slot, quiz)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        dialogue_template, vocab_3, fortune_bridge, requires_name_slot, quiz, micro)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        semester           = VALUES(semester),
        grammar_point      = VALUES(grammar_point),
@@ -312,10 +353,11 @@ export async function upsertTemplate(conn, {
        /* quiz が無い原稿で再入稿すると VALUES(quiz)=NULL になり、
           既存のクイズを黙って消していた（指示書⑮ §3）。
           NULL のときは列を触らない。原稿に quiz があるときだけ更新。 */
-       quiz               = IF(VALUES(quiz) IS NULL, quiz, VALUES(quiz))`,
+       quiz               = IF(VALUES(quiz) IS NULL, quiz, VALUES(quiz)),
+       micro              = VALUES(micro)`,
     [track, d, semesterForDay(d), grammarPoint, nn(grammarTipKr),
      toJson(dialogueTemplate), toJson(vocab3), toJson(fortuneBridge),
-     requiresNameSlot ? 1 : 0, toJson(quiz)]);
+     requiresNameSlot ? 1 : 0, toJson(quiz), toJson(packed)]);
   return getTemplate(conn, track, d);
 }
 

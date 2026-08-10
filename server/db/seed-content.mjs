@@ -221,7 +221,16 @@ for (const d of days) {
     requiresNameSlot: !!d.requires_name_slot,
     /* 復習クイズ（任意、003）。形は content-check が入稿前に全部見る。
        null のとき upsert は既存 quiz を触らない（IF … IS NULL）。 */
-    quiz:             incoming
+    quiz:             incoming,
+    /* 009。週次マイクロ。無い日は null → DB も NULL（クラシック）。 */
+    micro: (d.hook || d.formula || d.mission)
+      ? {
+          hook: d.hook,
+          hook_body: d.hook_body ?? null,
+          formula: d.formula,
+          mission: d.mission
+        }
+      : null
   });
   done++;
 }

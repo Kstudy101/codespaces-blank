@@ -945,16 +945,69 @@ await acheck("quiz のある原稿で再入稿すれば、ちゃんと差し替�
   await learning.upsertTemplate(conn, {
     track: "beginner", dayNumber: 3, grammarPoint: "-아요/어요", quiz: q
   });
-  /* params は (track, day_number, semester, …, requires_name_slot, quiz)。
-     最後が JSON で渡っていれば VALUES(quiz) は非 NULL ── IF は
+  /* params は (track, day_number, semester, …, requires_name_slot, quiz, micro)。
+     quiz は末尾から 2 番目。JSON で渡っていれば VALUES(quiz) は非 NULL ── IF は
      VALUES(quiz) の側を選ぶ。 */
-  const last = conn.calls[0].params[9];
-  assert(typeof last === "string" && JSON.parse(last).answer === 1,
-    `quiz が JSON で渡っていません: ${JSON.stringify(last)}`);
+  const quizParam = conn.calls[0].params[9];
+  assert(typeof quizParam === "string" && JSON.parse(quizParam).answer === 1,
+    `quiz が JSON で渡っていません: ${JSON.stringify(quizParam)}`);
   /* 「触らない」だけの式に退化していないか。 */
   assert(/IS NULL\s*,\s*quiz\s*,\s*VALUES\s*\(\s*quiz\s*\)/i.test(conn.calls[0].sql),
     "VALUES(quiz) 側の枝がありません（更新されなくなります）");
   return "非 NULL なら差し替わる";
+});
+
+await acheck("micro 原稿は upsert で micro 列へ入り、再取得で平らに広がる（009）", async () => {
+  /* seed しても 📘 のまま、の事故。列に入らない / 入ってもネストのまま
+     だと isMicroFormat が false のまま。 */
+  const packed = {
+    hook: "短いフック！",
+    hook_body: "補足",
+    formula: "名詞 + 입니다",
+    mission: "3回言う"
+  };
+  const row = {
+    day_number: 1, track: "beginner", semester: 1,
+    grammar_point: "-입니다", grammar_tip_kr: null,
+    dialogue_template: null, vocab_3: null, fortune_bridge: null,
+    requires_name_slot: 0, quiz: null,
+    micro: JSON.stringify(packed)
+  };
+  const conn = fakeConn((sql) => {
+    if (/INSERT\s+INTO\s+content_templates/i.test(sql)) return { affectedRows: 1 };
+    return [row];
+  });
+  const out = await learning.upsertTemplate(conn, {
+    track: "beginner", dayNumber: 1, grammarPoint: "-입니다", micro: packed
+  });
+  assert(/\bmicro\b/.test(conn.calls[0].sql), `micro 列が SQL にありません:\n${conn.calls[0].sql}`);
+  assert(/micro\s*=\s*VALUES\s*\(\s*micro\s*\)/i.test(conn.calls[0].sql),
+    "micro の UPDATE がありません");
+  const microParam = conn.calls[0].params[10];
+  assert(typeof microParam === "string" && JSON.parse(microParam).hook === packed.hook,
+    `micro が JSON で渡っていません: ${JSON.stringify(microParam)}`);
+  assert(out.hook === packed.hook && out.formula === packed.formula && out.mission === packed.mission,
+    `平らに広がっていません: ${JSON.stringify(out)}`);
+  assert(out.micro === undefined, "生の micro 列が残っています");
+  return "列へ保存 → hook/formula/mission";
+});
+
+check("seed-content が micro を渡す（009・週次マイクロ）", () => {
+  const src = stripComments(read("server/db/seed-content.mjs"));
+  assert(/\bmicro\s*:/.test(src), "upsert に micro を渡していません");
+  assert(/d\.hook/.test(src) && /d\.formula/.test(src) && /d\.mission/.test(src),
+    "原稿の hook/formula/mission を読んでいません");
+  return "hook/formula/mission → micro";
+});
+
+check("009-content-micro が micro 列を足す", () => {
+  assert(MIGRATION_FILES.includes("009-content-micro.sql"),
+    "migrations/009-content-micro.sql がありません");
+  const sql = read("server/db/migrations/009-content-micro.sql");
+  assert(/ADD COLUMN micro JSON NULL/i.test(sql), sql);
+  assert(/EXPECTED_COLUMNS[\s\S]*\["content_templates",\s*"micro"\]/.test(MIGRATE),
+    "migrate.mjs の EXPECTED_COLUMNS に micro がありません");
+  return "ADD COLUMN micro JSON NULL";
 });
 
 check("seed-content が「保全した件数」を黙らずに出す（지시서⑯ §3-2）", () => {

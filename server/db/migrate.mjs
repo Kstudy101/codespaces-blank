@@ -77,6 +77,9 @@ const EXPECTED_COLUMNS = [
   /* 003。復習クイズの原稿。無くてもクイズが黙って抜けるだけだが、
      列ごと無いと postback の採点が「未入稿」と読み違える。 */
   ["content_templates",  "quiz"],
+  /* 009。週次マイクロ（hook/formula/mission）。無いと seed しても
+     クラシック📘のまま届く（isMicroFormat が常に false）。 */
+  ["content_templates",  "micro"],
   /* 007。体験で貰った日数を契約の行が持つ。無いと EXPECTED が
      COALESCE で 0 に落ち、体験者が全員 drift に載る。 */
   ["subscriptions",      "trial_days"]

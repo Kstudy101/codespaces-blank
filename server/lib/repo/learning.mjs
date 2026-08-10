@@ -250,7 +250,7 @@ function unpackMicro(raw) {
 /* seed / 運営入力から来る micro。不完全なら null（クラシック扱い）。
    どれかだけ在る状態を DB に残すと、isMicroFormat が false なのに
    片側だけ古い文が残って対照しづらい。 */
-export function packMicro(input) {
+function packMicro(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
   const hook = input.hook != null ? String(input.hook) : "";
   const formula = input.formula != null ? String(input.formula) : "";

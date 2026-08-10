@@ -34,7 +34,7 @@ const AUTHORIZE = () => `${authBase()}/oauth2/v2.1/authorize`;
 const TOKEN     = () => `${apiBase()}/oauth2/v2.1/token`;
 const PROFILE   = () => `${apiBase()}/v2/profile`;
 
-export function loginConfig() {
+function loginConfig() {
   loadEnv();
   return requireEnv([
     "LINE_LOGIN_CHANNEL_ID",

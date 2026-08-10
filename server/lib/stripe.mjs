@@ -58,7 +58,7 @@ const apiBase = () => process.env.STRIPE_API_BASE || "https://api.stripe.com";
    講師を付ける）は、このコードも見直すこと。 */
 export const TAX_CODE = "txcd_20060058";
 
-export function stripeConfig() {
+function stripeConfig() {
   loadEnv();
   return requireEnv(["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"]);
 }

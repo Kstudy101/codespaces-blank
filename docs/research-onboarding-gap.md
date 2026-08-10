@@ -67,6 +67,11 @@ JOIN course_entitlements e ON e.user_id = u.id AND e.track = u.active_track   --
 
 ## 4. H2 기각 — 「入れ直したい」 서브플로우는 사라진 게 아니라 원래 없음
 
+> **2026-08-10 갱신** — `b39b6eb` 으로 LINE 온보딩에서 생년월일 질문 자체가 없어졌고,
+> 이 절이 다루는 `birthRedo`·`askBirth`·`summaryConfirm` 등은 호출부를 잃었습니다.
+> 정의도 같은 날 제거했습니다([research-deadcode.md §2.1](research-deadcode.md)).
+> 아래 기술은 **`b39b6eb` 이전 상태**의 기록으로 읽어 주십시오.
+
 `birthRedo` 는 처음부터 **사이트로 유도**합니다. 주석에 이유가 있습니다:
 날짜 해석(1995/4/12·H7.4.12·…)을 LINE 에서도 하면 읽기가 2벌이 되고,
 어긋나면 사주가 갈라진다. Phase 1(`4cfab37`)은 **이름 경로만** 이식했고

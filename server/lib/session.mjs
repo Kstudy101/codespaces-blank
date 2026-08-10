@@ -6,8 +6,8 @@
 import crypto from "node:crypto";
 import { loadEnv } from "./env.mjs";
 
-export const COOKIE_NAME = "ks101_edit";
-export const TTL_MS = 15 * 60 * 1000;
+const COOKIE_NAME = "ks101_edit";
+const TTL_MS = 15 * 60 * 1000;
 
 function secret() {
   loadEnv();

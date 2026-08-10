@@ -248,18 +248,6 @@ export async function getSajuProfile(conn, userId) {
   };
 }
 
-/* 生年月日を本人のものとして確かめた、を記録する。
-   運勢はこれが立っている人にだけ付く ── ウェブの診断は
-   「試しに入れてみる」場所でもあるので、確かめないまま 101 日ぶんの
-   運勢を出すと、全部が別人のものになる。しかも数字は出るので、
-   受け取った側からは間違いだと分からない。 */
-export async function setBirthConfirmed(conn, userId, confirmed = true) {
-  const r = await run(conn,
-    `UPDATE saju_profiles SET birth_confirmed = ? WHERE user_id = ?`,
-    [confirmed ? 1 : 0, userId]);
-  return r.affectedRows > 0;
-}
-
 /* 1 人 1 枚（user_id が UNIQUE）。LINE Login のコールバックが
    二度走っても 2 枚目にならない。 */
 export async function upsertSajuProfile(conn, userId, {

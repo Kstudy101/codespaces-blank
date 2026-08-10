@@ -566,7 +566,7 @@ export function boughtNotice(track, days, { switched = false } = {}) {
   };
 }
 
-export function askResume(track, lastDay) {
+function askResume(track, lastDay) {
   const l = TRACK_LABELS[track];
   return {
     type: "text",

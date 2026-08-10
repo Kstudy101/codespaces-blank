@@ -167,13 +167,13 @@ export function isMicroFormat(template) {
 }
 
 /* 주내 위치 1~7（달력 요일 아님 — plan-content-weekly §3）. */
-export function weekSlot(dayNumber) {
+function weekSlot(dayNumber) {
   const d = Number(dayNumber);
   if (!Number.isFinite(d) || d < 1) return 0;
   return ((d - 1) % 7) + 1;
 }
 
-export function dayKindOf(template) {
+function dayKindOf(template) {
   if (template?.day_kind) return String(template.day_kind);
   if (!isMicroFormat(template)) return "grammar";
   const s = weekSlot(template.day_number);

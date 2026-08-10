@@ -26,9 +26,6 @@
    ================================================================== */
 const SITE_URL = process.env.SITE_URL || "https://www.kstudy101.jp";
 
-/* 都市一覧。旧ボタン応答用。新規の質問では使わない。 */
-import { cities } from "./fortune.mjs";
-
 import { askCourse, notReady } from "./handlers/checkout.mjs";
 import { TRACKS, TRACK_LABELS, countTemplates } from "./repo/learning.mjs";
 import { TRIAL_DAYS } from "./repo/billing.mjs";
@@ -36,16 +33,6 @@ import { listByUser } from "./repo/entitlements.mjs";
 
 /* 名前 → コース。生年月日チェーン（bdate〜birth）は廃止。 */
 export const STEPS = Object.freeze(["name", "reading", "track"]);
-
-export function cityOf(u) {
-  const raw = u?.raw_result_json;
-  return raw && typeof raw === "object" && raw.city ? String(raw.city) : null;
-}
-
-export function timeUnknown(u) {
-  const raw = u?.raw_result_json;
-  return !!(raw && typeof raw === "object" && raw.birth_time_unknown === true);
-}
 
 export const ONBOARD_COLUMNS = Object.freeze([
   "name_kr", "name_source", "display_name",
@@ -66,7 +53,7 @@ export function nextStep(u = {}) {
   return STEPS.find((s) => PENDING[s](u)) || null;
 }
 
-export const BLOCKING_STEPS = Object.freeze(["name", "reading"]);
+const BLOCKING_STEPS = Object.freeze(["name", "reading"]);
 
 export function blockingStep(u = {}) {
   return STEPS.find((s) => BLOCKING_STEPS.includes(s) && PENDING[s](u)) || null;
@@ -288,57 +275,6 @@ export function nameFixed(kr) {
 }
 
 
-/* ---- 3. 生年月日の確認 ---------------------------------------------
-   時刻まで見せる。四柱は時柱で変わるので、日付だけ合っていても
-   時刻が「とりあえず 0 時」だと別の四柱になる。 */
-export function askBirth({ birthDate, birthTime = null }) {
-  const t = birthTime
-    ? `${String(birthTime).slice(0, 5)} ごろ`
-    : "時刻は未入力（時柱なしで占います！）";
-
-  return {
-    type: "text",
-    text: [
-      "② 生年月日の確認",
-      "",
-      "毎朝の運勢は、この生年月日から四柱を立てて出します。",
-      "サイトでお試しの値を入れていた場合は、ここで直せます！",
-      "",
-      `　${birthDate}`,
-      `　${t}`,
-      "",
-      "こちらはご本人のものですか？"
-    ].join("\n"),
-    quickReply: quick([
-      { label: "はい、これで", data: "action=birth&ok=1",
-        displayText: "はい、この生年月日で" },
-      { label: "入れ直したい", data: "action=birth&ok=0",
-        displayText: "入れ直します" }
-    ])
-  };
-}
-
-/* 入れ直す人への返し。名前と同じくサイトへ戻す ── 生年月日だけを
-   LINE で受け取る道を作ると、日付の書き方（1995/4/12・H7.4.12・
-   1995-04-12）を LINE 側でも解釈することになり、サイトと 2 通りの
-   読み取りができる。ずれたときに四柱が変わる。 */
-export function birthRedo() {
-  return {
-    type: "text",
-    text: [
-      "承知しました。",
-      "",
-      "▼ 本当の生年月日で、もう一度どうぞ",
-      SITE_URL,
-      "",
-      "生まれた時刻が分かる場合は入れてください。",
-      "四柱の「時柱」が決まるので、運勢が細かくなります！",
-      "分からなければ空のままで大丈夫です。"
-    ].join("\n")
-  };
-}
-
-
 /* ---- 4. コース選択（plan-course-onboarding §2〜§4）------------------
    要約確認が済んだ人に、無料の入口として訊く。文面は checkout の
    askCourse をそのまま使い、ボタンの行き先だけ trackpick に替える
@@ -383,119 +319,9 @@ export function trackStarted(track) {
 
 /* ---- 次の 1 通を作る ------------------------------------------------
    nextStep が返した段の文面を作る。作れないとき（訊く必要が無い）は
-   null を返すので、呼ぶ側は送らずに済む。 */
-/* ---- LINE 直接流入の 4 問（plan-line-onboarding.md）------------------
-   datetimepicker は LINE 専用の入れ物で、押した結果は postback の
-   params.date / params.time に載って戻る。data には値を載せない ──
-   値は LINE が運ぶ（改竄面も data より狭い）。 */
-export function askBirthDate() {
-  return {
-    type: "text",
-    text: [
-      "生年月日を教えてください。",
-      "毎朝の運勢は、ここから四柱を立てて出します。"
-    ].join("\n"),
-    quickReply: { items: [{
-      type: "action",
-      action: { type: "datetimepicker", label: "生年月日を選ぶ",
-                data: "action=bdate", mode: "date",
-                initial: "1990-01-01", min: "1930-01-01", max: "2030-12-31" }
-    }] }
-  };
-}
+   null を返すので、呼ぶ側は送らずに済む。
 
-export function askBirthTime() {
-  return {
-    type: "text",
-    text: [
-      "生まれた時刻はお分かりですか？",
-      "（分からない場合は、時柱なしの三柱で占います）"
-    ].join("\n"),
-    quickReply: { items: [
-      { type: "action",
-        action: { type: "datetimepicker", label: "時刻を選ぶ",
-                  data: "action=btime", mode: "time", initial: "12:00" } },
-      { type: "action",
-        action: { type: "postback", label: "わからない",
-                  data: "action=btime&unknown=1", displayText: "わからない" } }
-    ] }
-  };
-}
-
-/* 出生地。CITIES 17 個 > quickReply 13 個の制限なので 2 段
-   （国 → 都市）。都市の一覧は fortune.mjs の cities() ── vm ロードの
-   Saju.CITIES そのもので、写しは持たない（리뷰 수정 1）。
-   国の見分けは tz（seoul / tokyo）── CITIES に国の列は無く、
-   標準時がそのまま国割りになっている。 */
-export function askBirthPlace() {
-  return {
-    type: "text",
-    text: "お生まれの国はどちらですか？",
-    quickReply: { items: [
-      { type: "action", action: { type: "postback", label: "日本",
-          data: "action=bplace&c=tokyo", displayText: "日本" } },
-      { type: "action", action: { type: "postback", label: "韓国",
-          data: "action=bplace&c=seoul", displayText: "韓国" } }
-    ] }
-  };
-}
-
-export function askBirthCity(tzGroup, cityList) {
-  const list = cityList.filter((c) => c.tz === tzGroup);
-  return {
-    type: "text",
-    text: "いちばん近い都市をお選びください。\n（経度で真太陽時を出すのに使います）",
-    quickReply: { items: list.slice(0, 13).map((c) => ({
-      type: "action",
-      action: { type: "postback", label: String(c.ja).slice(0, 20),
-                data: `action=bcity&id=${c.id}`, displayText: c.ja }
-    })) }
-  };
-}
-
-/* askGender は削除（지시서⑱）── 訊かないので、訊く文面も持たない。 */
-
-/* 要約確認（決定 2-2）。直接流入の締め ── 全項目を 1 画面に並べ、
-   「これで始めます」で birth_confirmed が立つ。項目ごとに再確認
-   しない代わりの、唯一のまとめて見る場所。 */
-export function summaryConfirm(u = {}, cityList = []) {
-  const city = cityList.find((c) => c.id === cityOf(u));
-  return {
-    type: "text",
-    text: [
-      "ご入力の確認です。",
-      "",
-      `　お名前　　${u.name_kr || "（未登録）"}`,
-      `　生年月日　${String(u.birth_date || "").slice(0, 10)}`,
-      `　時刻　　　${u.birth_time ? String(u.birth_time).slice(0, 5) : "わからない（三柱で占います）"}`,
-      `　出生地　　${city ? city.ja : "（未選択）"}`,
-      "",
-      "この内容で始めてよろしいですか？"
-    ].join("\n"),
-    quickReply: quick([
-      { label: "これで始めます", data: "action=birth&ok=1",
-        displayText: "この内容で始めます" },
-      { label: "直したい", data: "action=birth&ok=0", displayText: "直します" }
-    ])
-  };
-}
-
-/* 直したい → どの項目か。答えると各段の質問がもう一度出て、
-   answering 後の followUp が要約確認へ自然に戻す。 */
-export function fixPicker() {
-  return {
-    type: "text",
-    text: "どちらを直しますか？",
-    quickReply: quick([
-      { label: "名前", data: "action=fix&s=reading", displayText: "名前を直します" },
-      { label: "生年月日", data: "action=fix&s=bdate", displayText: "生年月日を直します" },
-      { label: "時刻", data: "action=fix&s=btime", displayText: "時刻を直します" },
-      { label: "出生地", data: "action=fix&s=bplace", displayText: "出生地を直します" }
-    ])
-  };
-}
-
-/* track 段だけ DB が要る（原稿の保有日数で選択肢を絞る）ので、
+   track 段だけ DB が要る（原稿の保有日数で選択肢を絞る）ので、
    全体を async にして conn を受ける。呼ぶ側は**必ず await して conn を
    渡す** ── 渡さないと track 段が null になり、要約確認に答えた人が
    無応答で終わる（verify-onboarding が呼び出し形を静的に見張る）。 */

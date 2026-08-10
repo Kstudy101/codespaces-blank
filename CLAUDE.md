@@ -56,7 +56,9 @@ LLM 일반 행동 지침(가정 금지 / 단순하게 / 최소 변경 / 검증 �
 - **운세 엔진의 사본을 `server/` 에 두지 않는다.** `node:vm` 으로 사이트의 1부를 실행한다 —
   사본을 두면 웹과 LINE의 운세가 갈라지고, 양쪽 다 그럴듯해서 대조 전엔 모른다
   (유일한 예외: `server/lib/kana2hangul.mjs` — 허가된 사본. `verify-kana` 가
-  index.html 실물과 전수 대조하므로, 한쪽을 고치면 관문이 다른쪽을 강제한다)
+  정본과 전수 대조하므로, 한쪽을 고치면 관문이 다른쪽을 강제한다.
+  정본은 `js/name-learn-data.js` 다 — 2026-08-10 LP 전환으로 index.html 에서
+  진단 기능이 빠지면서 옮겼고, 공개 페이지에서는 읽지 않는다(`build-site.sh` PUBLIC 밖))
 - **`repo/` 는 `mysql2` 도 `node:` 내장도 읽지 않는다.** 넘겨받은 `conn.execute()` 만.
   그 덕에 관문 19종이 `npm install` 없이 돈다
 - **의존은 `mysql2` 하나뿐.** Stripe SDK 도 LINE SDK 도 넣지 않았다

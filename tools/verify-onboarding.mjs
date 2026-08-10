@@ -1048,9 +1048,17 @@ check("オンボーディングは生年月日・性別を訊かない", () => {
     assert(!new RegExp(`"${s}"`).test(ob), `STEPS / PENDING に ${s} が残っています`);
   }
   assert(!/性別を教えて/.test(read("server/lib/onboarding.mjs")), "性別の質問文面が残っています");
+  /* 2026-08-10: b39b6eb で呼び出し側が消え、この 5 つは定義ごと撤去した。
+     「messageForStep が呼んでいないか」だけを見ていると、関数が無くなった
+     いま常に真になり、緑のまま何も守らない検査になる ── ファイル全体から
+     消えていることを見る形に上げる。戻すなら 5 つ一緒に戻すこと。 */
+  for (const f of ["askBirth", "askBirthDate", "askBirthTime",
+                   "askBirthPlace", "askBirthCity", "summaryConfirm",
+                   "birthRedo", "fixPicker", "timeUnknown"]) {
+    assert(!new RegExp(`\\b${f}\\b`).test(ob),
+      `生年月日チェーンの ${f} が残っています`);
+  }
   const mfs = ob.match(/export async function messageForStep[\s\S]*?\n}/)[0];
-  assert(!/askBirthDate|askBirthTime|askBirthPlace|askBirth|summaryConfirm/.test(mfs),
-    "messageForStep が生年月日チェーンを呼んでいます");
   assert(/step === "name"|step === "reading"|step === "track"/.test(mfs),
     "messageForStep が name / reading / track だけを扱っていません");
 

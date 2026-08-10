@@ -470,4 +470,4 @@ export function checkAll(days, { expect = null, track = null } = {}) {
   return { ok: problems.length === 0, problems, count: seen.size };
 }
 
-export { PROBES, TOTAL_DAYS, HANGUL, JAPANESE, LATIN1_MOJIBAKE };
+export { PROBES, TOTAL_DAYS };

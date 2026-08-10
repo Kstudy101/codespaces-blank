@@ -67,11 +67,6 @@ function load() {
 export function engineDir() { return load().dir; }
 export function categories() { return load().Fortune.CATS; }
 
-/* 도시 목록. saju.js 가 공개 API 로 내보내는 것을 vm 로드에서 그대로
-   꺼낸다 ── 사본을 만들지 않는다(2026-08-05 리뷰 수정 1). 온보딩의
-   출생지 2단 선택(plan-line-onboarding.md)이 읽는 유일한 출처. */
-export function cities() { return load().Saju.CITIES; }
-
 /* ---- その人の、その日の運勢 ---------------------------------------
    サイトと同じ引数で呼ぶ（index.html の 3199〜3200 行）:
 

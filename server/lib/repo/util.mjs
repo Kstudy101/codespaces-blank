@@ -54,7 +54,7 @@ export async function run(conn, sql, params = []) {
    使ってよいのは「PK 以外の一意キーが 1 本だけ」の表に限る。
    2 本あるとどちらに当たったのか区別できない。
    tools/verify-server.mjs がその条件を見張っている。 */
-export function isDuplicateKey(e) {
+function isDuplicateKey(e) {
   return !!e && (e.code === "ER_DUP_ENTRY" || e.errno === 1062);
 }
 

@@ -16,7 +16,7 @@
 | LINE | `STEPS = name / reading / track`（bdate·btime·bplace·birth 폐지） |
 | `/profile` | 이름만 변경（성별·생년월일·출생지 없음） |
 | 운세 | `birth_date` 있으면 붙음（확인 질문 없음） |
-| 리치메뉴 | **비활성화 완료**（2026-08-10）— 기본 해제·정의 삭제. 재등록은 `setup-richmenu --image=…` |
+| 리치메뉴 | **재등록 완료**（2026-08-10 `richmenu-a62983f0be68d5a95bf7f80ae225c8c8`）— 새 이미지·행선지. [plan-richmenu-v2](docs/plan-richmenu-v2.md) |
 | 다음 | beginner 재 seed（필요 시） |
 
 ### §0-◆◆◆ 마이크로 seed 미반영 수정 — **009 micro 열**（2026-08-10）

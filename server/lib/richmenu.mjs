@@ -10,10 +10,10 @@
    変えるときだけ tools/setup-richmenu.mjs を手で走らせる。
 
    ┌──────────────────────────────────────┐
-   │           コース紹介（Notion）         │
+   │        サービス利用（受講料）           │
    ├────────────┬────────────┬────────────┤
-   │ コース利用料金 │  何日目？   │ その他サービス │
-   │ （受講料）   │ （進み具合） │  （Notion）  │
+   │  K:study101 │  何日目？   │ その他サービス │
+   │ （サイトへ）  │ （進み具合） │  （Notion）  │
    └────────────┴────────────┴────────────┘
 
    【画像が要る】
@@ -44,18 +44,20 @@ const BOTTOM_H = H - TOP_H;                    // 900
 const COL = Math.floor(W / 3);                 // 833
 const COL_LAST = W - COL * 2;                  // 834（余りを最後の列へ）
 
-const COURSE_GUIDE_URL =
-  "https://luxuriant-burst-b65.notion.site/Kstudy101-3b6439a4f5e7802e9739e64a0a8df5b5?source=copy_link";
 const OTHER_SERVICES_URL =
   "https://app.notion.com/p/3b6439a4f5e780d6a385caf5230aca44?source=copy_link";
+/* 「K:study101」からサイトへ。SITE_URL では読まない ── この定義を作る
+   setup-richmenu.mjs は import が loadEnv より先に走るので、環境変数から
+   読むと .env の値が黙って無視され、既定値のまま登録される。 */
+const HOME_URL = "https://www.kstudy101.jp";
 
 /* 押せる範囲。隙間も重なりも作らない ── 隙間は「押しても何も
    起きない帯」になり、重なりは先に書いたほうが勝つ。 */
 export const AREAS = Object.freeze([
   { bounds: { x: 0,       y: 0,      width: W,        height: TOP_H },
-    action: { type: "uri", uri: COURSE_GUIDE_URL } },
-  { bounds: { x: 0,       y: TOP_H,  width: COL,      height: BOTTOM_H },
     action: { type: "postback", data: "action=plans",  displayText: "受講料を見ます" } },
+  { bounds: { x: 0,       y: TOP_H,  width: COL,      height: BOTTOM_H },
+    action: { type: "uri", uri: HOME_URL } },
   { bounds: { x: COL,     y: TOP_H,  width: COL,      height: BOTTOM_H },
     action: { type: "postback", data: "action=status", displayText: "進み具合" } },
   { bounds: { x: COL * 2, y: TOP_H,  width: COL_LAST, height: BOTTOM_H },

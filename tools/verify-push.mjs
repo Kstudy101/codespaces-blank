@@ -779,14 +779,14 @@ await check("確かめた生年月日の人には、運勢が付く", async () =
   return "総合運 + 十神";
 });
 
-await check("確かめていない生年月日には、運勢を付けない", async () => {
-  /* ウェブの診断は「試しに入れてみる」場所でもある。確かめずに
-     101 日ぶん占うと、全部が別人のものになる ── しかも数字は
-     出るので、受け取った側からは間違いだと分からない。 */
+await check("生年月日があれば運勢が付く（birth_confirmed は不要）", async () => {
+  /* ウェブ連携で birth_date だけ入っている人にも運勢を付ける。
+     LINE では生年月日を訊かないので、confirmed フラグは見ない。 */
   const m = fortuneSection({ ...WITH_SAJU, birth_confirmed: false },
     { load: () => FAKE_LINES });
-  assert(m === null, JSON.stringify(m));
-  return "null";
+  assert(m && m.type === "text", JSON.stringify(m));
+  assert(/총운/.test(m.text), m.text);
+  return "birth_date だけで付く";
 });
 
 await check("四柱が無い人にも付けない（既定の運勢を作らない）", async () => {

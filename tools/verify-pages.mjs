@@ -326,6 +326,25 @@ check("privacy に性別の文言が無い（지시서⑱ ── 集めない・
   return "성별·大運 문구 0";
 });
 
+check("登録情報フォームは名前だけ（性別・生年月日・出生地を集めない）", () => {
+  const pages = fs.readFileSync("server/lib/pages.mjs", "utf8");
+  const i = pages.indexOf("export function profileFormPage");
+  const j = pages.indexOf("export function profileDonePage");
+  assert(i >= 0 && j > i, "profileFormPage がありません");
+  const body = pages.slice(i, j);
+  assert(/name_reading/.test(body), "お名前欄がありません");
+  /* 注釈ではなく入力欄。name= / for= / id= が残っていたら集めている。 */
+  for (const bad of ["birth_date", "birth_time", "gender", "city_id", "time_unknown"]) {
+    assert(!new RegExp(`(?:name|id|for)=["']${bad}["']`).test(body),
+      `登録情報に ${bad} 入力が残っています`);
+  }
+  const handler = fs.readFileSync("server/lib/handlers/profile.mjs", "utf8");
+  assert(!/upsertSajuProfile/.test(handler),
+    "profile 保存が四柱を書き換えています（名前だけにする）");
+  assert(!/normalizeProfile/.test(handler), "profile が生年月日正規化を呼んでいます");
+  return "お名前のみ";
+});
+
 check("amulet.html の ?cat= は KINDS で照合してから使う（지시서⑪）", () => {
   /* LINE の부적 버튼이 실어 오는 유일한 파라미터。知らない値を
      Amulet.of へ渡すと throw ── 照合に落ちたら「無かったこと」にして

@@ -41,9 +41,7 @@
 import { users, learning, billing, entitlements } from "../repo/index.mjs";
 import { replyMessage, pushMessage } from "../line.mjs";
 import { nextStep, messageForStep, askReading, confirmName, nameFixed,
-         onboardingDone, birthRedo, serviceGuide, fixPicker,
-         askBirthCity, trackStarted } from "../onboarding.mjs";
-import { cities } from "../fortune.mjs";
+         onboardingDone, serviceGuide, trackStarted } from "../onboarding.mjs";
 import { kanaNameToHangul } from "../kana2hangul.mjs";
 import {
   salesAllowedFor, salesMode, notReady, coursePreparing, askCourse, priceList,
@@ -252,132 +250,27 @@ export async function handlePostback(conn, event,
     return { skipped: `name の use が読めません: ${use}`, userId: user.id };
   }
 
-  /* ---- LINE 直接流入の 4 問（plan-line-onboarding.md）--------------
-     どの答えも「部分更新」で保存する ── upsertSajuProfile は全列を
-     書くので、いまの行を読んで欠けを埋めてから渡す。渡し忘れた列が
-     null で上書きされると、答えた値が静かに消える。
-
-     ★ ohaengMain はここでは**決して渡さない**（리뷰 수정 5）。
-     ohaeng_main の空白が「サイト診断を通っていない」の判別子で、
-     ここで埋めると新 4 段が途中で止まる。verify-onboarding が
-     この不在を静的に見張る。 */
-  const saveSaju = async (patch) => {
-    const cur = await users.getSajuProfile(conn, user.id) || {};
-    const raw = cur.raw_result_json && typeof cur.raw_result_json === "object"
-      ? cur.raw_result_json : {};
-    /* timeUnknown: 「わからない」も**答え**として残す（지시서⑩ §2-2 가안）。
-       birth_time は NULL のままにする（時柱の計算が実際にそれを見る）ので、
-       答えた事実は raw_result_json の birth_time_unknown 키에 둔다 ──
-       열 추가 없이, cityOf 와 같은 자리。키가 없으면 「未質問」。 */
-    const rawPatched =
-      patch.city !== undefined ? { ...raw, city: patch.city }
-      : patch.timeUnknown ? { ...raw, birth_time_unknown: true }
-      : (cur.raw_result_json ?? null);
-    await users.upsertSajuProfile(conn, user.id, {
-      birthDate: patch.birthDate !== undefined ? patch.birthDate : (cur.birth_date || null),
-      birthTime: patch.birthTime !== undefined ? patch.birthTime : (cur.birth_time || null),
-      gender:    patch.gender    !== undefined ? patch.gender    : (cur.gender || "U"),
-      rawResult: rawPatched
-    });
-  };
-
-  if (action === "bdate") {
-    /* datetimepicker の結果は postback.params.date に載って戻る。 */
-    const date = event?.postback?.params?.date;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) {
-      return { skipped: `date が読めません: ${date}`, userId: user.id };
-    }
-    const y = Number(String(date).slice(0, 4));
-    if (y < 1930 || y > 2030) {   /* 節気表の範囲外は四柱が立たない */
-      return { skipped: `範囲外の年: ${y}`, userId: user.id };
-    }
-    await saveSaju({ birthDate: date });
+  /* ---- 旧・生年月日チェーンのボタン（もう訊かない）----------------
+     bdate〜birth / bgender は段ごと削除。既に送った画面のボタンは
+     data を変えられないので、黙殺せず followUp で受け止める。
+     保存はしない ── 書く経路を 1 本も残さない。 */
+  if (["bdate", "btime", "bplace", "bcity", "bgender", "birth"].includes(action)) {
     const replied = await reply(token, [await followUp(conn, user.id)], send);
-    return { userId: user.id, action, date, replied };
+    return { userId: user.id, action, dropped: "生年月日・出生地・性別は受け取らない", replied };
   }
 
-  if (action === "btime") {
-    const unknown = params.unknown === "1";
-    const time = event?.postback?.params?.time;
-    if (!unknown && !/^\d{2}:\d{2}$/.test(String(time || ""))) {
-      return { skipped: `time が読めません: ${time}`, userId: user.id };
-    }
-    /* 「わからない」は birth_time=NULL のまま、答えた事実だけを
-       raw.birth_time_unknown に残す（지시서⑩ §2-2）。以前は NULL の
-       ままで何も書かず、PENDING.btime が同じ質問を出し続けた ──
-       「後ろの項目の有無で分かる」つもりの導出は、後ろの項目が
-       まだ空の時点では働かない。 */
-    await saveSaju(unknown ? { birthTime: null, timeUnknown: true }
-                           : { birthTime: `${time}:00` });
-    const replied = await reply(token, [await followUp(conn, user.id)], send);
-    return { userId: user.id, action, unknown, replied };
-  }
-
-  if (action === "bplace") {
-    const tzGroup = params.c === "seoul" ? "seoul" : params.c === "tokyo" ? "tokyo" : null;
-    if (!tzGroup) return { skipped: `国が読めません: ${params.c}`, userId: user.id };
-    const replied = await reply(token, [askBirthCity(tzGroup, cities())], send);
-    return { userId: user.id, action, tzGroup, replied };
-  }
-
-  if (action === "bcity") {
-    /* data は書き換えられる ── 都市 id は必ず一覧で引き当てる。
-       知らない id を raw.city に入れると、fortune が黙って
-       tokyo に落ちる（raw.city || "tokyo"）。 */
-    const city = cities().find((c) => c.id === params.id);
-    if (!city) return { skipped: `知らない都市: ${params.id}`, userId: user.id };
-    await saveSaju({ city: city.id });
-    const replied = await reply(token, [await followUp(conn, user.id)], send);
-    return { userId: user.id, action, city: city.id, replied };
-  }
-
-  /* ---- bgender は受けるが、保存しない（지시서⑱）--------------------
-     性別はもう訊かない ── 段ごと削除。ただし既に送った古い画面の
-     ボタン（data は変えられない）が押されることはあるので、黙殺せず
-     followUp（いまの段の質問）で受け止める。保存はしない ── privacy
-     から性別の項目を消したので、書く経路を 1 本も残さない。 */
-  if (action === "bgender") {
-    const replied = await reply(token, [await followUp(conn, user.id)], send);
-    return { userId: user.id, action, dropped: "性別は受け取らない", replied };
-  }
-
-  /* 「直したい」で選んだ項目の質問をもう一度。答えの保存は各段の
-     ハンドラがやり、そのあとの followUp が要約確認へ自然に戻す。 */
+  /* 「直したい」は名前の読み直しだけ残す。 */
   if (action === "fix") {
-    const s = ["reading", "bdate", "btime", "bplace"].includes(params.s)
-      ? params.s : null;
-    if (!s) return { skipped: `直す対象が読めません: ${params.s}`, userId: user.id };
-    if (s === "reading") {
-      /* 名前は候補を消して読みから ── confirm ok=0 と同じ道。 */
-      await users.updateName(conn, user.id,
-        { nameKanji: null, nameReading: null, nameKr: null });
-      await users.setNameSource(conn, user.id, "line");
+    if (params.s !== "reading") {
+      const replied = await reply(token, [await followUp(conn, user.id)], send);
+      return { userId: user.id, action, dropped: `fix=${params.s}`, replied };
     }
+    await users.updateName(conn, user.id,
+      { nameKanji: null, nameReading: null, nameKr: null });
+    await users.setNameSource(conn, user.id, "line");
     const st = await stateOf(conn, user.id);
-    const replied = await reply(token, [await messageForStep(s, st, conn)], send);
-    return { userId: user.id, action, fix: s, replied };
-  }
-
-  /* ---- 生年月日 --------------------------------------------------- */
-  if (action === "birth") {
-    /* "ok=1" 以外はすべて「入れ直す」。ok が欠けている・読めない
-       ときに確認済みを立てないのは、確認は立てる側に寄せると
-       間違いが「本人が確かめた」として残るため。 */
-    const ok = params.ok === "1";
-
-    if (!ok) {
-      /* 直し方は経路で違う ── サイト経由は診断へ戻す（日付の読みを
-         2 通りにしない、の決めごと）。直接流入はトークの中で
-         項目を選んで直す（fixPicker）。判別は ohaeng_main。 */
-      const st = await stateOf(conn, user.id);
-      const replied = await reply(token,
-        [st?.ohaeng_main ? birthRedo() : fixPicker()], send);
-      return { userId: user.id, action, ok, replied };
-    }
-
-    await users.setBirthConfirmed(conn, user.id, true);
-    const replied = await reply(token, [await followUp(conn, user.id)], send);
-    return { userId: user.id, action, ok, replied };
+    const replied = await reply(token, [await messageForStep("reading", st, conn)], send);
+    return { userId: user.id, action, fix: "reading", replied };
   }
 
   /* ---- リッチメニュー：講座の案内 ----------------------------------- */

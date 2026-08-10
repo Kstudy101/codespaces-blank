@@ -136,13 +136,10 @@ export function resultPage(r) {
 /* ---- プロフィール編集（plan-profile）-------------------------------- */
 
 export function profileFormPage({
-  nameReading, nameKr, birthDate, birthTime, timeUnknown,
-  gender, cityId, cities, siteUrl, error = null
+  nameReading, nameKr, siteUrl, error = null
 }) {
-  const cityOpts = cities.map((c) =>
-    `<option value="${escapeHtml(c.id)}"${c.id === cityId ? " selected" : ""}>${escapeHtml(c.ja)}</option>`
-  ).join("");
-
+  /* 性別・生年月日・出生地は集めない（指示書⑱・登録情報は名前だけ）。
+     四柱は既存値のまま。直す道は LINE オンボーディング側。 */
   const errLine = error ? `<p class="err">${escapeHtml(error)}</p>` : "";
   const krHint = nameKr
     ? `<p class="hint">現在の韓国語表記: ${escapeHtml(nameKr)}</p>` : "";
@@ -150,31 +147,13 @@ export function profileFormPage({
   return SHELL("登録情報の変更", `
     <div class="card">
       <h1>登録情報の変更</h1>
-      <p>変更は LINE のトークにもお知らせします。</p>
+      <p>お名前だけ変更できます。変更は LINE のトークにもお知らせします。</p>
       ${errLine}
       <form method="post" action="/profile">
         <label for="name_reading">お名前（かな）</label>
         <input id="name_reading" name="name_reading" maxlength="50"
-               value="${escapeHtml(nameReading)}" autocomplete="name">
+               value="${escapeHtml(nameReading)}" autocomplete="name" required>
         ${krHint}
-        <label for="birth_date">生年月日</label>
-        <input id="birth_date" name="birth_date" type="date"
-               value="${escapeHtml(birthDate)}" required>
-        <label for="birth_time">生まれた時刻</label>
-        <input id="birth_time" name="birth_time" type="time"
-               value="${escapeHtml(birthTime)}"${timeUnknown ? " disabled" : ""}>
-        <label><input type="checkbox" name="time_unknown" value="1"${timeUnknown ? " checked" : ""}
-               onclick="document.getElementById('birth_time').disabled=this.checked">
-          わからない</label>
-        <label for="gender">性別</label>
-        <select id="gender" name="gender">
-          <option value="M"${gender === "M" ? " selected" : ""}>男性</option>
-          <option value="F"${gender === "F" ? " selected" : ""}>女性</option>
-          <option value="N"${gender === "N" ? " selected" : ""}>答えない</option>
-          <option value="U"${gender === "U" ? " selected" : ""}>未回答</option>
-        </select>
-        <label for="city_id">出生地</label>
-        <select id="city_id" name="city_id" required>${cityOpts}</select>
         <button class="btn" type="submit">保存する</button>
       </form>
       <p class="hint" style="margin-top:1rem"><a class="plain" href="${escapeHtml(siteUrl)}">サイトへ戻る</a></p>

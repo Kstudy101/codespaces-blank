@@ -13,9 +13,6 @@ import { newState, hashState, looksLikeState } from "../token.mjs";
 import { authorizeUrl, exchangeCode, loginProfile, revoke } from "../linelogin.mjs";
 import { pushMessage } from "../line.mjs";
 import { kanaNameToHangul } from "../kana2hangul.mjs";
-import { cities } from "../fortune.mjs";
-import { cityOf, timeUnknown } from "../onboarding.mjs";
-import { normalizeProfile } from "./link.mjs";
 import { issue, verify, cookieHeader, clearCookieHeader } from "../session.mjs";
 import { jstDateTime } from "../jst.mjs";
 import { profileFormPage, profileDonePage, profileGatePage } from "../pages.mjs";
@@ -28,10 +25,10 @@ export function profileStartUrl() {
   return base.replace(/\/line\/callback\/?$/, "/profile/start");
 }
 
-/* 編集を許す最小条件 ── 生年月日が確定している人だけ。
-   未完了の人は LINE の段で直す（plan-profile §0）。 */
+/* 編集を許す最小条件 ── 韓国語の名前がある人。
+   四柱の有無は問わない（生年月日はもう訊かない）。 */
 export function profileEligible(user, saju) {
-  return !!(user && saju && saju.birth_date && saju.birth_confirmed);
+  return !!(user && user.name_kr);
 }
 
 export async function startProfileEdit(conn) {
@@ -100,19 +97,11 @@ export async function loadProfileForm(conn, userId) {
     return { ok: false, kind: "onboarding_incomplete" };
   }
 
-  const cityId = cityOf({ raw_result_json: saju.raw_result_json });
-  const cityList = cities();
   return {
     ok: true,
     html: profileFormPage({
       nameReading: user.name_reading || "",
       nameKr: user.name_kr || "",
-      birthDate: saju.birth_date || "",
-      birthTime: saju.birth_time ? String(saju.birth_time).slice(0, 5) : "",
-      timeUnknown: timeUnknown({ raw_result_json: saju.raw_result_json }),
-      gender: saju.gender || "U",
-      cityId: cityId || "",
-      cities: cityList,
       siteUrl: SITE_URL
     })
   };
@@ -120,14 +109,7 @@ export async function loadProfileForm(conn, userId) {
 
 function parseForm(body) {
   const p = new URLSearchParams(body);
-  return {
-    nameReading: p.get("name_reading"),
-    birthDate: p.get("birth_date"),
-    birthTime: p.get("birth_time"),
-    timeUnknown: p.get("time_unknown") === "1",
-    gender: p.get("gender"),
-    cityId: p.get("city_id")
-  };
+  return { nameReading: p.get("name_reading") };
 }
 
 export async function saveProfile(conn, userId, rawBody, { send = pushMessage } = {}) {
@@ -140,28 +122,25 @@ export async function saveProfile(conn, userId, rawBody, { send = pushMessage } 
   }
 
   const form = parseForm(rawBody);
-  const norm = normalizeProfile({
-    birthDate: form.birthDate,
-    birthTime: form.timeUnknown ? null : form.birthTime,
-    gender: form.gender
-  });
-
-  if (!norm.birthDate) {
-    return { ok: false, kind: "bad_birth", html: profileGatePage("birth") };
-  }
-
-  const cityList = cities();
-  const city = cityList.find((c) => c.id === form.cityId);
-  if (!city) {
-    return { ok: false, kind: "bad_city", html: profileGatePage("city") };
+  const readingIn = form.nameReading != null ? String(form.nameReading).trim().slice(0, 50) : "";
+  if (!readingIn) {
+    return {
+      ok: false,
+      kind: "bad_name",
+      html: profileFormPage({
+        nameReading: "",
+        nameKr: user.name_kr || "",
+        siteUrl: SITE_URL,
+        error: "お名前（かな）を入力してください。"
+      })
+    };
   }
 
   let nameReading = user.name_reading;
   let nameKr = user.name_kr;
   let nameKanji = user.name_kanji;
 
-  const readingIn = form.nameReading != null ? String(form.nameReading).trim().slice(0, 50) : "";
-  if (readingIn && readingIn !== (user.name_reading || "")) {
+  if (readingIn !== (user.name_reading || "")) {
     const kr = kanaNameToHangul(readingIn);
     if (!kr) {
       return {
@@ -170,12 +149,6 @@ export async function saveProfile(conn, userId, rawBody, { send = pushMessage } 
         html: profileFormPage({
           nameReading: readingIn,
           nameKr: user.name_kr || "",
-          birthDate: norm.birthDate,
-          birthTime: form.timeUnknown ? "" : (form.birthTime || ""),
-          timeUnknown: form.timeUnknown,
-          gender: norm.gender,
-          cityId: city.id,
-          cities: cityList,
           siteUrl: SITE_URL,
           error: "お名前（かな）を読み取れませんでした。もう一度お試しください。"
         })
@@ -186,33 +159,16 @@ export async function saveProfile(conn, userId, rawBody, { send = pushMessage } 
     nameKanji = null;
   }
 
-  const raw = saju.raw_result_json && typeof saju.raw_result_json === "object"
-    ? { ...saju.raw_result_json } : {};
-  raw.city = city.id;
-  if (form.timeUnknown) {
-    raw.birth_time_unknown = true;
-  } else if (form.birthTime) {
-    delete raw.birth_time_unknown;
-  }
-
+  /* 四柱（生年月日・時刻・出生地・性別）は触らない。フォームからも消した。 */
   await users.updateName(conn, userId, {
     nameKanji: nameKanji,
     nameReading: nameReading,
     nameKr: nameKr
   });
 
-  await users.upsertSajuProfile(conn, userId, {
-    birthDate: norm.birthDate,
-    birthTime: norm.birthTime,
-    gender: norm.gender,
-    ohaengMain: saju.ohaeng_main,
-    rawResult: raw
-  });
-  await users.setBirthConfirmed(conn, userId, true);
-
   const confirmText =
     "登録情報を更新しました。\n\n" +
-    "運勢は次の朝の便から、お名前の変更は今夜の復習・明日の朝から反映されます。";
+    "お名前の変更は今夜の復習・明日の朝から反映されます。";
 
   try {
     await send(user.line_user_id, [{ type: "text", text: confirmText }]);

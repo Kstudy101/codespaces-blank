@@ -1,17 +1,16 @@
 /* ==================================================================
-   lib/onboarding.mjs — 始める前に 2 つだけ確かめる
+   lib/onboarding.mjs — 始める前に名前とコースだけ確かめる
 
-   この講座は「あなたの名前」と「あなたの四柱」で進む。だから
-   始める前に、その 2 つが本人のものかを確かめないといけない。
-   確かめずに始めると、101 日ぶんが別人のものになる ── しかも
-   名前も運勢も「それらしい形」で出るので、受け取った側からは
-   間違いだと分からない。
+   この講座は「あなたの名前」で会話文が進む。四柱・運勢は付加物で、
+   生年月日が無くてもレッスンは止めない（BLOCKING は名前だけ）。
 
      1  名前     ウェブで入れた名前で呼ぶか、別の名前にするか
-     2  生年月日 ウェブに入れたものが本人のものか
-     3  コース   どの講座で始めるか（選ぶとその場で体験 3 日が始まる）
+     2  コース   どの講座で始めるか（選ぶとその場で体験が始まる）
 
-   コースは一度ここから外れて［受講料］の中にあった（migrations/002）。
+   生年月日・出生地・性別は訊かない（登録情報フォームと同じ方針）。
+   サイト診断で既に birth_date がある人には運勢だけ付ける。
+
+   コースは一度［受講料］の中にあった（migrations/002）。
    その形だと、販売が閉じているあいだ無料の体験すら始められない ──
    オンボーディングを完走しても何も来ない袋小路になっていたので、
    段として戻した（plan-course-onboarding.md）。無料の入口なので
@@ -19,159 +18,54 @@
 
    【状態の列を作らなかった理由】
    「今どの段まで進んだか」を列で持つと、実際の中身（name_source が
-   入っているか、birth_confirmed が立っているか）と二重に真実ができる。
-   片方だけ進んだ状態は必ず起きる（送信が失敗した、利用者がボタンを
-   押さずに 3 日置いた）ので、そのときどちらを信じるかを決められない。
+   入っているか）と二重に真実ができる。片方だけ進んだ状態は必ず
+   起きるので、そのときどちらを信じるかを決められない。
 
    なので段は持たず、毎回そのつど中身から導く（nextStep）。
    導けるものを保存しない、が唯一ずれない書き方。
-
-   【なぜウェブの生年月日を疑うのか】
-   サイトの診断は「試しに入れてみる」場所でもある。実際、名前も
-   生年月日も適当に入れて結果だけ見る使い方ができる ── そのために
-   ログインを要らなくしてある。その値のまま LINE へ引き継ぐと、
-   毎朝 101 回、別人の運勢が届く。
    ================================================================== */
-/* 診断ページ。名前を入れ直す道はここしか無い（下の注記を参照）。 */
 const SITE_URL = process.env.SITE_URL || "https://www.kstudy101.jp";
 
-/* 都市一覧。vm ロード（Saju.CITIES）から遅延で ── 写しは持たない
-   （2026-08-05 리뷰 수정 1）。読み込みは要約確認を組む時だけ。 */
+/* 都市一覧。旧ボタン応答用。新規の質問では使わない。 */
 import { cities } from "./fortune.mjs";
 
-/* コース段の部品。文面（askCourse）は checkout のものをそのまま使う ──
-   写しを持つと、コースの説明を直した日に選択画面だけ古くなる。
-   notReady は「選べるコースが 0」のときの案内（能動通知は約束しない）。 */
 import { askCourse, notReady } from "./handlers/checkout.mjs";
 import { TRACKS, TRACK_LABELS, countTemplates } from "./repo/learning.mjs";
 import { TRIAL_DAYS } from "./repo/billing.mjs";
 import { listByUser } from "./repo/entitlements.mjs";
 
-/* LINE 直接流入の 4 段（bdate〜bgender）を挟む（plan-line-onboarding.md）。
-   サイト経由の人は値が既にあるので自然に飛ぶ ── 分岐コードは無い。
-   新 4 段は ohaeng_main が空の人（＝サイト診断を通っていない人）だけ。
-   [리뷰 수정 2] BLOCKING は name/reading のまま ── 売るのは講座で、
-   運勢は付加物。生年月日が無くても払った人のレッスンは止めない。
+/* 名前 → コース。生年月日チェーン（bdate〜birth）は廃止。 */
+export const STEPS = Object.freeze(["name", "reading", "track"]);
 
-   track は最後（plan-course-onboarding §2）。要約確認（birth_confirmed）が
-   済んだ人が「始める準備のできた人」で、その前に挟むと確認と順序が
-   混ざる。 */
-export const STEPS = Object.freeze(
-  ["name", "reading", "bdate", "btime", "bplace", "birth", "track"]);
-
-/* 出生地。fortune.mjs が読む唯一の場所（raw_result_json.city）。 */
 export function cityOf(u) {
   const raw = u?.raw_result_json;
   return raw && typeof raw === "object" && raw.city ? String(raw.city) : null;
 }
 
-/* 生まれ時刻「わからない」と答えた事実（지시서⑩ §2-2 (가)）。
-   birth_time は NULL のまま（時柱なしの三柱計算が実際に読む値）で、
-   答えたことだけをこの키が持つ。**特定の 키**を見る ── オブジェクトの
-   存在有無で経路を判別する形は、チェーン中間の raw.city 書き込みで
-   自己矛盾するとして以前却下された。키 단위면 그 반박에 걸리지 않는다。 */
 export function timeUnknown(u) {
   const raw = u?.raw_result_json;
   return !!(raw && typeof raw === "object" && raw.birth_time_unknown === true);
 }
 
-/* ---- PENDING が読む列（2026-08-05 リビュー修正 4）--------------------
-   ここが唯一の出どころ。状態を組み立てるどの経路（配信の
-   DELIVERABLE_SQL / getSajuProfile / postback の stateOf /
-   message の pendingStep）も、この列を**全部**運ばなければならない ──
-   1 つ欠けると undefined になり、判定が静かに逸れる。実際
-   DELIVERABLE_SQL に gender が無く、バッチ経路だけ判定が狂いうる
-   状態が実測された（LINE 直接流入の段が増える前に塞ぐ）。
-   verify-onboarding が全経路をこの一覧と突き合わせる。 */
 export const ONBOARD_COLUMNS = Object.freeze([
   "name_kr", "name_source", "display_name",
   "birth_date", "birth_time", "birth_confirmed",
   "gender", "ohaeng_main", "raw_result_json",
-  /* track 段（PENDING.track）が読む。行の別名は track（active_track の
-     alias ── listDeliverable と同じ形）。 */
   "track"
 ]);
 
-
-/* ---- 次に訊くこと --------------------------------------------------
-   listDeliverable の 1 行をそのまま渡せる形にしてある。
-   足りない列があっても落ちない（undefined は「無い」と同じ扱い）。
-
-   返すのは 1 つだけ。3 つまとめて訊くと、答えが 3 つ返ってくるまで
-   何も始まらず、途中で止めた人がどこまで答えたのか分からなくなる。 */
-/* 段ごとの「まだ答えていない」。ここが唯一の出どころで、
-   nextStep も blockingStep もこれを見る ── 別々に書くと、片方だけ
-   直したときに「訊いたのに進まない」が生まれる。 */
 const PENDING = Object.freeze({
-  /* 1. 名前。**選べるときにだけ**訊く。
-     ウェブの名前が無い人（友だち追加だけ）は、そもそも選択肢が
-     無いので訊かない ── その人は push-daily の名前案内が拾う。
-     LINE の表示名が取れなかった人も同じで、比べる相手が無い。 */
   name:  (u) => !u.name_source && !!u.name_kr && !!u.display_name,
-
-  /* 1.5 読み仮名。「LINEの名前で／べつの名前で」を選んで、ハングル
-     表記がまだ無い人（name_source='line' かつ name_kr が空）。
-     handlers/message.mjs が待ち受けている状態そのもの。
-
-     ここに無かったあいだ、この状態は blockingStep に掛からず、
-     バッチは名前案内（NAME_NOTICE_MAX で 2 回）→ 沈黙で終わっていた ──
-     askReading の返信が落ちた人（replyToken 切れ・LINE 5xx）は、
-     何を訊かれたのかを知る機会が二度と来なかった。 */
   reading: (u) => (u.name_source === "line"
-    /* サイト名の選択肢がそもそも無い人（友だち追加だけの直接流入）も
-       ここへ ── 7-3 の解消。読みを 1 行もらえば名前が作れる。 */
     || (!u.name_source && !u.name_kanji)) && !u.name_kr,
-
-  /* ---- LINE 直接流入の 4 段（サイト診断を通っていない人だけ）--------
-     判別は ohaeng_main の有無（plan-line-onboarding §2-4 安A）──
-     サイト経由は連携時から入り、直接流入は永く空のまま
-     （fortuneFor は ohaeng_main を読まないので空で運勢も出る）。
-     [리뷰 수정 3] 重なる区間は STEPS の並びが解く。三項は使わない。
-     [2-1] 「わからない(NULL)」と「未質問」は後ろの項目の有無で分ける。 */
-  bdate:   (u) => !u.ohaeng_main && !!u.name_kr && !u.birth_date,
-  /* 「わからない」と答えた事実は raw.birth_time_unknown（saveSaju）。
-     birth_time は NULL のままなので、この키を見ないと同じ質問が
-     出続ける（지시서⑩ ── 「後ろの項目で分かる」は、後ろがまだ
-     空の瞬間には働かなかった）。 */
-  btime:   (u) => !u.ohaeng_main && !!u.birth_date
-                  && u.birth_time === null && !timeUnknown(u) && !cityOf(u),
-  bplace:  (u) => !u.ohaeng_main && !!u.birth_date && !cityOf(u),
-  /* 性別はもう訊かない（지시서⑱・2026-08-07）。privacy が掲げた目的
-     （大運の計算に将来用いる）が消えたので、目的の無い個人情報を
-     受け取り続けない。段ごと消えたので、⑩の「答えない」ループも
-     質問ごと消滅。gender 列は参照が多いので残す ── 書く経路が無い。
-     bplace の次は birth（要約確認）── 都市を選ぶと bplace が偽になり
-     birth が真になるので、繋ぎ直しは要らない（관문이 실측）。 */
-
-  /* 2. 生年月日の確定。サイト経由は「ご本人のものですか」、
-     直接流入は要約確認（全項目を 1 画面 ── 決定 2-2）。
-     どちらも birth_confirmed が立って終わる ── 意味は同じ
-     「生年月日情報が確定した」。 */
-  birth: (u) => !!u.birth_date && !u.birth_confirmed,
-
-  /* 3. コース。確認の済んだ人（birth_confirmed）だけ。値（track ＝
-     active_track の別名）から導出 ── 列追加 0 の原則のまま。
-     BLOCKING には入れない ── 未選択者はそもそも配信名簿の外
-     （listDeliverable が active_track で JOIN）で、止める相手が居ない。 */
-  track: (u) => !!u.birth_date && !!u.birth_confirmed && !u.track
+  /* 名前が決まればコース。生年月日は要らない。 */
+  track: (u) => !!u.name_kr && !u.track
 });
 
 export function nextStep(u = {}) {
   return STEPS.find((s) => PENDING[s](u)) || null;
 }
 
-
-/* ---- 配信を止める段だけ ---------------------------------------------
-   nextStep は「次に訊くこと」を 1 つだけ返す。生年月日は配信を止めない
-   段（止まるのは運勢だけ）なので、そこが返ってきたからといって
-   バッチが待ってはいけない。
-
-   前はコースもこの一覧に居た。今はコースを買うときに選ぶので、
-   止める段は名前の 2 つ（どちらの名前か / その読み方）だけ ──
-   名前が決まらないと会話文が作れず、その日の中身そのものが無い。
-
-   一覧が 1 つでも口を分けたままにするのは、判定そのものを PENDING で
-   共有しておけば、段が増えても真実が 2 か所にならないため。 */
 export const BLOCKING_STEPS = Object.freeze(["name", "reading"]);
 
 export function blockingStep(u = {}) {
@@ -620,17 +514,6 @@ export async function messageForStep(step, u = {}, conn = null) {
      選んだ人なので、答えたはずの質問が戻ってくる形になる。 */
   if (step === "reading") {
     return askReading();
-  }
-  if (step === "bdate")   return askBirthDate();
-  if (step === "btime")   return askBirthTime();
-  if (step === "bplace")  return askBirthPlace();
-  if (step === "birth") {
-    /* サイト経由（ohaeng_main あり）は従来の「ご本人のものですか」。
-       直接流入は要約確認 ── birth_confirmed の意味はどちらも同じ。
-       都市の一覧は vm ロードから遅延で引く（写しを持たない）。 */
-    return u.ohaeng_main
-      ? askBirth({ birthDate: String(u.birth_date).slice(0, 10), birthTime: u.birth_time })
-      : summaryConfirm(u, cities());
   }
   return null;
 }

@@ -584,44 +584,40 @@ const { nextStep, blockingStep, onboardingDone } = await import("../server/lib/o
 const { healProgress } = await import("../server/lib/repo/learning.mjs");
 const { handlePostback } = await import("../server/lib/handlers/postback.mjs");
 
-check("部分状態 5 種で、次の質問が正しく導かれる", () => {
-  /* サイト経由の状態には ohaeng_main を必ず載せる ── 実物は連携時に
-     入る判別子で、これが無い状態は「直接流入」と読まれて新 4 段へ
-     入る（plan-line-onboarding §2-4 安A。それ自体が仕様）。 */
+check("部分状態で、次の質問が正しく導かれる", () => {
+  /* STEPS は name / reading / track の 3 段だけ。生年月日チェーンは
+     廃止 ── 名前が決まればコースへ。birth_date の有無は段に影響しない。 */
   const CASES = [
     /* [状態, 期待 nextStep] */
     [{ name_source: null, name_kr: "하나코", display_name: "h", birth_date: "1990-01-01",
        birth_confirmed: false, ohaeng_main: "목", track: null }, "name",  "新規（連携直後）"],
     [{ name_source: "web", name_kr: "하나코", display_name: "h", birth_date: "1990-01-01",
-       birth_confirmed: false, ohaeng_main: "목", track: null }, "birth", "①だけ済み"],
+       birth_confirmed: false, ohaeng_main: "목", track: null }, "track", "①だけ済み → コース"],
     [{ name_source: "web", name_kr: "하나코", display_name: "h", birth_date: "1990-01-01",
        birth_confirmed: true, ohaeng_main: "목", track: "beginner" }, null, "全部済み（再連携の代表口座）"],
-    /* saju 行ごと消えた人 ── 以前は袋小路（null）だったが、いまは
-       トークの中で生年月日から入れ直せる。部分削除の自己回復が
-       状態機械そのものに備わった形。 */
+    /* saju 行が無くても、名前とコースがあれば済み。 */
     [{ name_source: "web", name_kr: "하나코", display_name: "h", birth_date: null,
-       birth_confirmed: false, ohaeng_main: null, track: "beginner" }, "bdate", "saju 行が無い（部分削除 → 訊き直せる）"],
-    /* 友だち追加だけ ── 以前は訊く材料が無く沈黙だったが、いまは
-       読み仮名から始められる（7-3 の解消）。 */
+       birth_confirmed: false, ohaeng_main: null, track: "beginner" }, null, "saju 行が無い（コース済み）"],
+    /* 友だち追加だけ ── 読み仮名から始まる。 */
     [{ name_source: null, name_kr: null, name_kanji: null, display_name: "h", birth_date: null,
        birth_confirmed: false, ohaeng_main: null, track: null }, "reading", "友だち追加だけ → 読みから始まる"],
-    /* 直接流入の途中経過も 1 つずつ。 */
+    /* 直接流入：名前だけ済み → コース。 */
     [{ name_source: "line", name_kr: "타로", name_kanji: null, display_name: "h",
        birth_date: null, birth_confirmed: false, ohaeng_main: null, track: null },
-      "bdate", "直接流入：名前だけ済み"],
+      "track", "直接流入：名前だけ済み"],
+    /* 生年月日の途中経過が残っていても、名前＋未コースなら track。 */
     [{ name_source: "line", name_kr: "타로", name_kanji: null, display_name: "h",
        birth_date: "1990-01-01", birth_time: null, birth_confirmed: false,
        ohaeng_main: null, raw_result_json: null, track: null },
-      "btime", "直接流入：日付まで（時刻は未質問）"],
-    /* 性別は訊かない（⑱）── 出生地まで済めば要約確認へ直行。 */
+      "track", "直接流入：日付まで（旧チェーンの途中）"],
     [{ name_source: "line", name_kr: "타로", name_kanji: null, display_name: "h",
        birth_date: "1990-01-01", birth_time: null, birth_confirmed: false,
        ohaeng_main: null, raw_result_json: { city: "tokyo" }, gender: "U", track: null },
-      "birth", "直接流入：時刻わからない＋出生地まで → 要約確認"],
+      "track", "直接流入：出生地まで（旧チェーンの途中）"],
     [{ name_source: "line", name_kr: "타로", name_kanji: null, display_name: "h",
        birth_date: "1990-01-01", birth_time: "09:00:00", birth_confirmed: false,
        ohaeng_main: null, raw_result_json: { city: "seoul" }, gender: "F", track: null },
-      "birth", "直接流入：全部答えた → 要約確認へ"]
+      "track", "直接流入：全部答えた（旧）→ コース"]
   ];
   for (const [st, want, label] of CASES) {
     const got = nextStep(st);
@@ -632,8 +628,8 @@ check("部分状態 5 種で、次の質問が正しく導かれる", () => {
   return `${CASES.length} 状態`;
 });
 
-await acheck("要約確認の答えに、コース選択が続く（無応答で終わらない・欠損A）", async () => {
-  /* birth ok=1、他の段は済み → followUp は track 段（コース選択）を返す。
+await acheck("旧・要約確認ボタンは保存せず followUp でコース選択へ（欠損A）", async () => {
+  /* birth ok=1 は dropped だが followUp は track 段（コース選択）を返す。
      選択肢は原稿が体験日数ぶんあるコースだけ（§4-나）── beginner だけ
      원고 50、他は 0 の状況を作る。 */
   const row = [{ id: 7, line_user_id: "U", display_name: "h", name_kanji: null,
@@ -651,7 +647,8 @@ await acheck("要約確認の答えに、コース選択が続く（無応答で
   const r = await handlePostback(conn,
     { source: { userId: "U" }, replyToken: "rt", postback: { data: "action=birth&ok=1" } },
     { send: async (_t, m) => { sent = m; return {}; } });
-  assert(r.ok === true, JSON.stringify(r));
+  assert(r.dropped, JSON.stringify(r));
+  assert(r.replied, "followUp を返していません");
   assert(sent && sent.length === 1, "続きの 1 通がありません（最後の答えに無応答）");
   /* 2026-08-09 に代表が「どのコースで始めますか？」から안 C の文面へ。
      文面を変えるときは、ここも同じコミットで直すこと。 */
@@ -664,11 +661,11 @@ await acheck("要約確認の答えに、コース選択が続く（無応答で
   const items = sent[0].quickReply?.items || [];
   assert(items.length === 1 && items[0].action.data === "action=trackpick&track=beginner",
     `原稿 0 のコースが選択肢に出ています: ${JSON.stringify(items.map((i) => i.action.data))}`);
-  return "要約確認 → コース選択（原稿のあるコースだけ）";
+  return "旧 birth → dropped + コース選択（原稿のあるコースだけ）";
 });
 
-await acheck("コースを選んだあとの答えには、本当の締めが返る", async () => {
-  /* active_track が立っていれば段は残っていない → onboardingDone。 */
+await acheck("コース済みの人が旧・要約確認を押しても、締めが返る", async () => {
+  /* active_track が立っていれば段は残っていない → followUp は onboardingDone。 */
   const row = [{ id: 7, line_user_id: "U", display_name: "h", name_kanji: null,
     name_reading: "はなこ", name_kr: "하나코", name_source: "web",
     status: "trial", active_track: "beginner" }];
@@ -681,7 +678,7 @@ await acheck("コースを選んだあとの答えには、本当の締めが返
   const r = await handlePostback(conn,
     { source: { userId: "U" }, replyToken: "rt", postback: { data: "action=birth&ok=1" } },
     { send: async (_t, m) => { sent = m; return {}; } });
-  assert(r.ok === true, JSON.stringify(r));
+  assert(r.dropped && r.replied, JSON.stringify(r));
   assert(sent && /準備が整いました/.test(sent[0].text), sent && sent[0].text);
   assert(/明日の朝/.test(sent[0].text), "コース選択済みの人に予告がありません");
   return "track あり → 明日の朝の予告";
@@ -804,10 +801,8 @@ head("[答えたら必ず進む]  状態遷移の不変式（지시서⑩ §3）
    STEPS に段階を足すと、ここに登録するまで失敗する（自動カバー ──
    列運搬の自動探索関門と同じ思想）。見るのは**答えた直後**だけ:
    fix（項目を選んで直す）・ok=0（入れ直す）のような明示的な
-   再質問は対象外。bplace の国タップは都市一覧へ進む 2 段 UI の
-   中間なので、終端の答え（都市）だけを見る。 */
+   再質問は対象外。生年月日チェーン（bdate〜birth）は廃止。 */
 
-const { cities: cityList } = await import("../server/lib/fortune.mjs");
 const { handlePostback: chainPost } = await import("../server/lib/handlers/postback.mjs");
 const { STEPS: CHAIN_STEPS, nextStep: chainNext } = await import("../server/lib/onboarding.mjs");
 
@@ -859,7 +854,6 @@ const chainShape = (st) => ({
 const CU = { id: 7, line_user_id: "U", status: "trial", display_name: "たなか",
   name_kanji: null, name_reading: null, name_kr: null, name_source: null,
   active_track: null };
-const CITY0 = cityList()[0].id;
 const pb = (data, params = null) => ({ source: { userId: "U" }, replyToken: "rt",
   postback: params ? { data, params } : { data } });
 
@@ -874,30 +868,6 @@ const CHAIN = {
     base: () => ({ user: { ...CU, name_source: "line", name_reading: "たなか" },
       saju: { birth_date: "1990-04-12", birth_confirmed: 1, gender: "U", ohaeng_main: "목" } }),
     answers: [pb("action=name&use=confirm&ok=1")]
-  },
-  bdate: {
-    base: () => ({ user: { ...CU, name_source: "line", name_kr: "다나카" }, saju: null }),
-    answers: [pb("action=bdate", { date: "1990-04-12" })]
-  },
-  btime: {
-    base: () => ({ user: { ...CU, name_source: "line", name_kr: "다나카" },
-      saju: { birth_date: "1990-04-12", birth_time: null, gender: "U",
-              birth_confirmed: 0, ohaeng_main: null, raw_result_json: null } }),
-    answers: [pb("action=btime", { time: "12:00" }), pb("action=btime&unknown=1")]
-  },
-  bplace: {
-    base: () => ({ user: { ...CU, name_source: "line", name_kr: "다나카" },
-      saju: { birth_date: "1990-04-12", birth_time: "12:00:00", gender: "U",
-              birth_confirmed: 0, ohaeng_main: null, raw_result_json: null } }),
-    answers: [pb(`action=bcity&id=${CITY0}`)]
-  },
-  /* bgender 段は削除（지시서⑱）── 도시를 답하면 그대로 요약 확인
-     (birth)로 간다. bplace 의 전환 검사가 그 연결을 실측한다. */
-  birth: {
-    base: () => ({ user: { ...CU, name_source: "web", name_kanji: "田中", name_kr: "다나카" },
-      saju: { birth_date: "1990-04-12", birth_time: null, gender: "U",
-              birth_confirmed: 0, ohaeng_main: "목", raw_result_json: null } }),
-    answers: [pb("action=birth&ok=1")]
   },
   track: {
     base: () => ({ user: { ...CU, name_source: "web", name_kanji: "田中", name_kr: "다나카" },
@@ -1067,38 +1037,49 @@ await acheck("ONBOARD_COLUMNS を全経路が運ぶ ── 欠けは undefined �
 });
 
 /* ================================================================== */
-head("[直接流入の 4 段]  判別子を守る・data を信じない（리뷰 수정 5）");
+head("[直接流入]  生年月日チェーン廃止・data を信じない（리뷰 수정 5）");
 
-check("オンボーディングはどこでも性別を訊かない（지시서⑱）", () => {
-  /* privacy の目的（大運の計算に将来用いる）が消えたので、目的の
-     無い個人情報を受け取らない。質問・保存の両方が無いことを見る ──
-     古いボタンの bgender postback は**受けるが保存しない**（黙殺すると
-     無反応になるため followUp で受け止める）。 */
+check("オンボーディングは生年月日・性別を訊かない", () => {
+  /* LINE では名前とコースだけ。旧ボタン（bdate〜birth / bgender）は
+     受けるが保存しない ── 黙殺すると無反応になるため followUp で受け止める。 */
   const ob = stripComments(read("server/lib/onboarding.mjs"));
   assert(!/askGender/.test(ob), "askGender が残っています");
-  assert(!/"bgender"/.test(ob), "STEPS / PENDING に bgender が残っています");
-  assert(!/性別を教えて/.test(read("server/lib/onboarding.mjs")), "性別の質問文面が残っています");
-  const pb2 = stripComments(read("server/lib/handlers/postback.mjs"));
-  const bg = pb2.match(/if \(action === "bgender"\)[\s\S]*?\n  }/)[0];
-  assert(!/saveSaju|gender:/.test(bg), "bgender が保存しています ── 書く経路は 1 本も残さない");
-  return "訊かない・書かない（古いボタンは followUp で受け止め）";
-});
-
-check("チェーンの途中で ohaeng_main を書く経路が無い（不変式）", () => {
-  /* ohaeng_main の空白が「サイト診断を通っていない」の判別子。
-     bdate〜bgender のどこかで埋めると、判別が黙って崩れて
-     残りの段が止まる ── 注釈ではなく関門が守る。 */
-  const src = stripComments(read("server/lib/handlers/postback.mjs"));
-  const save = src.match(/const saveSaju[\s\S]*?\n  };/)[0];
-  assert(!/ohaengMain/.test(save), "saveSaju が ohaengMain を渡しています");
-  for (const a of ["bdate", "btime", "bplace", "bcity", "bgender"]) {
-    const fn = src.match(new RegExp(`if \\(action === "${a}"\\)[\\s\\S]*?\\n  }`))[0];
-    assert(!/ohaengMain|ohaeng_main/.test(fn), `${a} が ohaeng_main に触れています`);
+  for (const s of ["bdate", "btime", "bplace", "birth", "bgender"]) {
+    assert(!new RegExp(`"${s}"`).test(ob), `STEPS / PENDING に ${s} が残っています`);
   }
-  return "saveSaju + 5 ハンドラとも不在";
+  assert(!/性別を教えて/.test(read("server/lib/onboarding.mjs")), "性別の質問文面が残っています");
+  const mfs = ob.match(/export async function messageForStep[\s\S]*?\n}/)[0];
+  assert(!/askBirthDate|askBirthTime|askBirthPlace|askBirth|summaryConfirm/.test(mfs),
+    "messageForStep が生年月日チェーンを呼んでいます");
+  assert(/step === "name"|step === "reading"|step === "track"/.test(mfs),
+    "messageForStep が name / reading / track だけを扱っていません");
+
+  const pb2 = stripComments(read("server/lib/handlers/postback.mjs"));
+  assert(!/saveSaju/.test(pb2), "saveSaju が残っています");
+  assert(!/upsertSajuProfile/.test(pb2.match(/if \(\["bdate"[\s\S]*?\n  }/)[0]),
+    "旧・生年月日チェーンが saju を保存しています");
+  const drop = pb2.match(/if \(\["bdate"[\s\S]*?\n  }/)[0];
+  for (const a of ["bdate", "btime", "bplace", "bcity", "bgender", "birth"]) {
+    assert(drop.includes(`"${a}"`), `dropped 一覧に ${a} がありません`);
+  }
+  assert(/dropped:/.test(drop), "dropped 応答がありません");
+  return "訊かない・書かない（旧ボタンは dropped + followUp）";
 });
 
-await acheck("bcity は一覧で引き当てる ── 知らない id を黙って tokyo にしない", async () => {
+check("生年月日チェーンが ohaeng_main を書く経路が無い（不変式）", () => {
+  /* ohaeng_main の空白が「サイト診断を通っていない」の判別子。
+     旧チェーンは廃止 ── STEPS に無く、postback も saju を書かない。 */
+  const ob = stripComments(read("server/lib/onboarding.mjs"));
+  for (const s of ["bdate", "btime", "bplace", "birth", "bgender"]) {
+    assert(!new RegExp(`"${s}"`).test(ob), `STEPS に ${s} が残っています`);
+  }
+  const pb2 = stripComments(read("server/lib/handlers/postback.mjs"));
+  assert(!/saveSaju/.test(pb2), "saveSaju が残っています");
+  assert(!/upsertSajuProfile/.test(pb2), "postback が upsertSajuProfile を呼んでいます");
+  return "STEPS 3 段 + postback は saju を書かない";
+});
+
+await acheck("旧・bcity ボタンは dropped ── saju を書かない", async () => {
   const { handlePostback } = await import("../server/lib/handlers/postback.mjs");
   const U_ROW = [{ id: 7, line_user_id: "U_d", display_name: "d", name_kanji: null,
     name_reading: "たろう", name_kr: "타로", name_source: "line",
@@ -1108,48 +1089,44 @@ await acheck("bcity は一覧で引き当てる ── 知らない id を黙っ
     { source: { userId: "U_d" }, replyToken: "rt",
       postback: { data: "action=bcity&id=atlantis" } },
     { send: async () => ({}) });
-  assert(r.skipped, `弾いていません: ${JSON.stringify(r)}`);
+  assert(r.dropped, `保存せず dropped ではありません: ${JSON.stringify(r)}`);
   assert(!conn.calls.some((c) => /INSERT INTO saju_profiles|UPDATE saju_profiles/i.test(c.sql)),
-    "知らない都市を保存しています（fortune が黙って tokyo に落ちる）");
-  return "atlantis → 保存なし";
+    "知らない都市を保存しています");
+  return "atlantis → dropped・保存なし";
 });
 
-await acheck("datetimepicker の答えは範囲を見てから保存する", async () => {
+await acheck("旧・bdate ボタンは dropped ── 範囲内外とも saju を書かない", async () => {
   const { handlePostback } = await import("../server/lib/handlers/postback.mjs");
   const U_ROW = [{ id: 7, line_user_id: "U_d", display_name: "d", name_kanji: null,
     name_reading: "たろう", name_kr: "타로", name_source: "line",
     status: "active", active_track: null }];
+  const send = async () => ({});
   /* 範囲外の年（picker の min/max は端末側の飾りで、postback は作れる） */
   const bad = fakeConn({ "FROM users": U_ROW });
   const r1 = await handlePostback(bad,
     { source: { userId: "U_d" }, replyToken: "rt",
       postback: { data: "action=bdate", params: { date: "1900-01-01" } } },
-    { send: async () => ({}) });
-  assert(r1.skipped, `範囲外が通りました: ${JSON.stringify(r1)}`);
+    { send });
+  assert(r1.dropped, `範囲外も dropped ではありません: ${JSON.stringify(r1)}`);
+  assert(!bad.calls.some((c) => /INSERT INTO saju_profiles|UPDATE saju_profiles/i.test(c.sql)),
+    "範囲外を保存しています");
 
-  /* 正常値 → 保存して、次の質問（時刻）が返る。
-     偽の接続は書き込みを覚えないので、INSERT を見たら以後の
-     SELECT に反映する ── 反映しないと followUp が古い状態を読み、
-     この検査自身が「保存後の次の段」を見られない。 */
-  let saved = null;
+  /* 正常値も保存しない ── followUp で次の段（track）へ。 */
   const ok = fakeConn({
     "FROM users": U_ROW,
-    "INSERT INTO saju_profiles": (sql, params) => {
-      saved = { user_id: 7, birth_date: params[1], birth_time: params[2],
-                birth_confirmed: 0, gender: "U", ohaeng_main: null, raw_result_json: null };
-      return { affectedRows: 1, insertId: 1 };
-    },
-    "FROM saju_profiles": () => saved ? [saved] : []
+    "SELECT COUNT\\(\\*\\) AS n FROM content_templates": [{ n: 50 }]
   });
   let sent = null;
   const r2 = await handlePostback(ok,
     { source: { userId: "U_d" }, replyToken: "rt",
       postback: { data: "action=bdate", params: { date: "1990-05-05" } } },
     { send: async (_t, m) => { sent = m; return {}; } });
-  assert(r2.date === "1990-05-05", JSON.stringify(r2));
-  assert(saved && saved.birth_date === "1990-05-05", "保存していません");
-  assert(sent && /時刻/.test(sent[0].text), `次の質問が時刻ではありません: ${sent?.[0]?.text?.slice(0, 20)}`);
-  return "1900 拒否 / 1990 保存 → 時刻へ";
+  assert(r2.dropped, JSON.stringify(r2));
+  assert(!ok.calls.some((c) => /INSERT INTO saju_profiles|UPDATE saju_profiles/i.test(c.sql)),
+    "正常値を保存しています");
+  assert(sent && /ご希望のコースをお選びください/.test(sent[0].text),
+    `followUp がコース選択ではありません: ${sent?.[0]?.text?.slice(0, 30)}`);
+  return "1900/1990 とも dropped + followUp・保存なし";
 });
 
 console.log(`\n${failed ? "✗" : "✓"} ${passed + failed} 項目中 ${passed} 件成功`

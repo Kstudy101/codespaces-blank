@@ -439,6 +439,8 @@ await acheck("答えた段は、もう訊かない（次の段が返る）", asy
       if (/FROM users WHERE line_user_id/i.test(s) || /FROM users WHERE id/i.test(s)) return [[{ ...st.user }], []];
       if (/FROM saju_profiles/i.test(s)) return [[{ ...st.saju }], []];
       if (/FROM learning_progress/i.test(s)) return [[{ ...st.progress }], []];
+      if (/SELECT COUNT\(\*\) AS n FROM content_templates/i.test(s)) return [[{ n: 50 }], []];
+      if (/FROM course_entitlements/i.test(s)) return [[], []];
       if (/^(INSERT|UPDATE|DELETE)/i.test(s)) return [{ affectedRows: 1, insertId: 1 }, []];
       return [[], []];
     }
@@ -453,25 +455,21 @@ await acheck("答えた段は、もう訊かない（次の段が返る）", asy
   assert(sent.length, "何も返していません");
   assert(!/お名前の確認/.test(sent[0][0].text),
     "答えたばかりの「お名前の確認」がもう一度返りました（引いておいた行で判定しています）");
-  assert(/生年月日の確認/.test(sent[0][0].text),
-    `次の段が生年月日ではありません: ${sent[0][0].text.split("\n")[0]}`);
+  assert(/ご希望のコースをお選びください/.test(sent[0][0].text),
+    `次の段がコース選択ではありません: ${sent[0][0].text.split("\n")[0]}`);
 
-  /* 生年月日も同じ形で確かめる。こちらは元から進んでいたが、
-     users を引き直す作りに変えたので、壊していないことを見る。 */
+  /* 旧 birth ボタンは保存せず followUp。コース段のまま。 */
   await handlePostback(conn, { source: { userId: "U_test" }, replyToken: "t2",
     postback: { data: "action=birth&ok=1" } }, { send });
-  assert(st.saju.birth_confirmed === 1, `書けていません: ${st.saju.birth_confirmed}`);
+  assert(st.saju.birth_confirmed === 0, `旧 birth が四柱を書いています: ${st.saju.birth_confirmed}`);
 
-  /* ここで段は終わり。コースは買うときに選ぶので（migrations/002）、
-     この先に「コースを選んでください」は来ない ── 来ると、まだ何も
-     買っていない人が押しても進む先が無い。 */
   const after = sent.slice(1).flat();
-  assert(!after.some((m) => /コースを選んでください/.test(m.text || "")),
-    "コース選択がまだ段に残っています（押しても買う所へ行けません）");
+  assert(after.some((m) => /ご希望のコースをお選びください/.test(m.text || "")),
+    "旧 birth の followUp でコース選択が返りません");
   assert(!after.some((m) => /action=track&pick=/.test(JSON.stringify(m))),
     "廃止した action=track のボタンが残っています");
 
-  return "名前 → 生年月日 → 終わり";
+  return "名前 → コース（旧 birth は drop）";
 });
 
 
@@ -661,9 +659,10 @@ await acheck("オンボーディング完了者は profile/start へ誘導", asy
 });
 
 await acheck("未完了者は Web へ誘導しない", async () => {
+  /* 名前が無い人だけ未完了（生年月日はもう訊かない）。 */
   const { r, sent } = await askPlans("情報を変更", {
-    "FROM saju_profiles": [{ user_id: 7, birth_date: "1990-01-01",
-      birth_confirmed: 0, gender: "U" }]
+    "FROM users": [{ id: 7, line_user_id: "U_test", status: "active", name_kr: null }],
+    "FROM saju_profiles": []
   });
   assert(r.profile === false, JSON.stringify(r));
   assert(!sent[0]?.quickReply, "未完了なのにリンク");
@@ -745,7 +744,11 @@ const NAMELESS = [{ id: 7, line_user_id: "U_new", status: "trial", name_kr: null
 const NAMED    = [{ id: 8, line_user_id: "U_old", status: "active", name_kr: "다나카" }];
 
 async function follow(rows, extra = {}) {
-  const conn = fakeConn({ "FROM users": rows });
+  const conn = fakeConn({
+    "FROM users": rows,
+    "SELECT COUNT\\(\\*\\) AS n FROM content_templates": [{ n: 50 }],
+    "FROM course_entitlements": []
+  });
   const { handleFollow } = await import("../server/lib/handlers/follow.mjs");
   let sent = null;
   const r = await handleFollow(conn,
@@ -806,12 +809,12 @@ await acheck("名前がある人にも、ボード＋次に訊くことが続く
   assert(sent && sent.length === 2, `返した通数: ${sent ? sent.length : 0}`);
   assert(/はじめまして/.test(sent[0].text), "1 通目がボードではありません");
   const ask = sent[1];
-  assert(/お名前の確認|生年月日の確認|生年月日を教えてください/.test(ask.text),
+  assert(/ご希望のコースをお選びください|お名前の確認|読み方/.test(ask.text),
     `確認・質問ではありません: ${ask.text.slice(0, 40)}`);
   assert(!/action=track&pick=/.test(JSON.stringify(ask)),
-    "コース選択のボタンが残っています（買う所へ行けません）");
+    "廃止した action=track のボタンが残っています");
   assert(r.welcomed === true, JSON.stringify(r));
-  return "ボード + 確認";
+  return "ボード + コース選択";
 });
 
 await acheck("コースが決まっている人には、ボードだけ（質問はしない）", async () => {

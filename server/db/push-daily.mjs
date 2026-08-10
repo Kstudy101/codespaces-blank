@@ -205,14 +205,6 @@ export function retryKey(userId, day, type) {
 export function fortuneSection(u, { date = DATE, load = loadLines } = {}) {
   if (!u.birth_date) return null;
 
-  if (!u.birth_confirmed) {
-    if (!fortuneSkips.has("未確認")) {
-      fortuneSkips.add("未確認");
-      console.log("  · 生年月日が未確認の人には運勢を付けていません");
-    }
-    return null;
-  }
-
   let lines;
   try {
     lines = load();

@@ -46,11 +46,12 @@ import { kanaNameToHangul } from "../kana2hangul.mjs";
 import {
   salesAllowedFor, salesMode, notReady, coursePreparing, askCourse, priceList,
   sellablePackages, sellableTracks, startCheckout, checkoutLink, startTrialFor,
-  applyResume, resumeDone, applySwitch, switchDone, statusMessage, missingLegalConfig
+  applyResume, resumeDone, applySwitch, switchDone, statusMessage, missingLegalConfig,
+  inTrialNow, trialInProgress
 } from "./checkout.mjs";
 import { PACKAGES, TRIAL_DAYS } from "../repo/billing.mjs";
 import { deliverNow } from "../../db/push-daily.mjs";
-import { isTrack } from "../repo/learning.mjs";
+import { isTrack, isOpenTrack } from "../repo/learning.mjs";
 import { renderReviewAnswer, formatQuizReply } from "../render.mjs";
 import { recoverUser, welcomeMessages } from "./follow.mjs";
 
@@ -290,6 +291,15 @@ async function onPlans(ctx) {
     return { userId: user.id, action, blocked: "販売停止",
              replied: await reply(token, [notReady()], send) };
   }
+  /* 体験の 7 日が終わるまでは価格表を出さない（대표 지시 2026-08-10）。
+     判定は checkout.mjs の inTrialNow 1 つ ── plan / buy /「受講料」と
+     打つ道の 4 か所とも同じものを通す。1 か所でも素通りすると、
+     そこだけが決済への抜け道になる（salesAllowedFor と同じ理屈）。 */
+  if (await inTrialNow(conn, user)) {
+    return { userId: user.id, action, blocked: "体験中",
+             replied: await reply(token, [trialInProgress()], send) };
+  }
+
   const owned = (await entitlements.listByUser(conn, user.id)).map((e) => e.track);
 
   /* 売れるコースだけを出す（지시서⑯ §4）。判定は checkout.mjs の
@@ -314,8 +324,18 @@ async function onPlan(ctx) {
     return { userId: user.id, action, blocked: "販売停止",
              replied: await reply(token, [notReady()], send) };
   }
+  if (await inTrialNow(conn, user)) {
+    return { userId: user.id, action, blocked: "体験中",
+             replied: await reply(token, [trialInProgress()], send) };
+  }
   const track = params.track;
   if (!isTrack(track)) return { skipped: `未知の track: ${track}`, userId: user.id };
+  /* data は書き換えられる ── 一覧から外した中級・上級を名乗られても
+     ここで止める（募集中の判定は repo/learning.mjs の OPEN_TRACKS）。 */
+  if (!isOpenTrack(track)) {
+    return { userId: user.id, action, track, blocked: "募集停止中",
+             replied: await reply(token, [coursePreparing(track)], send) };
+  }
 
   /* 原稿の保有日数が売れる上限（§1-2）。体験もこの中に収まるときだけ。 */
   const availableDays = await learning.countTemplates(conn, track);
@@ -370,9 +390,17 @@ async function onBuy(ctx) {
     return { userId: user.id, action, blocked: "販売停止",
              replied: await reply(token, [notReady()], send) };
   }
+  if (await inTrialNow(conn, user)) {
+    return { userId: user.id, action, blocked: "体験中",
+             replied: await reply(token, [trialInProgress()], send) };
+  }
   const track = params.track, pkg = params.pkg;
   if (!isTrack(track)) return { skipped: `未知の track: ${track}`, userId: user.id };
   if (!PACKAGES[pkg])  return { skipped: `未知の package: ${pkg}`, userId: user.id };
+  if (!isOpenTrack(track)) {
+    return { userId: user.id, action, track, pkg, blocked: "募集停止中",
+             replied: await reply(token, [coursePreparing(track)], send) };
+  }
 
   /* data は書き換えられる ── 価格表に出していないパッケージを
      名乗られても、原稿の上限（§1-2）でここでも止める。 */
@@ -401,6 +429,13 @@ async function onTrackpick(ctx) {
   const { conn, event, user, action, params, token, send, deliver, push, transact } = ctx;
   const track = params.track;
   if (!isTrack(track)) return { skipped: `未知の track: ${track}`, userId: user.id };
+
+  /* 募集していないコースでは始めない。選択肢からは除いてあるが、
+     data は書き換えて戻せるのでここでも止める（OPEN_TRACKS）。 */
+  if (!isOpenTrack(track)) {
+    return { userId: user.id, action, track, blocked: "募集停止中",
+             replied: await reply(token, [coursePreparing(track)], send) };
+  }
 
   /* 原稿が体験日数ぶんも無いコースでは始めない ── 体験（action=trial）と
      同じ上限・同じ関数。選択肢からは除いてあるが、data は書き換えて
@@ -445,6 +480,14 @@ async function onTrial(ctx) {
   const { conn, event, user, action, params, token, send, deliver, push, transact } = ctx;
   const track = params.track;
   if (!isTrack(track)) return { skipped: `未知の track: ${track}`, userId: user.id };
+
+  /* 募集していないコースでは体験も始めない（OPEN_TRACKS）── ここを
+     開けたままにすると、価格表から外した中級・上級を data 経由で
+     始められてしまう。 */
+  if (!isOpenTrack(track)) {
+    return { userId: user.id, action, track, blocked: "募集停止中",
+             replied: await reply(token, [coursePreparing(track)], send) };
+  }
 
   /* 原稿が体験日数ぶんも無いコースでは始めない（§1-2 と同じ上限）。 */
   if (TRIAL_DAYS > await learning.countTemplates(conn, track)) {

@@ -31,6 +31,24 @@ import { usableQuiz } from "../render.mjs";
    verify-server.mjs が schema と突き合わせる。 */
 export const TRACKS = Object.freeze(["beginner", "intermediate", "advanced"]);
 
+/* ---- いま募集しているコース（2026-08-10 대표 지시）--------------------
+   TRACKS とは別に持つ。TRACKS は「この系に存在しうる値」で、
+   entitlements・purchases・原稿・既存利用者の active_track が
+   すべて isTrack() で検証される ── そこから中級・上級を削ると、
+   その 2 つを持っている人の行が「未知の track」になり、配信も採点も
+   止まる。募集を止めるのは**表示の話**なので、別の名前で別に持つ。
+
+   原稿は 3 コースぶん（303 日）サーバーに在るので、countTemplates
+   による自動の絞り込みでは外れない ── 「原稿はあるが、まだ売らない」
+   を表せる場所が他に無かった。
+
+   ここが唯一の出どころ。増やすときはこの 1 行だけを足す。 */
+export const OPEN_TRACKS = Object.freeze(["beginner"]);
+
+export function isOpenTrack(v) {
+  return typeof v === "string" && OPEN_TRACKS.includes(v);
+}
+
 /* 画面に出す名前。日本語で出す（利用者は日本語話者）。
    韓国語を併記するのは、コース名そのものが最初の単語になるため。 */
 export const TRACK_LABELS = Object.freeze({

@@ -1135,14 +1135,43 @@ const plansReply = async (byTrack, extra = {}) => {
   return { r, sent };
 };
 
-await acheck("一覧は sellablePackages の結果と一致する", async () =>
+await acheck("一覧は sellablePackages の結果と一致する（募集中のコースの中で）", async () =>
   withSalesOpen(async () => {
     const conn = tplConn({ beginner: 101, intermediate: 7, advanced: 3 });
     const tracks = await sellableTracksFn(conn);
-    assert(JSON.stringify(tracks) === JSON.stringify(["beginner", "intermediate"]),
+    assert(JSON.stringify(tracks) === JSON.stringify(["beginner"]),
       `売れるコース: ${tracks.join(",")}`);
-    return "초급 101 / 중급 7 → 2 코스";
+    return "초급만（중급은 원고 7일 있어도 모집 밖）";
   }));
+
+/* 【2026-08-10 대표 지시】原稿は 3 コースぶん在るので、countTemplates
+   だけでは中級・上級が出続ける。募集の可否は OPEN_TRACKS が持つ ──
+   この検査は「原稿を消さずに募集を止められている」ことを見る。 */
+await acheck("募集していないコースは、原稿が 101 日あっても一覧に出ない", async () =>
+  withSalesOpen(async () => {
+    const { r, sent } = await plansReply({ beginner: 101, intermediate: 101, advanced: 101 });
+    assert(!/中級/.test(sent[0].text), `中級が残っています:\n${sent[0].text}`);
+    assert(!/上級/.test(sent[0].text), `上級が残っています:\n${sent[0].text}`);
+    assert(JSON.stringify(r.tracks) === JSON.stringify(["beginner"]), JSON.stringify(r.tracks));
+    return "원고 303일이어도 초급만";
+  }));
+
+check("募集の可否は OPEN_TRACKS 1 か所 ── TRACKS を削って表現しない", () => {
+  /* TRACKS から消すと isTrack() が中級・上級を「未知の値」と見て、
+     その 2 つを持っている人の配信・採点が止まる。表示を止めるのに
+     系の定義を削らない、を検査で固定する。 */
+  const { TRACKS: T, OPEN_TRACKS: O } = learning;
+  assert(T.includes("intermediate") && T.includes("advanced"),
+    "TRACKS から中級・上級が消えています（既存利用者の行が「未知の track」になります）");
+  assert(JSON.stringify(O) === JSON.stringify(["beginner"]),
+    `OPEN_TRACKS: ${O.join(",")}`);
+  for (const f of ["server/lib/handlers/checkout.mjs", "server/lib/onboarding.mjs"]) {
+    const src = stripComments(read(f));
+    assert(!/for\s*\(\s*const\s+\w+\s+of\s+TRACKS\s*\)/.test(src),
+      `${f} が TRACKS を回して一覧を作っています（OPEN_TRACKS を通してください）`);
+  }
+  return "TRACKS 3 종 유지 / 모집은 OPEN_TRACKS";
+});
 
 await acheck("原稿 3 日のコースは一覧に出ない（体験はできても買えない）", async () =>
   withSalesOpen(async () => {
@@ -1192,6 +1221,107 @@ check("判定は 1 か所 ── sellablePackages の外に同じ物差しを置
   const defs = (ck.match(/p\.days\s*<=\s*availableDays/g) || []).length;
   assert(defs === 1, `sellablePackages と同じ式が ${defs} 箇所あります`);
   return "入口 2 つ → 判定 1 つ";
+});
+
+
+/* ================================================================== */
+head(`[体験中は買えない]  無料の ${billing.TRIAL_DAYS} 日が終わるまで決済へ進ませない（대표 지시 2026-08-10）`);
+
+/* 体験中の人。trial_end はまだ先で、残りもある ── inTrialNow が
+   true になる形。dateStrings: true なので 'YYYY-MM-DD' の文字列。 */
+const IN_TRIAL_ROWS = {
+  "FROM subscriptions": [{ id: 1, user_id: 7, trial_start: "2026-08-01",
+    trial_end: "2999-12-31", trial_track: "beginner",
+    trial_days: billing.TRIAL_DAYS, payment_status: "trial" }],
+  "FROM course_entitlements": [{ track: "beginner", days_entitled: billing.TRIAL_DAYS,
+    days_used: 2, current_day: 2, remaining: billing.TRIAL_DAYS - 2 }]
+};
+
+const trialConn = (over = {}) => fakeConn({
+  "COUNT\\(\\*\\) AS n FROM content_templates": [{ n: 101 }],
+  "FROM users": [{ id: 7, line_user_id: "U_t", display_name: "t",
+    name_kanji: null, name_reading: "たろう", name_kr: "타로",
+    name_source: "web", status: "trial", active_track: "beginner" }],
+  ...IN_TRIAL_ROWS, ...over
+});
+
+const trialPost = async (data, over = {}) => {
+  const conn = trialConn(over);
+  const sent = [];
+  const r = await handlePostback(conn,
+    { source: { userId: "U_t" }, replyToken: "rt", postback: { data } },
+    { send: async (_t, m) => { sent.push(...m); return {}; } });
+  return { r, sent, conn };
+};
+
+/* 入口ごとに 1 つずつ。1 か所でも素通りすると、そこだけが決済への
+   抜け道になる（salesAllowedFor を 4 か所に通したのと同じ理屈）。 */
+for (const data of ["action=plans", "action=plan&track=beginner",
+                    "action=buy&track=beginner&pkg=7days"]) {
+  await acheck(`体験中は ${data} でも価格表・決済に進まない`, async () =>
+    withSalesOpen(async () => {
+      const { r, sent } = await trialPost(data);
+      assert(r.blocked === "体験中", JSON.stringify(r));
+      assert(sent.length === 1, `送った通数: ${sent.length}`);
+      assert(!sent[0].quickReply, "押せる選択肢が付いています");
+      assert(/お届けしている間です/.test(sent[0].text), sent[0].text);
+      return "体験中の案内 1 通";
+    }));
+}
+
+await acheck("体験中は Stripe のセッションを作らない（作ってから止めない）", async () =>
+  withSalesOpen(async () => {
+    /* 先に作ってから止めると、使われないセッションが押すたびに
+       積み上がる。門は Stripe を呼ぶ**前**に置く。 */
+    const { conn } = await trialPost("action=plan&track=beginner");
+    assert(!conn.calls.some((c) => /INSERT INTO purchases/i.test(c.sql)),
+      "体験中に購入の記録が動きました");
+    return "決済ページの事前作成に入らない";
+  }));
+
+await acheck("体験が終わっていれば買える（永久に買えない状態を作らない）", async () =>
+  withSalesOpen(async () => {
+    /* 残り 0（体験を使い切った）。ここで止まると、体験した人は
+       二度と買えなくなる ── 門が開くことも同じ強さで確かめる。 */
+    const { r } = await trialPost("action=plans", {
+      "FROM course_entitlements": [{ track: "beginner", days_entitled: billing.TRIAL_DAYS,
+        days_used: billing.TRIAL_DAYS, current_day: billing.TRIAL_DAYS, remaining: 0 }]
+    });
+    assert(r.blocked !== "体験中", JSON.stringify(r));
+    assert(JSON.stringify(r.tracks) === JSON.stringify(["beginner"]), JSON.stringify(r));
+    return "残り 0 → 価格表が出る";
+  }));
+
+await acheck("配信が止まって残日数が減らない人も、trial_end を過ぎれば買える", async () =>
+  withSalesOpen(async () => {
+    /* 原稿切れ・障害で days_used が進まないと、残りだけを見る判定では
+       体験が永遠に終わらない ── 日付側の門がその袋小路を開ける。 */
+    const { r } = await trialPost("action=plans", {
+      "FROM subscriptions": [{ id: 1, user_id: 7, trial_start: "2020-01-01",
+        trial_end: "2020-01-07", trial_track: "beginner",
+        trial_days: billing.TRIAL_DAYS, payment_status: "trial" }]
+    });
+    assert(r.blocked !== "体験中", JSON.stringify(r));
+    return "trial_end 経過 → 買える";
+  }));
+
+check("受講料が 7 日分ずつであることを、価格表とコース選択の両方に書く", () => {
+  /* 文字列は checkout.mjs の PACKAGE_UNIT_NOTE 1 つ。写しを持つと、
+     片方だけ直した日に案内が食い違う（대표 지시 2026-08-10 §2・§3）。 */
+  const note = checkout.PACKAGE_UNIT_NOTE;
+  assert(/7\s*日分ずつ/.test(note), `文面が変わりました: ${note}`);
+
+  const list = checkout.priceList("beginner", { checkoutUrls: FAKE_URLS });
+  assert(list.text.includes(note), `価格表に 7 日分ずつの案内がありません:\n${list.text}`);
+
+  const pickScreen = checkout.askCourse({ pick: { tracks: ["beginner"] } });
+  assert(pickScreen.text.includes(note),
+    `コース選択に 7 日分ずつの案内がありません:\n${pickScreen.text}`);
+
+  const src = stripComments(read("server/lib/handlers/checkout.mjs"));
+  const copies = (src.match(/7\s*日分ずつ/g) || []).length;
+  assert(copies === 1, `同じ文字列が ${copies} 箇所あります（PACKAGE_UNIT_NOTE 1 つに）`);
+  return "価格表 + コース選択 / 文字列は 1 つ";
 });
 
 

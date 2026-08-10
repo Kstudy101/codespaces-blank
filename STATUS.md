@@ -19,6 +19,18 @@
 | 리치메뉴 | **재등록 완료**（2026-08-10 `richmenu-a62983f0be68d5a95bf7f80ae225c8c8`）— 새 이미지·행선지. [plan-richmenu-v2](docs/plan-richmenu-v2.md) |
 | 다음 | beginner 재 seed（필요 시） |
 
+### §0-◆◆◆ 초급만 모집 · 7일 단위 명기 · 체험 중 결제 금지 — **구현 완료·배포 대기**（2026-08-10）
+
+| | |
+|---|---|
+| 모집 코스 | **초급만**（`OPEN_TRACKS`. `TRACKS` 는 3종 그대로 — 기보유자 배신 유지） |
+| 7일 단위 | 가격표 + 코스 선택 두 곳（문자열은 `PACKAGE_UNIT_NOTE` 1개) |
+| 체험 중 | **결제 불가**（`inTrialNow` — plans/plan/buy/「受講料」 4입구). 6일째 저녁은 **예고**(버튼 없음) |
+| 판정 | 잔여 > 0 **그리고** 오늘 ≤ `trial_end` — 한쪽만 보면 영구 잠김 또는 조기 개방 |
+| 관문 | 19종 PASS（billing 80→89 · onboarding 74→76） |
+| 다음 | **서버 배포**. 사이트 코스 표기는 §0-☆-5 보류 |
+| 계획 | [plan-beginner-only-7day](docs/plan-beginner-only-7day.md) |
+
 ### §0-◆◆◆ 마이크로 seed 미반영 수정 — **009 micro 열**（2026-08-10）
 
 | | |
@@ -154,6 +166,7 @@ node db/with-env.mjs db/accel-day.mjs --user=<ID> --to=30 \
 | 2 | LINE Developers → Login 채널 → Basic settings | **Linked LINE Official Account** 지정 | `bot_prompt=aggressive` 가 조용히 무시됨 |
 | 3 | 저장소 | `contact.html` 개명 범위 결정 (§0-☆-a) | 페이지마다 서비스명이 갈림 |
 | 4 | 저장소 | 루트 `package.json`/`package-lock.json` 처리 | 커밋되면 `verify-server` 실패 → **배포 정지** |
+| 5 | 저장소 | 사이트 코스 표기 결정 — LINE 은 초급만, 사이트는 3코스 그대로（보류 중） | 표기가 갈린다. `tokushoho.html` 은 특정상거래법 표기 |
 
 **§0-☆-a `contact.html` 개명 — 미커밋으로 대기 중.**
 `contact.html` 만 「名前で学ぶ韓国語」로 바뀌어 있고, 나머지 **9장 71곳**은

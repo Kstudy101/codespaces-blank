@@ -25,7 +25,7 @@ import { kanaNameToHangul } from "../kana2hangul.mjs";
 import { profileEligible, profileStartUrl } from "./profile.mjs";
 import { recoverUser, welcomeMessages } from "./follow.mjs";
 import { askCourse, notReady, salesAllowedFor, salesMode, missingLegalConfig,
-         sellableTracks, statusMessage } from "./checkout.mjs";
+         sellableTracks, statusMessage, inTrialNow, trialInProgress } from "./checkout.mjs";
 
 /* 受け取る文面は日本語。ひらがな・カタカナ・漢字が混ざるので
    単語の一致で見る（形態素解析は入れない）。 */
@@ -165,6 +165,21 @@ export async function handleMessage(conn, event, { send = replyMessage } = {}) {
       }
       return { userId: user.id, replied: true, blocked: "販売停止" };
     }
+
+    /* 体験の 7 日が終わるまでは価格表を出さない（대표 지시 2026-08-10）。
+       押して来た道（postback の plans）と**同じ関数**で判定する ──
+       打って来た人だけが買える抜け道を作らない。 */
+    if (await inTrialNow(conn, user)) {
+      if (replyToken && !isVerifyToken(replyToken)) {
+        try {
+          await send(replyToken, [trialInProgress()]);
+        } catch (e) {
+          return { userId: user.id, replied: false, error: e.message };
+        }
+      }
+      return { userId: user.id, replied: true, blocked: "体験中" };
+    }
+
     const owned = (await entitlements.listByUser(conn, user.id)).map((e) => e.track);
     /* 売れるコースだけ。postback の plans と同じ関数を通る ──
        打って来た人と押して来た人で一覧が違う、を作らない（지시서⑯ §4）。 */

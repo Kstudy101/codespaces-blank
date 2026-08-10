@@ -34,7 +34,7 @@ import { pushMessage, isUnreachable } from "../lib/line.mjs";
 import { jstDate, jstDateTime, tooEarly } from "../lib/jst.mjs";
 import { makeRetryKey } from "../lib/pushkey.mjs";
 import { renderReview, renderReviewQuestion } from "../lib/render.mjs";
-import { salesAllowedFor, sellablePackages, trialUpsellNotice } from "../lib/handlers/checkout.mjs";
+import { trialUpsellNotice } from "../lib/handlers/checkout.mjs";
 import { TRIAL_UPSELL_DAY } from "../lib/repo/billing.mjs";
 
 /* ---- 引数 --------------------------------------------------------- */
@@ -104,19 +104,18 @@ export const retryKey = makeRetryKey(DATE);
    day_number の値で見分ける形だと、入れる値が 2 か所で独立に決まり、
    片方を直した日にもう片方の「1 回だけ」が黙って壊れる。
 
-   文面の分岐（買える/買えない）は trialUpsellNotice に書いてある。
-   判定の片側 sellablePackages は価格表（priceList）と同じ関数 ──
-   原稿の保有日数が売れる上限、を二か所に書かない。 */
+   【2026-08-10】買える/買えないの分岐（canBuy）は無くなった。体験の
+   7 日が終わるまで決済へ進ませない（checkout.mjs の inTrialNow）ので、
+   ここは誰に対しても**予告**になる ── 判定が 1 本になったぶん、
+   salesAllowedFor と sellablePackages をここで見る理由も消えた。 */
 async function trialUpsellSection(conn, u) {
   const full = await users.findDeliverable(conn, u.id);
   if (!full || full.status !== "trial"
       || Number(full.current_day) !== TRIAL_UPSELL_DAY) return null;
   if (await pushlogs.countByType(conn, u.id, "trial_end")) return null;
-  const availableDays = await learning.countTemplates(conn, full.track);
-  const canBuy = salesAllowedFor(full) && sellablePackages(availableDays).length > 0;
   /* 文面に出す進み具合は DB の実測を渡す ── 定数を渡すと、判定と
      表示が食い違っていても文面がそれを隠す。 */
-  return trialUpsellNotice(full.track, { canBuy, currentDay: Number(full.current_day) });
+  return trialUpsellNotice(full.track, { currentDay: Number(full.current_day) });
 }
 
 /* ---- 1 人ぶん ------------------------------------------------------

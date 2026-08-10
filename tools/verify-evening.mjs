@@ -339,54 +339,52 @@ function withSales(mode, fn) {
   return Promise.resolve(fn()).finally(() => SALES_ENV.forEach((k) => delete process.env[k]));
 }
 
-await check("買える人には文面 A ── 復習の後ろに 1 通、日数は消費しない", () =>
+/* 【2026-08-10 대표 확정 ── 勧誘から予告へ】
+   体験の 7 日が終わるまで決済へ進ませない（checkout.mjs の inTrialNow）
+   ので、ここは誰に対しても同じ**予告**になる。買える/買えないで文面が
+   分かれていた 3 検査を、下の 2 つに置き換えた。 */
+await check("予告は 1 通・押す所を置かない ── 日数は消費しない", () =>
   withSales("open", async () => {
     const conn = fakeConn(upsellReady());
     let msgs = null;
     const r = await deliverOne(conn, DAY_UPSELL, { send: async (_t, m) => { msgs = m; return {}; } });
     assert(r === SENT_UPSELL, r);
-    assert(msgs.length === 2, `${msgs.length} 通でした（問い 1 + 勧誘 1 のはず）`);
+    assert(msgs.length === 2, `${msgs.length} 通でした（問い 1 + 予告 1 のはず）`);
     const t = msgs[1].text;
     assert(/明日が最後の 1 日/.test(t), t);
-    assert(/日数を追加できます/.test(t), t);
-    const qr = msgs[1].quickReply?.items?.[0]?.action;
-    assert(qr && qr.data === "action=plan&track=beginner", JSON.stringify(qr));
+    assert(/続きのご案内をお送りします/.test(t), t);
+    /* 体験中は買えないのだから、押す所を置かない ── 置くと
+       trialInProgress の壁に当たる（空振りするボタンを残さない）。 */
+    assert(!msgs[1].quickReply, "体験中に買えないのに quickReply が付いています");
+    assert(!/日数を追加できます/.test(t), `買える文面が残っています: ${t}`);
     assert(!conn.sql().some((s) => /UPDATE learning_progress/i.test(s)),
-      "勧誘で日数が動きました ── ボーナスの不変式が崩れています");
+      "予告で日数が動きました ── ボーナスの不変式が崩れています");
     assert(conn.calls.some((c) => /INSERT INTO push_logs/i.test(c.sql) && c.params.includes("trial_end")),
       "trial_end の記録がありません（通算 1 回の判定が壊れます）");
-    return "A + 受講料を見る / days_used 不変";
+    return "予告 1 通 / days_used 不変";
   }));
 
-await check("販売が閉じていれば文面 B ── quickReply 無し・約束もしない", () =>
-  withSales("closed", async () => {
-    const conn = fakeConn(upsellReady());
-    let msgs = null;
-    const r = await deliverOne(conn, DAY_UPSELL, { send: async (_t, m) => { msgs = m; return {}; } });
-    assert(r === SENT_UPSELL, r);
-    const t = msgs[1].text;
-    assert(/ただいま準備中です/.test(t), t);
-    assert(/［受講料］/.test(t), "どこを見ればよいかが無い");
-    assert(!msgs[1].quickReply, "押しても準備中の quickReply が付いています");
-    /* 「整いましたらお知らせします」は書かない ── 知らせる機能が
-       コードに無い。文書がコードより先に出るのを関門で止める。 */
-    assert(!/お知らせ/.test(t), `能動通知を約束しています: ${t}`);
-    return "B / 通知の約束なし";
-  }));
-
-await check("販売が開いていても、原稿が最小パッケージ未満なら文面 B", () =>
-  withSales("open", async () => {
-    /* 原稿 3 日ぶん ← 最小 7 日が売れない。A を送ると、押した先で
-       「準備中」が出る ── 価格表と同じ sellablePackages で判定する。 */
+await check("販売の開閉・原稿の量で文面が変わらない（判定が 1 本であること）", async () => {
+  /* 以前は salesAllowedFor と sellablePackages で 2 分岐していた。
+     体験中は誰も買えないので、その 2 つを見る理由が消えた ── 分岐が
+     戻ってくると、通らない側が腐ったまま残る。 */
+  const textOf = async (mode, tplN) => withSales(mode, async () => {
     const conn = fakeConn(upsellReady({
-      "SELECT COUNT\\(\\*\\) AS n FROM content_templates": [{ n: 3 }] }));
+      "SELECT COUNT\\(\\*\\) AS n FROM content_templates": [{ n: tplN }] }));
     let msgs = null;
-    const r = await deliverOne(conn, DAY_UPSELL, { send: async (_t, m) => { msgs = m; return {}; } });
-    assert(r === SENT_UPSELL, r);
-    assert(/ただいま準備中です/.test(msgs[1].text), msgs[1].text);
-    assert(!msgs[1].quickReply, "買えないのに quickReply が付いています");
-    return "sellablePackages = 0 → B";
-  }));
+    await deliverOne(conn, DAY_UPSELL, { send: async (_t, m) => { msgs = m; return {}; } });
+    return msgs[1].text;
+  });
+  const [open101, closed101, open3] =
+    [await textOf("open", 50), await textOf("closed", 50), await textOf("open", 3)];
+  assert(open101 === closed101 && open101 === open3,
+    `文面が分かれています:\n--- open/50 ---\n${open101}\n--- closed/50 ---\n${closed101}\n--- open/3 ---\n${open3}`);
+  /* 「整いましたらお知らせします」は書かない ── ただし「7 日分が
+     終わったら送る」は書いてよい。残り 0 の朝に upsellNotice が
+     実際に出るので、コードが約束を守っている（checkout.mjs）。 */
+  assert(!/お知らせします/.test(open101), `能動通知を約束しています: ${open101}`);
+  return "3 通りとも同じ予告";
+});
 
 await check("勧誘は通算 1 回だけ（trial_end の記録で二度目を止める）", () =>
   withSales("open", async () => {

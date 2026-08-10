@@ -25,7 +25,7 @@
    導けるものを保存しない、が唯一ずれない書き方。
    ================================================================== */
 import { askCourse, notReady } from "./handlers/checkout.mjs";
-import { TRACKS, TRACK_LABELS, countTemplates } from "./repo/learning.mjs";
+import { OPEN_TRACKS, TRACK_LABELS, countTemplates } from "./repo/learning.mjs";
 import { TRIAL_DAYS } from "./repo/billing.mjs";
 import { listByUser } from "./repo/entitlements.mjs";
 
@@ -280,8 +280,10 @@ export function nameFixed(kr) {
    関係なく先に数えるので、無限には繰り返さない（승인 수정 3）。 */
 async function askTrackStep(conn, u) {
   const owned = (await listByUser(conn, u.id)).map((e) => e.track);
+  /* 回すのは OPEN_TRACKS（募集中のコース）── 原稿は 3 コースぶん在るので、
+     countTemplates だけでは中級・上級が選択肢に出続ける（OPEN_TRACKS）。 */
   const selectable = [];
-  for (const t of TRACKS) {
+  for (const t of OPEN_TRACKS) {
     if (TRIAL_DAYS <= await countTemplates(conn, t)) selectable.push(t);
   }
   if (!selectable.length) return notReady();

@@ -29,10 +29,11 @@
    ================================================================== */
 import { users, billing, learning, pushlogs, entitlements, lapses } from "../repo/index.mjs";
 import { PACKAGES, TRIAL_DAYS, TRIAL_UPSELL_DAY } from "../repo/billing.mjs";
-import { TRACKS, TRACK_LABELS, TOTAL_DAYS, isTrack } from "../repo/learning.mjs";
+import { TRACKS, OPEN_TRACKS, TRACK_LABELS, TOTAL_DAYS, isTrack, isOpenTrack }
+  from "../repo/learning.mjs";
 import { createCheckoutSession } from "../stripe.mjs";
 import { pushMessage, replyMessage, isUnreachable } from "../line.mjs";
-import { jstDateTime } from "../jst.mjs";
+import { jstDate, jstDateTime } from "../jst.mjs";
 
 /* 決済のあとの戻り先はどちらも LINE のトーク（지시서⑧ §1）。
    以前は success が `${SITE_URL}/thanks` ── **存在しないページ**で、
@@ -120,59 +121,77 @@ export const sellablePackages = (availableDays) =>
 
    受講中でも外さない（§4-2）── 追加購入が起きるのは、まさに受講中の
    コースで残りが減ったときだから。除く理由は「原稿不足」だけにする。 */
+/* 回すのは OPEN_TRACKS（募集中のコース）── TRACKS ではない。原稿は
+   3 コースぶん在るので、countTemplates だけでは中級・上級が出続ける
+   （repo/learning.mjs の OPEN_TRACKS）。 */
 export async function sellableTracks(conn) {
   const out = [];
-  for (const t of TRACKS) {
+  for (const t of OPEN_TRACKS) {
     if (sellablePackages(await learning.countTemplates(conn, t)).length) out.push(t);
   }
   return out;
 }
 
-/* ---- 体験の終わり前日（TRIAL_UPSELL_DAY）の夕方の勧誘（2026-08-06 指示書 C4）--
+/* ---- 無料体験の 7 日が終わるまでは決済へ進ませない（대표 지시 2026-08-10）--
+   販売の門（salesAllowedFor）とは別に置く ── あちらは「この事業者が
+   いま売ってよいか」、こちらは「この人がいま買う時期か」で、別の問い。
+
+   判定は残日数と日付の **両方**。片方だけだと:
+
+     残日数だけ … 配信が止まっている人（原稿切れ・障害）は days_used が
+                  進まないので体験が終わらず、**永久に買えない**
+     日付だけ  … 障害で配信が遅れた人が、無料の日数を残したまま買える
+
+   trial_end は DATE。db.mjs が dateStrings: true なので 'YYYY-MM-DD' の
+   文字列で来る ── 辞書順の比較がそのまま日付の比較になる。 */
+export async function inTrialNow(conn, user, { today = jstDate() } = {}) {
+  const sub = await billing.getSubscription(conn, user.id);
+  if (!sub || sub.payment_status !== "trial" || !sub.trial_track) return false;
+  if (String(today) > String(sub.trial_end)) return false;
+  const e = await entitlements.get(conn, user.id, sub.trial_track);
+  return !!e && e.remaining > 0;
+}
+
+/* 体験中に［受講料］を押した人へ。「終わりましたらお送りします」と
+   書けるのは、コードが実際にそれをするから ── 残り 0 になった朝に
+   upsellNotice が 1 通出る（db/push-daily.mjs、離脱 1 回につき 1 通）。
+   販売が開く日を知らせる手段が無かった notReady とは、そこが違う。 */
+export const trialInProgress = () => ({
+  type: "text",
+  text: [
+    `無料でお試しいただける ${TRIAL_DAYS} 日分をお届けしている間です。`,
+    `${TRIAL_DAYS} 日分が終わりましたら、続きのご案内をお送りします。`
+  ].join("\n")
+});
+
+/* ---- 体験の終わり前日（TRIAL_UPSELL_DAY）の夕方の**予告**（2026-08-06 指示書 C4）--
    体験中・current_day = TRIAL_UPSELL_DAY の人へ、復習の後ろに 1 通。
-   販売が閉じていても送る ── ただし文面を分ける。「買える」は
 
-     salesAllowedFor(user) かつ sellablePackages ≥ 1
+   【2026-08-10 대표 확정 ── 勧誘から予告へ】
+   体験の 7 日が終わるまで決済へ進ませない（inTrialNow）ことにしたので、
+   ここで「下から日数を追加できます」＋［受講料を見る］を出すと、押した
+   人が体験中の壁（trialInProgress）に当たる。**押す所を置かない** ──
+   空振りするボタンを残すより、次に何が起きるかだけを言う。
 
-   の**両方**。後者を落とすと、販売が開いていても原稿 3 日ぶんの
-   コースで「下から追加できます」が出て、押した先で「準備中」になる。
+   買える/買えないの分岐（canBuy）はここから消えた。体験中は誰も買えず、
+   判定が 1 本になったため ── 分岐を残すと「通らない側」が腐る。
+   引数を受け取るだけ受け取って無視する形にはしない（呼ぶ側が
+   渡し続け、いつか意味があると誤解する）。
 
-   買えない側の文面は「どこを見ればよいか」だけを言い、
-   「整いましたらお知らせします」とは**書かない** ── 販売が開いた日に
-   待っている人へ知らせる機能はコードに無い。約束した瞬間、文書が
-   コードより先へ出る（この置き場が 4 回踏んだ形）。 */
-export function trialUpsellNotice(track, {
-  canBuy = false,
-  currentDay = TRIAL_UPSELL_DAY
-} = {}) {
+   「終わりましたらお送りします」と書けるのは、コードが実際に送るから ──
+   残り 0 の朝に upsellNotice が 1 通出る（db/push-daily.mjs）。 */
+export function trialUpsellNotice(track, { currentDay = TRIAL_UPSELL_DAY } = {}) {
   const l = TRACK_LABELS[track];
-  const head = [
-    `無料でお試しいただける ${TRIAL_DAYS} 日分のうち、明日が最後の 1 日です。`,
-    "",
-    `${l.ja}（${l.kr}）は ${currentDay} 日目まで進みました。`,
-    ""
-  ];
-  if (!canBuy) {
-    /* quickReply は付けない。押す所が無ければ空振りも無い。 */
-    return {
-      type: "text",
-      text: [...head,
-        "続きの受講料のご案内は、ただいま準備中です。",
-        "準備が整いましたら、下のメニューの［受講料］からご確認いただけます。"
-      ].join("\n")
-    };
-  }
+  /* quickReply は付けない。押す所が無ければ空振りも無い。 */
   return {
     type: "text",
-    text: [...head,
-      "続けてお受け取りになる場合は、下から日数を追加できます。",
-      "追加された日数は、いまの続きに足されます。"
-    ].join("\n"),
-    quickReply: { items: [{
-      type: "action",
-      action: { type: "postback", label: "受講料を見る",
-                data: `action=plan&track=${track}`, displayText: "受講料を見る" }
-    }] }
+    text: [
+      `無料でお試しいただける ${TRIAL_DAYS} 日分のうち、明日が最後の 1 日です。`,
+      "",
+      `${l.ja}（${l.kr}）は ${currentDay} 日目まで進みました。`,
+      "",
+      `${TRIAL_DAYS} 日分が終わりましたら、続きのご案内をお送りします。`
+    ].join("\n")
   };
 }
 
@@ -199,6 +218,17 @@ export function upsellNotice(track, { lastDay = 0 } = {}) {
     }] }
   };
 }
+
+
+/* 受講料が 7 日分ずつであること（대표 지시 2026-08-10）。パッケージは
+   もともと 7 の倍数（7・14・21・28）だが、その**決まりごと自体**は
+   どこにも書いていなかった ── 全 101 日の隣に並ぶと「101 日を一度に
+   買う」に読める。
+
+   価格表とコース選択の 2 か所に出す。文字列はここ 1 つ ── 写しを
+   持つと、片方だけ直した日に案内が食い違う。 */
+export const PACKAGE_UNIT_NOTE =
+  "受講料は 7 日分ずつのお申し込みです（7・14・21・28 日分）。";
 
 
 /* ---- ① コースを選ぶ ------------------------------------------------- */
@@ -249,7 +279,11 @@ export function askCourse({ owned = [], pick = null, only = null } = {}) {
         "",
         `${BULLET[t]} ${TRACK_LABELS[t].ja}（${TRACK_LABELS[t].kr}）${mark(t)}`,
         DESC[t]
-      ])
+      ]),
+      /* 選ぶ画面にも出す（대표 지시 2026-08-10 §3）── 体験の 7 日と
+         そのあとの 7 日ずつが、ひと続きに読めるようにする。 */
+      "",
+      PACKAGE_UNIT_NOTE
       /* 【2026-08-09 대표 확정】選ぶ前の断り 3 行（無料体験は 1 回まで /
          取り替え不可 / ［내 진도］で行き来）はここから外した。
          いま同じことがどこに残るか（消えたものを見失わないため）:
@@ -345,6 +379,7 @@ export function priceList(track,
       ...rows,
       "",
       `全 ${TOTAL_DAYS} 日で1つの講座です。`,
+      PACKAGE_UNIT_NOTE,
       "",
       "──────────",
       "お支払い:　クレジットカード（申込時に1回）",

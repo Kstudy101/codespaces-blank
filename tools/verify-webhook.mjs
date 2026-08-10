@@ -584,7 +584,7 @@ const OPEN_ENV = { TOKUSHOHO_URL: "https://example.jp/tokushoho",
 const { handleMessage: handleMsg, ASK_PLANS } =
   await import("../server/lib/handlers/message.mjs");
 const { askCourse, notReady } = await import("../server/lib/handlers/checkout.mjs");
-const { TRACKS } = await import("../server/lib/repo/learning.mjs");
+const { OPEN_TRACKS } = await import("../server/lib/repo/learning.mjs");
 
 /* 応答は { send } 差し替えで受け取る（handlePostback と同じ形）。 */
 async function askPlans(text, rows = {}) {
@@ -602,7 +602,8 @@ const ENT_ROW = [{ track: "beginner", days_entitled: 3, days_used: 0,
 
 /* 原稿の数。plans は「売れるコースだけ」を出すようになった（지시서⑯ §4）ので、
    原稿の無い世界では一覧そのものが出ない ── それを試したい検査は
-   この行を混ぜる。101 日ぶんあれば 3 コースとも売れる。 */
+   この行を混ぜる。101 日ぶんあれば、募集中のコースは売れる
+   （募集の可否は OPEN_TRACKS。2026-08-10 から初級のみ）。 */
 const TPL_ROWS = [{ n: 101 }];
 
 await acheck("販売許可のとき「受講料」は plans と同じ応答（askCourse を同じ引数で）", async () =>
@@ -611,8 +612,8 @@ await acheck("販売許可のとき「受講料」は plans と同じ応答（as
       { "FROM course_entitlements": ENT_ROW, "FROM content_templates": TPL_ROWS });
     assert(sent.length === 1, `送った通数: ${sent.length}`);
     /* postback の plans と同じ引数で作ったものと一致するか。
-       only は sellableTracks の結果（原稿 101 日なら 3 コースとも）。 */
-    const expected = askCourse({ owned: ["beginner"], only: TRACKS });
+       only は sellableTracks の結果（原稿 101 日でも募集中のコースだけ）。 */
+    const expected = askCourse({ owned: ["beginner"], only: OPEN_TRACKS });
     assert(JSON.stringify(sent[0]) === JSON.stringify(expected),
       "postback の plans（askCourse({ owned, only })）と同じ応答ではありません");
     assert(r.replied === true && r.plans === true, JSON.stringify(r));

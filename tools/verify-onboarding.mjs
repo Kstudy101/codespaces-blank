@@ -760,10 +760,12 @@ await acheck("体験を使い切った人がコースを選ぶと、コースだ
 });
 
 await acheck("原稿が体験日数ぶんも無いコースは、data を書き換えて名乗っても始めない", async () => {
+  /* 募集中のコース（初級）で試す ── 中級・上級だと OPEN_TRACKS の門で
+     先に止まり、原稿の門を通ったかどうかが見えない（2026-08-10）。 */
   const conn = pickConn({ "SELECT COUNT\\(\\*\\) AS n FROM content_templates": [{ n: 2 }] });
   let sent = null;
   const r = await handlePostback(conn,
-    { source: { userId: "U" }, replyToken: "rt", postback: { data: "action=trackpick&track=advanced" } },
+    { source: { userId: "U" }, replyToken: "rt", postback: { data: "action=trackpick&track=beginner" } },
     { send: async (_t, m) => { sent = m; return {}; },
       deliver: async () => "送信:1日目" });
   assert(r.blocked === "原稿不足", JSON.stringify(r));
@@ -772,6 +774,25 @@ await acheck("原稿が体験日数ぶんも無いコースは、data を書き�
     "原稿が無いのに体験を開始しました");
   return "選択肢の外からも止める";
 });
+
+/* 【2026-08-10 대표 지시】募集していないコースは選択肢から外したが、
+   data は利用者の端末を経由して戻るので書き換えられる。原稿は 3 コース
+   ぶん在るため、原稿の門（上）では止まらない ── ここが唯一の壁。 */
+for (const t of ["intermediate", "advanced"]) {
+  await acheck(`募集していないコース（${t}）は、原稿が足りていても始めない`, async () => {
+    const conn = pickConn({ "SELECT COUNT\\(\\*\\) AS n FROM content_templates": [{ n: 101 }] });
+    let sent = null;
+    const r = await handlePostback(conn,
+      { source: { userId: "U" }, replyToken: "rt", postback: { data: `action=trackpick&track=${t}` } },
+      { send: async (_t, m) => { sent = m; return {}; },
+        deliver: async () => "送信:1日目" });
+    assert(r.blocked === "募集停止中", JSON.stringify(r));
+    assert(sent && /準備中/.test(sent[0].text), sent && sent[0].text);
+    assert(!conn.calls.some((c) => /INSERT INTO subscriptions/i.test(c.sql)),
+      "募集していないコースで体験を開始しました");
+    return "OPEN_TRACKS の外は data からも入れない";
+  });
+}
 
 check("反対方向の関門 ── trackpick に salesAllowedFor が**無い**こと", () => {
   /* plans/plan/buy はゲート必須、trackpick はゲート禁止。「ある」を

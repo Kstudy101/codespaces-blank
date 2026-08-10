@@ -95,7 +95,7 @@ async function call(url, { method = "POST", body = null, headers = {}, raw = nul
   return text ? JSON.parse(text) : {};
 }
 
-export async function createMenu() {
+async function createMenu() {
   const r = await call(`${API()}/richmenu`, { body: menuDefinition() });
   if (!r.richMenuId) throw new Error("richMenuId が返りませんでした");
   return r.richMenuId;
@@ -103,7 +103,7 @@ export async function createMenu() {
 
 /* 画像は JSON ではなく生のバイト列で送る。Content-Type を取り違えると
    400 になり、理由は「画像が不正」としか出ない。 */
-export async function uploadImage(richMenuId, file) {
+async function uploadImage(richMenuId, file) {
   if (!fs.existsSync(file)) throw new Error(`画像がありません: ${file}`);
   const buf = fs.readFileSync(file);
   const type = file.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
@@ -117,8 +117,23 @@ export async function uploadImage(richMenuId, file) {
 }
 
 /* 全員の既定にする。個別に付ける口もあるが、ここは全員同じでよい。 */
-export async function setDefault(richMenuId) {
+async function setDefault(richMenuId) {
   return call(`${API()}/user/all/richmenu/${encodeURIComponent(richMenuId)}`, { method: "POST" });
+}
+
+/* 既定を外す。トーク下のメニューが消える。定義は list に残る。 */
+export async function cancelDefault() {
+  return call(`${API()}/user/all/richmenu`, { method: "DELETE" });
+}
+
+export async function getDefaultId() {
+  try {
+    const r = await call(`${API()}/user/all/richmenu`, { method: "GET" });
+    return r.richMenuId || null;
+  } catch (e) {
+    if (/LINE 404/.test(String(e.message || e))) return null;
+    throw e;
+  }
 }
 
 export async function listMenus() {
@@ -126,8 +141,25 @@ export async function listMenus() {
   return r.richmenus || [];
 }
 
-export async function deleteMenu(richMenuId) {
+async function deleteMenu(richMenuId) {
   return call(`${API()}/richmenu/${encodeURIComponent(richMenuId)}`, { method: "DELETE" });
+}
+
+/* 一旦オフ。既定解除のあと定義も消す ── 残定義が別経路で既定に
+   戻る事故を防ぐ。戻すときは setup-richmenu --image=… で作り直し。 */
+export async function deactivate({ deleteDefinitions = true } = {}) {
+  const previousDefault = await getDefaultId();
+  await cancelDefault();
+  const removed = [];
+  if (deleteDefinitions) {
+    for (const m of await listMenus()) {
+      try {
+        await deleteMenu(m.richMenuId);
+        removed.push(m.richMenuId);
+      } catch { /* 1 件失敗でも他は消す */ }
+    }
+  }
+  return { previousDefault, removed };
 }
 
 /* 古いものを消してから新しいものを既定にする。消さずに積むと、

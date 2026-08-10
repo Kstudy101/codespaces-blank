@@ -4,6 +4,7 @@
 
      node tools/setup-richmenu.mjs --image=menu.png
      node tools/setup-richmenu.mjs --list          いま何が登録されているか
+     node tools/setup-richmenu.mjs --disable       既定を外して定義も消す（一旦オフ）
      node tools/setup-richmenu.mjs --dry-run       送らずに中身だけ見る
 
    本番では cron からも配置手順からも呼ばない。メニューは 1 度
@@ -18,7 +19,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEnv } from "../server/lib/env.mjs";
-import { menuDefinition, AREAS, install, listMenus } from "../server/lib/richmenu.mjs";
+import { menuDefinition, AREAS, install, listMenus, deactivate, getDefaultId }
+  from "../server/lib/richmenu.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 loadEnv(path.join(ROOT, "server", ".env"));
@@ -36,11 +38,41 @@ const IMAGE = value("image",
 
 /* ---- いま何が登録されているか ---------------------------------------- */
 if (flag("list")) {
+  if (!process.env.LINE_CHANNEL_ACCESS_TOKEN) {
+    console.error("✗ LINE_CHANNEL_ACCESS_TOKEN がありません");
+    process.exit(1);
+  }
+  const defId = await getDefaultId();
+  console.log(`既定: ${defId || "（なし）"}`);
   const menus = await listMenus();
   if (!menus.length) console.log("登録されているリッチメニューはありません");
   for (const m of menus) {
+    const mark = m.richMenuId === defId ? " ★既定" : "";
     console.log(`  ${m.richMenuId}  ${m.name}  ${m.size.width}×${m.size.height}`
-      + `  領域 ${m.areas.length}`);
+      + `  領域 ${m.areas.length}${mark}`);
+  }
+  process.exit(0);
+}
+
+/* ---- 一旦オフ（既定解除＋定義削除）-------------------------------- */
+if (flag("disable")) {
+  if (!process.env.LINE_CHANNEL_ACCESS_TOKEN) {
+    console.error("✗ LINE_CHANNEL_ACCESS_TOKEN がありません");
+    process.exit(1);
+  }
+  if (DRY) {
+    console.log("--dry-run: 既定を外し、定義も消す予定です");
+    process.exit(0);
+  }
+  try {
+    const r = await deactivate();
+    console.log("✓ リッチメニューを非表示にしました");
+    console.log(`  直前の既定: ${r.previousDefault || "（なし）"}`);
+    if (r.removed.length) console.log(`  削除した定義: ${r.removed.length} 件`);
+    console.log("  トークを開き直すと下のメニューが消えます");
+  } catch (e) {
+    console.error(`✗ ${e.message}`);
+    process.exit(1);
   }
   process.exit(0);
 }

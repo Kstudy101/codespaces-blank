@@ -698,7 +698,7 @@ check("신양식 → 섹션 헤더 7종이 코드가 붙인 것으로 출력에 
   return "📘🔗💡💬📚❓🍀 전부 코드 소유";
 });
 
-check("마이크로 포맷 → 💡📌💬🎯（📘 Day N 없음）", () => {
+check("마이크로 포맷 → 📅 N日目 + 💡📌💬🎯（📘 Day N 없음）", () => {
   const MICRO = {
     day_number: 1,
     grammar_point: "-입니다（〜です）",
@@ -727,14 +727,14 @@ check("마이크로 포맷 → 💡📌💬🎯（📘 Day N 없음）", () => {
     assert(!raw.includes(h), `픽스처에 ${h}`);
   }
   const m = renderDay(MICRO, KEN);
-  assert(m[0].text.startsWith("💡 "), m[0].text.split("\n")[0]);
+  assert(m[0].text.startsWith("📅 1日目\n\n💡 "), m[0].text.split("\n").slice(0, 3).join("|"));
   assert(m[0].text.includes("📌 核心公式"), "📌");
   assert(m[0].text.includes("💬 実戦会話"), "💬");
   assert(m[0].text.includes("🎯 5秒ミッション"), "🎯");
   assert(!m[0].text.includes("📘 Day"), "📘 가 남았습니다");
   assert(m.some((x) => x.text.includes("📚 今日の単語")), "📚");
   assert(m[m.length - 1].quickReply, "문법일 ❓ quickReply");
-  return "마이크로 1통=💡📌💬🎯";
+  return "마이크로 1통=📅+💡📌💬🎯";
 });
 
 check("신양식 → 3통（1·2통 + ❓ 꼬리통）・tip 은 形/使/落로 분해", () => {

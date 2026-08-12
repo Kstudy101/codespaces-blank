@@ -283,6 +283,17 @@ function fillOrNull(s, user) {
   return fillSlots(String(s), user);
 }
 
+/* マイクロ朝便の先頭。夕方の「🌙 N日目のふりかえり」と揃え、
+   受け手が何日目か分かるようにする（旧📘 Day N の役割）。 */
+function microDayBadge(day) {
+  return `📅 ${day}日目`;
+}
+
+function withMicroDayBadge(day, body) {
+  if (body == null) return null;
+  return `${microDayBadge(day)}\n\n${body}`;
+}
+
 /* マイクロ 1通（文法）: 💡フック → 説明 → 📌 → 💬 → 🎯 */
 function renderMicroGrammar(template, user) {
   const hook = fillOrNull(template.hook, user);
@@ -364,13 +375,13 @@ function renderMicroDay(template, user, { quizSection }) {
     if (hook === null) return null;
     const body = fillOrNull(template.hook_body || "", user);
     if (body === null) return null;
-    const head = [
+    const head = withMicroDayBadge(day, [
       `❓ ${hook}`,
       "",
       String(body || q.question).trim(),
       "",
       "👇 下のボタンを押して正解を確認しましょう！"
-    ].join("\n");
+    ].join("\n"));
     /* quizMessage は head+question を重ねるので、ここでは本文を頭に
        載せた専用通にする ── question 重複を避ける. */
     msgs.push({
@@ -397,6 +408,7 @@ function renderMicroDay(template, user, { quizSection }) {
     if (kind === "talk") text = renderMicroTalk(template, user);
     else if (kind === "refresh") text = renderMicroRefresh(template, user);
     else text = renderMicroGrammar(template, user);
+    text = withMicroDayBadge(day, text);
     if (text === null) return null;
     msgs.push({ type: "text", text });
   }

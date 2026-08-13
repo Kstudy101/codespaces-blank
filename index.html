@@ -82,23 +82,33 @@ a{color:var(--accent)}
 .cta:hover, a.linebar:hover{background:var(--line-green-dark)}
 .cta:focus-visible, a.linebar:focus-visible{outline:2px solid var(--line-green); outline-offset:3px}
 
-/* phone mock */
+/* phone mock — 朝 + 夕 */
 .mock{
   justify-self:center; width:min(280px,86vw);
-  background:#111; border-radius:28px; padding:12px; box-shadow:var(--shadow);
+  display:flex; flex-direction:column; gap:14px;
+}
+.mock-phone{
+  background:#2a2a2a; border-radius:28px; padding:10px; box-shadow:var(--shadow);
 }
 .mock-screen{
-  background:#eef5f0; border-radius:20px; overflow:hidden; min-height:420px;
+  background:#eef5f0; border-radius:20px; overflow:hidden;
 }
+.mock-screen.eve{background:#eef2f0}
 .mock-top{
-  background:#06C755; color:#fff; padding:14px 14px 12px; font-size:.82rem; font-weight:700;
+  background:#06C755; color:#fff; padding:12px 14px 10px; font-size:.82rem; font-weight:700;
 }
+.mock-top.eve{background:#0b9b5a}
 .mock-body{padding:12px; display:flex; flex-direction:column; gap:8px}
 .bubble{
   align-self:flex-start; max-width:92%; background:#fff; border-radius:14px 14px 14px 4px;
   padding:10px 12px; font-size:.84rem; line-height:1.55; box-shadow:0 1px 2px rgba(0,0,0,.04);
 }
 .bubble time{display:block; font-size:.7rem; color:#889; margin-bottom:4px}
+.mock-btn{
+  align-self:center; margin-top:4px; margin-bottom:4px;
+  background:#06C755; color:#fff; border-radius:999px;
+  padding:8px 18px; font-size:.8rem; font-weight:700;
+}
 
 section{padding:48px 0 8px}
 section h2{margin:0 0 10px; font-size:clamp(1.35rem, 3vw, 1.75rem); line-height:1.4}
@@ -184,7 +194,7 @@ footer a{font-weight:700; text-decoration:none}
     <p class="brand">Kstudy101</p>
     <p class="tagline">LINEで学ぶ 1日1分 簡単韓国語</p>
     <h1>勉強しなくていい。<br>開くだけでいい。<br>LINEの1分韓国語。</h1>
-    <p class="lede">アプリ不要。教科書不要。<br>毎日見ているLINEに、朝1分の韓国語が届きます。</p>
+    <p class="lede">アプリ不要。教科書不要。<br>毎日見ているLINEに、朝のレッスンと夜のクイズが届きます。</p>
     <!-- .linebar クラス名は verify-pages（友だち追加URL・計測）が参照。見た目は .cta -->
 <a class="linebar" href="https://lin.ee/SKZtS5k"
    target="_blank" rel="noopener"
@@ -193,13 +203,26 @@ footer a{font-weight:700; text-decoration:none}
     </a>
   </div>
   <div class="mock" aria-hidden="true">
-    <div class="mock-screen">
-      <div class="mock-top">Kstudy101　·　今朝 7:00</div>
-      <div class="mock-body">
-        <div class="bubble"><time>07:00</time>☀️ おはようございます！今日の1分韓国語です</div>
-        <div class="bubble"><time>07:00</time>📘 今日のポイント：「〜해요」丁寧な話し方</div>
-        <div class="bubble"><time>07:00</time>💬 「コーヒー一つお願いします」→ 커피 하나 주세요</div>
+    <div class="mock-phone">
+      <div class="mock-screen">
+        <div class="mock-top">Kstudy101　·　今朝 7:00</div>
+        <div class="mock-body">
+          <div class="bubble"><time>07:00</time>☀️ おはようございます！今日の1分韓国語です</div>
+          <div class="bubble"><time>07:00</time>📘 今日のポイント：「〜해요」丁寧な話し方</div>
+          <div class="bubble"><time>07:00</time>💬 「コーヒー一つお願いします」→ 커피 하나 주세요</div>
+        </div>
+      </div>
     </div>
+    <div class="mock-phone">
+      <div class="mock-screen eve">
+        <div class="mock-top eve">Kstudy101　·　夕方 18:00</div>
+        <div class="mock-body">
+          <div class="bubble"><time>18:00</time>🌙 1日目のふりかえり</div>
+          <div class="bubble"><time>18:00</time>📘 【今日の文法】〜해요 丁寧な話し方</div>
+          <div class="bubble"><time>18:00</time>💬 今朝の会話から1文。意味を思い出せますか？<br>　커피 하나 주세요</div>
+          <div class="mock-btn">こたえを見る</div>
+        </div>
+      </div>
     </div>
   </div>
 </header>

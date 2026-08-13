@@ -1363,6 +1363,39 @@ check("上げたあと、向こうの大きさを読み直して突き合わせ�
   return "切れたまま上がったのを捕まえる";
 });
 
+/* ---- 一括口（plan-content-batch-deploy）----------------------------
+   publish-content.sh は upload / trigger を呼ぶだけ。FTP 資格・削除は
+   持たない。--deploy は明示。_*.json は除外。 */
+const pubSrc = () => read("tools/publish-content.sh");
+const pubBody = () => pubSrc().split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+
+check("一括口 publish-content.sh が存在する", () => {
+  const src = pubSrc();
+  assert(/^#!\/usr\/bin\/env bash/.test(src), "bash ではありません");
+  assert(/set -euo pipefail/.test(src), "set -euo pipefail がありません");
+  return `${src.split("\n").length} 行`;
+});
+
+check("一括口は upload-content と trigger-chemi-deploy だけを呼ぶ", () => {
+  const body = pubBody();
+  assert(/upload-content\.sh/.test(body), "upload-content.sh を呼んでいません");
+  assert(/trigger-chemi-deploy\.sh/.test(body), "trigger-chemi-deploy.sh を呼んでいません");
+  assert(!/\bcurl\b/.test(body), "一括口が直接 curl しています（資格の口が二重）");
+  assert(!/\bDELE\b/.test(body), "DELE があります");
+  assert(!/FTP_PASS/.test(body), "FTP_PASS を一括口が触れています");
+  return "upload + trigger のみ";
+});
+
+check("一括口は --deploy 明示・_*.json 除外", () => {
+  const src = pubSrc();
+  assert(/--deploy/.test(src), "--deploy がありません");
+  assert(/DO_DEPLOY/.test(pubBody()), "DO_DEPLOY フラグがありません");
+  assert(/is_excluded/.test(pubBody()) || /_\*\)/.test(pubBody()),
+    "_*.json 除外がありません");
+  assert(/beginner-\*\.json/.test(src), "--all の beginner パターンがありません");
+  return "--deploy 明示 / _* 除外 / --all";
+});
+
 console.log(`\n${failed ? "✗" : "✓"} ${passed + failed} 項目中 ${passed} 件成功`
   + (failed ? ` / ${failed} 件失敗` : ""));
 process.exit(failed ? 1 : 0);

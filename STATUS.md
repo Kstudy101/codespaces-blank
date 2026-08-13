@@ -412,6 +412,20 @@ cPanel → Setup Node.js App → Environment variables 가 유일한 출처입�
 
 배포 3경로는 `content/` 를 **제외**합니다(지우지 않기 위해). 그래서 원고는 따로 올립니다.
 
+**일괄（권장）** — 로컬 `server/content/` 수정 후 Git Bash:
+
+```bash
+bash tools/publish-content.sh --check --upload --deploy \
+  server/content/beginner-01-15.json
+# 파일 생략 = beginner/intermediate/advanced/quiz-*-review 전부（_*.json 제외）
+bash tools/publish-content.sh --check --upload --deploy
+```
+
+`--deploy` 는 **명시한 때만**（`trigger-chemi-deploy` → `.cpanel.yml` seed）.
+설계: [plan-content-batch-deploy](docs/plan-content-batch-deploy.md).
+
+**1파일:**
+
 ```bash
 bash tools/upload-content.sh --dry-run server/content/beginner-51-60.json   # 무엇이 어디로
 bash tools/upload-content.sh server/content/beginner-51-60.json            # 보낸다
@@ -427,7 +441,7 @@ bash tools/upload-content.sh --list                                        # 저
 | `~/.config/kstudy101/ftp-content.conf` | `FTP_HOST` / `FTP_USER` / `FTP_PASS` / `FTP_DIR=/` (`chmod 600`) |
 
 FTPS 고정(평문 금지)·비밀번호는 명령행에 안 올림·**삭제 기능 없음**·올린 뒤 원격 크기 대조.
-이 약속들은 `verify-server` 의 `[原稿の送り口]` 9항목이 지킵니다.
+이 약속들은 `verify-server` 의 `[原稿の送り口]` 가 지킵니다.
 설계와 확인 절차는 [docs/plan-upload-content.md](docs/plan-upload-content.md).
 
 ---

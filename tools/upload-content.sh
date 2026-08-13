@@ -236,6 +236,12 @@ if [ "$REMOTE" != "$LOCAL" ]; then
 fi
 echo "✓ $NAME  $LOCAL バイト — 向こうで読み直して一致"
 
+# 一括口（publish-content.sh）から呼ばれたときは、ファイルごとの
+# 「残りは人の目」を繰り返さない。seed は --deploy 側の仕事。
+if [ "${UPLOAD_CONTENT_QUIET:-0}" = 1 ]; then
+  exit 0
+fi
+
 # --- ここから先は人がやる（指示書⑬ §4）-----------------------------
 cat <<EOF
 
@@ -246,6 +252,9 @@ cat <<EOF
        bash ~/kstudy101-line/db/run.sh db/seed-content.mjs --check content/$NAME
   3. 通ったら DB へ（cPanel Terminal）
        bash ~/kstudy101-line/db/run.sh db/seed-content.mjs
+
+  まとめてやるなら:
+       bash tools/publish-content.sh --check --upload --deploy server/content/$NAME
 
   ※ 原稿の差し替えは JST 18 時の夕方配信より前に終えてください
     ── 夕方の答えは押された瞬間に計算し直されるので、配信と操作の

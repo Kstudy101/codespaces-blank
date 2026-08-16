@@ -1,12 +1,16 @@
 # plan-fortune-removal.md — 운세를 전부 걷어내고 「LINE으로 배우는 공부」로 전환
 
-작성: 2026-08-16 · 상태: **승인·구현 완료. 배포 대기**（순서는 §2 — P2 먼저）
+작성: 2026-08-16 · 상태: **배포 완료**（`e1a3a44` 서버 · `7cbb038` 사이트）
 리서치: [research-fortune-removal.md](research-fortune-removal.md)
 계기: **Stripe 심사 기준상 승인 불가**(점술·역술은 제한 업종) → 사업 전면 수정.
 
 > **이 문서의 규칙.** `CLAUDE.md` §협업 방식 — §1 결정 7건에 대표 승인을 받은 뒤
-> §3 을 기계적으로 구현했다. 진행 상황은 §9 체크리스트가 정본이다.
-> **아직 배포하지 않았다** — 배포 순서는 §2（P2 서버 → 확인 → P1 사이트）.
+> §3 을 기계적으로 구현했고, 2026-08-16 에 배포했다. 남은 것은 §9 의 대표 실기 5건.
+>
+> **§2 의 「P2 먼저」는 결과적으로 필요 없었다.** 커밋 2개를 한 번에 push 했고,
+> 배포는 HEAD 에서 돌기 때문이다 — `.cpanel.yml` 의 `cp saju.js` 는 같은 트리에서
+> 이미 사라져 있었다. 순서를 강제하려 했다면 D7-2 의 「코드↔폴리시 대조」가
+> 사이트와 서버를 한 관문으로 묶어, 서버만 담은 커밋이 CI 에서 빨간불이 된다.
 
 ---
 
@@ -498,7 +502,9 @@ CLAUDE.md                           STATUS.md                  README.md
 - [x] P2-6b 삭제된 파일을 가리키던 주석 정리 — `content-check` `kana2hangul` `render`
       `repo/users` `who` `.env.example`
 - [x] P2-7 관문 18종 전부 PASS (`verify-push` 55→52 항목 · 신설 4항목 포함)
-- [ ] P2-8 **대표 push → ChemiCloud 배포 → 아침 편 실물 확인**（운세·부적 없음）
+- [x] P2-8 **ChemiCloud 배포 완료**（2026-08-16 `e1a3a44` · UAPI · `/health` ok ·
+      cron 3행 등록 확인 · maintain drift 는 기왕의 legacy 1건 그대로）
+- [ ] P2-9 아침 편 실물 확인（운세·부적 없음）— **대표**
 
 **P2 에서 새로 생긴 관문 4항목**(`verify-push` 의 ［廃止の見張り］):
 `생년월일이 있어도 레슨 2통만` / `Flex 0통·운세 문면 0곳` /
@@ -535,6 +541,6 @@ CLAUDE.md                           STATUS.md                  README.md
 - [x] 관문 전종 PASS — **12종**（`no-fortune` `name` `pages` `server` `webhook`
       `onboarding` `render` `push` `evening` `billing` `quiz` `kana`）
 - [x] `grep` 전수 0 — `verify-no-fortune` 이 자동으로（공개 6페이지 · 문면 13파일）
-- [ ] 배포 후 `/omikuji` `/gilbang` `/amulet` `/words` → 410 · `/saju.js` → 404
-      （`deploy.yml` 스모크가 자동으로 확인한다）
+- [x] 배포 후 `/omikuji` `/gilbang` `/amulet` `/words` → **410** · `/saju.js` → **404**
+      （`deploy.yml` 스모크 30항목 + 실측 둘 다 확인）
 - [ ] `accel-day` 로 아침 편에 운세·부적이 없는 것 확인

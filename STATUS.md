@@ -9,7 +9,7 @@
 
 ## 0. 30초 요약
 
-### §0-■■■ 운세 전면 폐지 — **P1·P2·P3 구현 완료 · 배포 대기**（2026-08-16）
+### §0-■■■ 운세 전면 폐지 — **배포 완료**（2026-08-16 `7cbb038`）
 
 **Stripe 심사 기준상 점술은 제한 업종**이라 결제를 열 수 없다. 그래서 사업을
 「LINE으로 배우는 한국어」 하나로 좁혔다. 계획·결정 7건: [plan-fortune-removal](docs/plan-fortune-removal.md)
@@ -20,22 +20,23 @@
 | 서버 | 아침 편에서 **운세 1통·부적 1통 소멸**. `fortune.mjs`/`fortune-text.mjs` 삭제. `.cpanel.yml` engine 복사 제거 |
 | 개인정보 | `POST /line/link/start` **폐지**（생년월일 입구）. privacy 「生年月日は取得しません」. **DB 열은 존치**（drop 은 별건 010） |
 | 관문 | **19종 → 12종**（운세 8종 폐지 + `verify-no-fortune` 신설） |
-| 배포 순서 | **P2(서버) 먼저 → 확인 → P1(사이트)**. 거꾸로 하면 `.cpanel.yml` 의 `cp saju.js` 가 `set -e` 로 배포를 통째로 멈춘다 |
-| 다음 | §0-■ 표 참조 |
+| 배포 | 커밋 2개를 **한 번에 push**. `.cpanel.yml` 의 `cp saju.js` 가 같은 트리에서 이미 사라져, 순서 위험이 구조적으로 없다 |
+| 실물 | `/omikuji` `/gilbang` `/amulet` `/words` → **410** · `/saju.js` → **404** · `/health` → **ok** |
+| 다음 | **대표 실기 4건** — §0-■ 표의 ■-4〜■-7 |
 
-### §0-■ 이번 전환의 배포 순서 (지키십시오)
+### §0-■ 배포 후에 남은 것 (대표 실기)
 
 | ■ | 할 일 | 담당 |
 |---|---|---|
-| **■-1** | `server/**` 커밋을 먼저 push → ChemiCloud 배포 확인 | 대표 |
+| ~~■-1~~ | ~~서버 배포~~ — **완료**（`e1a3a44` · UAPI · cron 3행 등록 확인 · `/health` ok） | ✅ |
 | **■-2** | 다음 아침 편에 **운세·부적이 없는 것** 확인（또는 `accel-day` 로 즉시） | 대표 |
-| **■-3** | 사이트 커밋 push → `/omikuji` `/gilbang` `/amulet` `/words` 가 **410** 인지 확인 | 대표 |
+| ~~■-3~~ | ~~사이트 배포~~ — **완료**（`7cbb038` · 스모크 30항목 · 410/404 실측） | ✅ |
 | **■-4** | ChemiCloud `server/content/fortune-lines.json` **삭제**（저장소에 없어 배포로는 안 사라진다） | 대표 |
 | **■-5** | Stripe 콘솔 — 상품명·설명에서 운세 표현 제거, 업종 재확인 → **재심사 신청** | 대표 |
 | **■-6** | Search Console — `/omikuji` `/gilbang` `/amulet` 색인 삭제 요청 | 대표 |
 | **■-7** | 기존 이용자 공지 1통（문면 초안은 계획서 §8. **「日数は変わりません」를 반드시 넣을 것**） | 대표 |
 
-### §0-■■ 일수 제한 일시 해제 — **구현 완료 · 배포 대기**（2026-08-16）
+### §0-■■ 일수 제한 일시 해제 — **배포 완료**（2026-08-16 `e1a3a44`）
 
 체험 7일을 다 쓴 사람에게 **살 방법이 없다**（Stripe 심사 대기）. 그동안은 계속 배신한다.
 [plan-delivery-unlimited](docs/plan-delivery-unlimited.md)
@@ -520,9 +521,9 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | [docs/research-audit.md](docs/research-audit.md) | 전수 점검 결과 (2026-08-04) |
 | [docs/research-line-flow.md](docs/research-line-flow.md) | LINE 연동 요구사항별 실기 검증 |
 | [docs/plan-billing.md](docs/plan-billing.md) | 선불 횟수권 설계·구현 결과 |
-| [docs/plan-fortune-removal.md](docs/plan-fortune-removal.md) | **운세 전면 폐지 — 구현 완료·배포 대기 (§0-■)** |
+| [docs/plan-fortune-removal.md](docs/plan-fortune-removal.md) | **운세 전면 폐지 — 배포 완료 (§0-■)** |
 | [docs/research-fortune-removal.md](docs/research-fortune-removal.md) | 그 사전 조사（어디에 무엇이 있었는가） |
-| [docs/plan-delivery-unlimited.md](docs/plan-delivery-unlimited.md) | 일수 제한 일시 해제 — 구현 완료·배포 대기 (§0-■■) |
+| [docs/plan-delivery-unlimited.md](docs/plan-delivery-unlimited.md) | 일수 제한 일시 해제 — 배포 완료 (§0-■■) |
 | [docs/plan-trial-7days.md](docs/plan-trial-7days.md) | 무료 체험 3일→7일 — 구현 완료·배포 대기 (§0-◆) |
 | [docs/plan-accel-day.md](docs/plan-accel-day.md) | 가속 시험 `accel-day.mjs` — 7일·30일 절목까지 (§0-◇) |
 | [docs/plan-quiz-review-on-multiple.md](docs/plan-quiz-review-on-multiple.md) | 3의 배수 아침은 🔁만（A안） |

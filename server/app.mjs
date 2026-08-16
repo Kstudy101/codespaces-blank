@@ -4,18 +4,17 @@
      node server/app.js          （cPanel も同じ入口を使う）
      PORT=3000 node server/app.js
 
-   経路は 8 つ。
+   経路は 7 つ。
 
      POST /line/webhook      LINE からの通知
-     POST /line/link/start   ウェブの占い結果を預かる（P3）
-     GET  /line/callback     LINE Login の戻り先（P3 / プロフィール編集）
+     GET  /line/callback     LINE Login の戻り先（プロフィール編集）
      GET  /profile/start     プロフィール編集のログイン開始
      GET  /profile           編集フォーム
      POST /profile           保存
      POST /stripe/webhook    入金の通知（migrations/002）
      GET  /health            生きているか（cPanel と外形監視から）
 
-   フレームワークを入れないのは、経路が 8 つしか無いため。
+   フレームワークを入れないのは、経路が 7 つしか無いため。
    Express を足すと依存が 60 個ほど増え、検証に install が要る
    範囲が広がる（README「検証は設置なしで走る」）。
 
@@ -32,7 +31,7 @@ import { loadEnv, requireEnv } from "./lib/env.mjs";
 import { getPool, withTransaction } from "./lib/db.mjs";
 import { verifyLineSignature } from "./lib/signature.mjs";
 import { handleWebhookBody } from "./lib/webhook.mjs";
-import { startLink, completeLink } from "./lib/handlers/link.mjs";
+import { completeLink } from "./lib/handlers/link.mjs";
 import {
   startProfileEdit, completeProfileEdit, loadProfileForm, saveProfile, gatePage
 } from "./lib/handlers/profile.mjs";
@@ -53,33 +52,15 @@ const PORT = Number(process.env.PORT || 3000);
    どのホストのどのパスに置くかがまだ決まっていない（README 参照）。 */
 const PATH_WEBHOOK  = process.env.LINE_WEBHOOK_PATH  || "/line/webhook";
 const PATH_CALLBACK = process.env.LINE_CALLBACK_PATH || "/line/callback";
-const PATH_START    = process.env.LINE_LINK_START_PATH || "/line/link/start";
 const PATH_STRIPE   = process.env.STRIPE_WEBHOOK_PATH || "/stripe/webhook";
 
-/* ---- CORS ---------------------------------------------------------
-   占いページは Xserver（www.kstudy101.jp）、この API は ChemiCloud に
-   居るので、ブラウザから見ると別オリジンになる。許可しないと
-   /line/link/start は preflight で止まる。
+/* ---- CORS は要らなくなった ----------------------------------------
+   2026-08-16 の事業転換で /line/link/start（ウェブの占い結果を預かる口）
+   を廃止した。ブラウザから直接叩かれる経路がこれ 1 つだったので、
+   Access-Control-* を返す相手がもう居ない。
 
-   * にはしない。この口は生年月日を受け取るので、どのサイトからでも
-   投げ込める状態にする理由が無い。Cookie は使っていないので
-   credentials も許可しない。 */
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ||
-  "https://www.kstudy101.jp,https://kstudy101.jp")
-  .split(",").map((s) => s.trim()).filter(Boolean);
-
-function corsHeaders(origin) {
-  if (!origin || !ALLOWED_ORIGINS.includes(origin)) return {};
-  return {
-    "Access-Control-Allow-Origin": origin,
-    /* オリジンごとに応答が変わるので、間に立つキャッシュへ伝える。
-       これが無いと、1 人ぶんの応答が別オリジンの人へ配られうる。 */
-    "Vary": "Origin",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Max-Age": "600"
-  };
-}
+   ALLOWED_ORIGINS と corsHeaders() も一緒に消してある。使われない
+   許可リストを残すと、次に口を足す人が「もう許可済みだ」と読む。 */
 
 /* 受け取る本文の上限。LINE の 1 通は数十 KB に収まる。
    上限が無いと、誰でも POST できる口に大きな本文を投げられる。 */
@@ -173,54 +154,13 @@ async function onWebhook(req, res) {
   }
 }
 
-/* ---- P3: 占い結果を預かる ------------------------------------------
-   ウェブ（占い結果ページ）から呼ばれる唯一の口。返すのは合言葉と
-   認証画面の URL だけで、ブラウザはそこへ飛ぶ。 */
-async function onLinkStart(req, res) {
-  const origin = req.headers.origin;
-  const cors = corsHeaders(origin);
-
-  if (req.method === "OPTIONS") return send(res, 204, "", cors);
-  if (req.method !== "POST") return send(res, 405, "POST のみ", cors);
-
-  /* 許可していないオリジンからのブラウザ経由の要求は、CORS ヘッダを
-     返さないので結果を読めない。それでも要求自体は届くので、
-     ここで断っておく（Origin が無い＝ブラウザ以外は通す。
-     curl での動作確認と、将来のサーバー間呼び出しのため）。 */
-  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
-    logErr("許可していないオリジン", origin);
-    return send(res, 403, "origin が許可されていません");
-  }
-
-  let raw;
-  try { raw = await readRawBody(req); }
-  catch (e) { return send(res, e.statusCode || 400, "本文を読めません", cors); }
-
-  let input;
-  try { input = JSON.parse(raw.toString("utf8")); }
-  catch { return send(res, 400, JSON.stringify({ ok: false, reason: "JSON ではありません" }), cors); }
-
-  try {
-    const pool = await getPool();
-    const r = await startLink(pool, input);
-    if (!r.ok) {
-      log("link/start 却下:", r.reason);
-      return send(res, 400, JSON.stringify(r),
-        { ...cors, "Content-Type": "application/json; charset=utf-8" });
-    }
-    log("link/start 受付");
-    return send(res, 200, JSON.stringify(r),
-      { ...cors, "Content-Type": "application/json; charset=utf-8" });
-  } catch (e) {
-    logErr("link/start 失敗", e && e.stack ? e.stack : e);
-    return send(res, 500, JSON.stringify({ ok: false, reason: "内部エラー" }),
-      { ...cors, "Content-Type": "application/json; charset=utf-8" });
-  }
-}
-
-/* ---- P3: LINE から戻ってくる ---------------------------------------
+/* ---- LINE Login から戻ってくる -------------------------------------
    ここはブラウザが直接開くので、返すのは JSON ではなく画面。
-   purpose=edit の state はプロフィール編集へ分岐（plan-profile）。 */
+   purpose=edit の state はプロフィール編集へ分岐（plan-profile）。
+
+   purpose が edit でない state は completeLink へ落ちるが、それを
+   作っていた /line/link/start はもう無い（2026-08-16）。実際に来るのは
+   期限切れか作り物だけで、どちらも「もう一度やり直し」の画面になる。 */
 async function onCallback(req, res, url) {
   if (req.method !== "GET") return send(res, 405, "GET のみ");
 
@@ -410,7 +350,6 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
 
   if (url.pathname === PATH_WEBHOOK)  return void onWebhook(req, res);
-  if (url.pathname === PATH_START)    return void onLinkStart(req, res);
   if (url.pathname === PATH_CALLBACK) return void onCallback(req, res, url);
   if (url.pathname === PATH_STRIPE)   return void onStripeWebhook(req, res);
   if (url.pathname === "/health")     return void onHealth(req, res);
@@ -468,12 +407,10 @@ for (const key of ["LINE_API_BASE", "LINE_AUTH_BASE", "STRIPE_API_BASE"]) {
 server.listen(PORT, () => {
   log(`起動しました :${PORT}`);
   log(`  webhook    ${PATH_WEBHOOK}`);
-  log(`  link start ${PATH_START}`);
   log(`  callback   ${PATH_CALLBACK}`);
   log(`  stripe     ${PATH_STRIPE}`);
   log(`  health     /health`);
   log(`  profile    /profile/start → /profile`);
-  log(`  許可オリジン ${ALLOWED_ORIGINS.join(" / ")}`);
 
   /* 売る用意が整っているか。足りなければ価格表そのものを出さない
      （lib/handlers/checkout.mjs の門）ので、起動時に名前で出しておく

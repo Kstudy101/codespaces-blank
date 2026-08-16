@@ -1,139 +1,30 @@
 /* ==================================================================
-   handlers/link.mjs — ウェブの四柱を LINE アカウントに繋ぐ（計画書 5-1）
+   handlers/link.mjs — LINE Login から戻ってきたところ
 
-   流れは 2 回に分かれる。間にブラウザが LINE の認証画面へ出ていくので、
-   こちらは 1 度手を離すことになる。
+   【2026-08-16 ── 預ける側（POST /line/link/start）を廃止した】
+   ウェブの占い結果を預かって LINE に繋ぐ流れは、事業転換で運勢ごと
+   無くなった（docs/plan-fortune-removal.md）。生年月日を受け取る口を
+   閉じるのがこの変更の目的なので、startLink と生年月日の正規化
+   （normalizeProfile）はここから消してある。
 
-     1  POST /line/link/start
-        ウェブ（占い結果ページ）が四柱を送ってくる。
-        まだ LINE の誰かは分からないので pending_links に預かり、
-        合言葉（state）と認証画面の URL を返す。
+   残っている completeLink は GET /line/callback の受け口だが、
+   pending_links を作る側がもう居ないため、実際に来るのは期限切れか
+   作り物の state だけで、いずれも「もう一度やり直し」を返す
+   （プロフィール編集は purpose=edit で handlers/profile.mjs へ分岐する）。
 
-     2  GET /line/callback?code=…&state=…
-        LINE から戻ってくる。state で預かりものを引き当て、
-        code を userId に替えて、users / saju_profiles に移す。
-
-   【なぜ預ける必要があるのか】
-   占いが終わった時点で分かっているのは名前と生年月日だけ。
-   LINE の userId が分かるのは認証から戻った後。両方が揃わないと
-   どの行に書けばよいか決まらないので、先に来た方を置いておく。
-
-   【順番はどちらでもよい】
-   友だち追加が先の人（webhook の follow が先に来ている）も、
-   リンクが先の人も居る。users への書き込みは upsertOnFollow を
-   通すので、どちらが先でも 2 人にならない。
+   到達しなくなった経路そのものの撤去は**別件**にしてある ── 消すと
+   resultPage・greet・関門 8 項目が同時に動き、この変更（口を閉じる）
+   の成否が読めなくなる。
    ================================================================== */
 import { users, links, pushlogs } from "../repo/index.mjs";
 import * as oauthStates from "../repo/oauth-states.mjs";
-import { newState, hashState, looksLikeState } from "../token.mjs";
-import { authorizeUrl, exchangeCode, loginProfile, revoke } from "../linelogin.mjs";
+import { hashState, looksLikeState } from "../token.mjs";
+import { exchangeCode, loginProfile, revoke } from "../linelogin.mjs";
 import { getProfile, pushMessage, isUnreachable } from "../line.mjs";
 import { jstDateTime } from "../jst.mjs";
 import { serviceGuide, nextStep, messageForStep } from "../onboarding.mjs";
 
-/* ---- 入力の検査 ----------------------------------------------------
-   ここはウェブから来る唯一の入口で、中身は利用者が作れる。
-   長さと形だけ見て、収まらないものは切るか捨てる。
-   DB の列幅を超えると MySQL 側で落ちるので、そこまで届かせない。 */
-
-const str = (v, max) => {
-  if (v === null || v === undefined) return null;
-  const s = String(v).trim();
-  return s ? s.slice(0, max) : null;
-};
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const TIME_RE = /^\d{2}:\d{2}(:\d{2})?$/;
-
-/* 生年月日の範囲は、サイト側（birth.js）と同じ 1930〜2030 に合わせる。
-   ここを広く取ると、保存はできたのに四柱が立たない状態を作れる。
-
-   切り詰めてから形を見てはいけない。10 文字に切ってから調べると
-   "1995-04-12T23:00:00Z" が "1995-04-12" として通る ── UTC の
-   23 時は JST では翌日なので、日柱が 1 日ずれた四柱を出したまま
-   保存される。占いの中身が変わるのに、値は「それらしい日付」の
-   ままなので、見比べても分からない。長さごと弾く。 */
-function birthDate(v) {
-  if (v === null || v === undefined) return null;
-  const s = String(v).trim();
-  if (!DATE_RE.test(s)) return null;             // 切らずにそのまま見る
-  const y = Number(s.slice(0, 4));
-  if (y < 1930 || y > 2030) return null;
-  /* 2 月 30 日のような「形は合っているが存在しない日」を落とす。
-     Date に通すと 3 月 2 日へ繰り上がるので、戻して同じか確かめる。 */
-  const d = new Date(`${s}T00:00:00Z`);
-  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s) return null;
-  return s;
-}
-
-/* 時刻も同じ理由で切らずに見る。"09:30:15+09:00" を切り詰めると
-   時差を落としたまま通ってしまい、時柱がずれる。 */
-function birthTime(v) {
-  if (v === null || v === undefined) return null;
-  const s = String(v).trim();
-  if (!TIME_RE.test(s)) return null;
-  return s.length === 5 ? `${s}:00` : s;
-}
-
-export function normalizeProfile(input) {
-  const b = input || {};
-  return {
-    nameKanji:   str(b.nameKanji ?? b.name_kanji, 50),
-    nameReading: str(b.nameReading ?? b.name_reading, 50),
-    nameKr:      str(b.nameKr ?? b.name_kr, 50),
-    birthDate:   birthDate(b.birthDate ?? b.birth_date),
-    birthTime:   birthTime(b.birthTime ?? b.birth_time),
-    /* 'N'（答えないと答えた）も通す（migrations/005）。サイトは性別を
-       訊かないので実際に来るのは 'U'（未質問）だけだが、白リストが
-       ENUM より狭いと、来た日に黙って 'U' に化ける。 */
-    gender:      ["M", "F", "U", "N"].includes(b.gender) ? b.gender : "U",
-    ohaengMain:  str(b.ohaengMain ?? b.ohaeng_main, 10),
-    /* 元の診断結果は丸ごと預かるが、大きさは抑える。
-       ここが無制限だと、この口が保管庫として使える。 */
-    rawResult:   b.rawResult ?? b.raw_result ?? null
-  };
-}
-
-const MAX_RAW_JSON = 8 * 1024;
-
-
-/* ---- 1. 預ける ---------------------------------------------------- */
-
-export async function startLink(conn, input) {
-  const profile = normalizeProfile(input);
-
-  if (!profile.birthDate) {
-    return { ok: false, reason: "birthDate が 1930〜2030 の YYYY-MM-DD ではありません" };
-  }
-  if (profile.rawResult !== null) {
-    const size = JSON.stringify(profile.rawResult).length;
-    if (size > MAX_RAW_JSON) {
-      return { ok: false, reason: `rawResult が大きすぎます（${size} > ${MAX_RAW_JSON}）` };
-    }
-  }
-
-  const state = newState();
-  const now = jstDateTime();
-  const expiresAt = jstDateTime(new Date(Date.now() + links.TTL_MINUTES * 60_000));
-
-  await oauthStates.create(conn, hashState(state), "link", { now, expiresAt });
-  await links.create(conn, hashState(state), profile, { now, expiresAt });
-
-  return {
-    ok: true,
-    state,
-    /* 同意のあとに「友だち追加しますか」の画面を出す。連携だけして
-       友だちにならない人が出ないように ── 友だちでなければ 1 通も
-       送れないので、その人はこちらの台帳にだけ残る（lib/linelogin.mjs）。
-       プロフィール編集（handlers/profile.mjs）には付けない。あちらは
-       もう友だちの人が使う口で、出しても素通りするだけ。 */
-    authorizeUrl: authorizeUrl(state, { botPrompt: "aggressive" }),
-    expiresInSeconds: links.TTL_MINUTES * 60
-  };
-}
-
-
-/* ---- 2. 戻ってくる ------------------------------------------------ */
+/* ---- LINE から戻ってくる ------------------------------------------ */
 
 /* ---- 連携できた直後に送る 1 便 --------------------------------------
    ここまで、サイトを通ってきた人には**何も送っていなかった**。

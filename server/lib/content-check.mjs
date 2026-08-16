@@ -301,16 +301,16 @@ export function checkDay(d, seen = new Set()) {
     at("名前を使っていないのに requires_name_slot が true です");
   }
 
-  /* --- 運勢に添える一言（任意） ---
+  /* --- 🍀 今日のひとこと（任意） ---
      無くてよい。あるなら kr が要る（ja は訳なので任意）。
-     ここに差し込み口を許さないのは、運勢の文は名前を主語に
-     しないため ── 許すと「다나카는 재물운이…」のような、
-     占いの文としては不自然な形が入りうる。
+     列名が fortune_bridge なのは出自（運勢に添える一言）だけで、
+     中身は 2026-08-07 にレッスン最下段の🍀へ移った。運勢そのものは
+     2026-08-16 に廃止（docs/plan-fortune-removal.md）── 改名は
+     原稿 303 日・renderDay・関門を同時に揺らすので見送っている。
 
-     ★ NAME だけでなく全部。fortuneSection（fortune-text.mjs）は
-     bridge.kr を fillSlots に通さず、そのまま文字列へ push する ──
-     {OHAENG_GA} と書いても値に置き換わらず、その 9 文字が利用者の
-     画面にそのまま出る（2026-08-07、SQL3(A) の指摘で発覚）。 */
+     ★ 差し込み口（{NAME} など）は 1 つも許さない。値に置き換わらず、
+     その 9 文字が利用者の画面にそのまま出る
+     （2026-08-07、SQL3(A) の指摘で発覚）。 */
   const fb = d.fortune_bridge;
   if (fb !== undefined && fb !== null) {
     if (typeof fb !== "object" || Array.isArray(fb)) {

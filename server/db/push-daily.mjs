@@ -43,9 +43,8 @@ import { jstDate, jstDateTime, tooEarly } from "../lib/jst.mjs";
 import { makeRetryKey } from "../lib/pushkey.mjs";
 import { renderDay, renderReviewQuiz, renderCheckpointQuiz, nameMissingNotice } from "../lib/render.mjs";
 import { TOTAL_DAYS } from "../lib/repo/learning.mjs";
+import { DELIVERY_UNLIMITED } from "../lib/repo/billing.mjs";
 import { blockingStep, messageForStep } from "../lib/onboarding.mjs";
-import { fortuneFor } from "../lib/fortune.mjs";
-import { loadLines, fortuneMessage, rankCats } from "../lib/fortune-text.mjs";
 import { EXPIRING_AT, expiringNotice, completionNotice, upsellNotice } from "../lib/handlers/checkout.mjs";
 
 /* ---- 引数 --------------------------------------------------------- */
@@ -94,10 +93,6 @@ const NAME_NOTICE_MAX = 2;
    ボタンは新しいメッセージが来ると押せなくなるため、
    黙ったあとに手が無くなるのを防ぐ。 */
 const ONBOARD_NOTICE_MAX = 3;
-
-/* 運勢を出せなかった理由。1 回だけ出す ── 全員ぶん出すと
-   ログが人数ぶん埋まって、他の行が読めなくなる。 */
-const fortuneSkips = new Set();
 
 if (!/^\d{4}-\d{2}-\d{2}$/.test(DATE)) {
   console.error(`✗ --date は YYYY-MM-DD で渡してください: ${DATE}`);
@@ -162,116 +157,18 @@ if (NOT_AFTER !== null) {
    呼び出しは今までどおり retryKey(userId, day, type) の 3 引数。 */
 export const retryKey = makeRetryKey(DATE);
 
-/* ---- 3 通目の運勢 ---------------------------------------------------
-   レッスンの後ろに足す（plan-fortune-daily.md §5 の (가)）。
-   pushMessage は配列を受けるので、3 通でも API 呼び出しは 1 回、
-   通知も 1 回。
+/* ---- 朝の便は「レッスン 1 通」だけになった（2026-08-16）-------------
+   ここには運勢（3 通目）と부적（Flex）が在った。2026-08-16 の事業転換で
+   両方とも廃止した ── Stripe の審査基準で占い・鑑定は扱えず、それを
+   商品説明に持ったままでは決済そのものが開けない
+   （docs/plan-fortune-removal.md）。
 
-   出さない条件が 3 つある。どれも「黙って出さない」で正しい ──
-   運勢はレッスンの付属で、これが無いことでレッスンが止まる方が損。
+   消したのは文面だけではない。運勢は lib/fortune.mjs が node:vm で
+   サイトの saju.js / fortune.js を実行して出していたので、engine の
+   写し（.cpanel.yml）ごと無くなっている。
 
-     ・生年月日が未確認   … 確かめていない値で 101 日ぶん占うと、
-                            全部が別人のものになる。数字は出るので
-                            受け取った側からは間違いだと分からない
-     ・文面が未入稿       … 既定の一言を埋めると、全員に同じものが
-                            「今日の運勢」として届く
-     ・エンジンが読めない … 手元で engine/ が無いとき。本番では
-                            .cpanel.yml が写す
-
-   理由は 1 度だけログに出す。出さないと、運勢が丸ごと落ちた日に
-   「元々そういうもの」と読めてしまう。 */
-/* 원고(template)는 더 이상 받지 않는다（지시서㉑ §1-3）── bridge 는
-   renderDay 가 레슨 말미（🍀）에 붙이고, 운세 메시지는 bridge 를
-   모른다. 양쪽에 두면 같은 한마디가 아침에 두 번 나간다. */
-export function fortuneSection(u, { date = DATE, load = loadLines } = {}) {
-  if (!u.birth_date) return null;
-
-  let lines;
-  try {
-    lines = load();
-  } catch (e) {
-    if (!fortuneSkips.has("文面")) {
-      fortuneSkips.add("文面");
-      console.error(`  ! 運勢の文面が読めません: ${e.message}`);
-    }
-    return null;
-  }
-  if (!lines) {
-    if (!fortuneSkips.has("未入稿")) {
-      fortuneSkips.add("未入稿");
-      console.log("  · content/fortune-lines.json が無いので運勢は付きません");
-    }
-    return null;
-  }
-
-  let f;
-  try {
-    f = fortuneFor(u, date);
-  } catch (e) {
-    if (!fortuneSkips.has("エンジン")) {
-      fortuneSkips.add("エンジン");
-      console.error(`  ! 運勢エンジン: ${e.message}`);
-    }
-    return null;
-  }
-  if (!f) return null;
-
-  return fortuneMessage(f, lines);
-}
-
-
-/* ---- きょうの부적（지시서⑪）----------------------------------------
-   運勢の後ろに Flex 1 通。押すまで何も作られない ── ボタンの uri が
-   サイトの부적 페이지（/amulet?cat=…）를 열고, 그 자리에서 한 장이
-   그려진다. cat 은 그날 **가장 낮은** 운세 항목（rankCats.bottom ──
-   본문의 「いちばん低い」와 같은 함수라 어긋날 수 없다）。
-
-   부적이 매일 바뀌는 것은 입력(cat)이 바뀌기 때문이지, 부적이
-   날짜를 보기 때문이 아니다 ── amulet.js 는 날짜를 모른 채로 남고,
-   같은 링크를 나중에 열면 같은 한 장（그날의 부적의 재현）。
-
-   URL 에 싣는 것은 cat 뿐 ── 생년월일・이름・id 는 싣지 않는다
-   （개인정보 없음 → privacy 개정 불요）。매일 배부（대표 확정 A）。
-   눌렀는지는 기록하지 않는다（무측정 원칙）。 */
-const AMULET_SITE = () => process.env.SITE_URL || "https://www.kstudy101.jp";
-
-export function amuletInvite(cat) {
-  return {
-    type: "flex",
-    /* altText 는 내용(어느 항목인지)을 알리지 않는다（⑨ §4-1 과 같은
-       규칙・문면은 2026-08-06 대표 확정）。 */
-    altText: "🔮 きょうの特別なお守り",
-    contents: {
-      type: "bubble",
-      body: { type: "box", layout: "vertical", contents: [
-        { type: "text", wrap: true, size: "sm",
-          text: "今日の運勢を補う「お守り」をご用意しました。\n不足している運気を整えます。" }
-      ] },
-      footer: { type: "box", layout: "vertical", contents: [
-        { type: "button", style: "primary", height: "sm",
-          action: { type: "uri", label: "お守りを受け取る",
-                    uri: `${AMULET_SITE()}/amulet?cat=${cat}` } }
-      ] }
-    }
-  };
-}
-
-/* 組めなければ黙って抜く（운세 fortuneSection 과 같은 태도・⑪ §4-5）──
-   부적은 덤이고, 이것 때문에 아침이 통째로 멈추는 쪽이 무겁다。 */
-export function amuletSection(u, { date = DATE } = {}) {
-  try {
-    const f = fortuneFor(u, date);
-    const { bottom } = rankCats(f?.scores || {});
-    if (!bottom) return null;
-    return amuletInvite(bottom);
-  } catch (e) {
-    if (!fortuneSkips.has("부적")) {
-      fortuneSkips.add("부적");
-      console.error(`  ! お守りカードを組めません（今日は付けません）: ${e.message}`);
-    }
-    return null;
-  }
-}
+   ★ 戻さないこと。戻すなら決済を閉じる覚悟が要る。
+     再発は tools/verify-no-fortune.mjs が止める。 */
 
 
 /* ---- 始める前に訊くこと --------------------------------------------
@@ -280,8 +177,9 @@ export function amuletSection(u, { date = DATE } = {}) {
      名前 … どちらの名前で呼ぶかで会話文が変わる
      コース … 引く原稿そのものが変わる
 
-   なので決まるまで日を進めない。生年月日の確認は止めない ──
-   止まるのは運勢だけで、レッスンはそのまま送れる。
+   なので決まるまで日を進めない。訊くのはこの 2 つだけ ──
+   生年月日はもう訊かない（2026-08-10 に온보딩から外し、
+   2026-08-16 に使い道そのものが無くなった）。
 
    促す回数に上限を置くのは名前案内（NAME_NOTICE_MAX）と同じ理由。
    日は進めないので、あとから答えればその日から始まる。 */
@@ -316,10 +214,10 @@ async function askOnboarding(conn, u, step, { send = pushMessage } = {}) {
    それは本物の LINE に送ってみても確かめられない ── 送る前に
    日が確保されているかどうかは、送る側から見えない。
    偽の send を渡して、呼ばれた時点の DB を覗く。 */
-/* amulet を差し替えられるのは検査のため ── 부적 조립이 던져도
-   운세・본문이 그대로 나가는 것（⑪ §4-5）을 일부러 깨서 확인한다。 */
+/* load / amulet の差し替え口は 2026-08-16 に無くなった ── 運勢の文面
+   （server/content/fortune-lines.json）も부적も廃止したため。 */
 export async function deliverOne(conn, u,
-  { send = pushMessage, load = loadLines, inspect = null, amulet = amuletSection } = {}) {
+  { send = pushMessage, inspect = null } = {}) {
   const today = Number(u.current_day) || 0;
   const next  = today + 1;
 
@@ -364,19 +262,13 @@ export async function deliverOne(conn, u,
       const atCp = await learning.isCheckpoint(conn, today);
       let messages = renderDay(tpl, u, { quizSection: !atCp });
       if (messages !== null) {
-        /* 꼬리통（quickReply）은 묶음 맨 끝에서만 열린다 ── 운세·부적을
-           그 앞에 끼운다（본편의 조립과 같은 규칙）. */
+        /* 꼬리통（quickReply）은 묶음 맨 끝에서만 열린다. 예전에는
+           여기서 뽑아 두고 운세·부적을 그 앞에 끼웠다 ── 둘 다
+           2026-08-16 에 폐지되어, 지금 재송신은 레슨 그대로다.
+           뽑았다 되돌리는 형태만 남긴다（앞으로 사이에 끼울 것이
+           생겨도 꼬리통이 맨 끝이라는 불변식이 유지되도록）. */
         const quizTail = messages[messages.length - 1]?.quickReply
           ? messages.pop() : null;
-        const fortune = fortuneSection(u, { load });
-        if (fortune) {
-          messages = [...messages, fortune];
-          /* 부적도 통상의 아침과 같게（운세가 붙은 재송신에만）。
-             조립이 던져도 재송신은 그대로（§4-5）。 */
-          let am = null;
-          try { am = amulet(u); } catch { /* 부적만 조용히 빠짐 */ }
-          if (am) messages = [...messages, am];
-        }
         if (quizTail) messages = [...messages, quizTail];
         if (DRY || DISABLED) return `${DRY ? "予定" : "停止中"}:再送信${today}日目`;
         try {
@@ -425,9 +317,14 @@ export async function deliverOne(conn, u,
 
      ★ current_day では引かない。「1 日目からやり直す」で戻るのは
      current_day だけなので、そちらで数えるとやり直した人の残りが
-     復活し、受け取ったぶんが無料になる（repo/learning.mjs）。 */
+     復活し、受け取ったぶんが無料になる（repo/learning.mjs）。
+
+     ★ 2026-08-16 から DELIVERY_UNLIMITED のあいだは、ここで降りない。
+     決済が開けない（Stripe 審査待ち）ので、止まった人には買う手段が
+     無いため（repo/billing.mjs に理由と戻し方）。判定そのものは残す
+     ── 消すと、戻す日に「どこで止めていたか」を探し直すことになる。 */
   const remaining = Number(u.days_entitled ?? 0) - Number(u.days_used ?? 0);
-  if (remaining <= 0) {
+  if (remaining <= 0 && !DELIVERY_UNLIMITED) {
     /* 切れたことを 1 度だけ台帳に残す。開いている行があれば書かない
        ので、切れているあいだ毎朝増えることはない（repo/lapses.mjs）。
 
@@ -543,21 +440,11 @@ export async function deliverOne(conn, u,
 
   /* 신양식 레슨의 꼬리통（❓+🍀, quickReply）은 묶음의 맨 끝에서만
      버튼이 열린다（LINE 사양 ── 절목 퀴즈가 말미로 가는 이유와 동일）.
-     여기서 뽑아 두고, 운세·부적·예고를 끼운 뒤에 다시 붙인다.
-     1·2통째에는 quickReply 가 없으므로 이 판별로 충분하다. */
+     여기서 뽑아 두고, 예고·복습·절목을 끼운 뒤에 다시 붙인다.
+     1·2통째에는 quickReply 가 없으므로 이 판별로 충분하다.
+     （운세·부적도 여기 사이에 들어갔었다 ── 2026-08-16 폐지） */
   const quizTail = messages[messages.length - 1]?.quickReply
     ? messages.pop() : null;
-
-  /* 3 通目の運勢。組むのは送る前 ── ここで落ちても
-     レッスンは送れるようにしておく（fortuneSection は投げない）。
-
-     load を差し替えられるようにしてあるのは、文面が
-     server/content/ にあり、公開リポジトリには無いため。
-     既定のまま検査すると、手元（文面あり）では 3 通、CI（文面なし）
-     では 2 通になり、通る場所と通らない場所が生まれる。
-     実際そうなって CI だけが落ちた。 */
-  const fortune = fortuneSection(u, { load });
-  if (fortune) messages = [...messages, fortune];
 
   /* ---- 期限の予告 ---------------------------------------------------
      今日ぶんを送ると残りが EXPIRING_AT になる、という日に 1 度だけ
@@ -600,7 +487,7 @@ export async function deliverOne(conn, u,
      1 度だけなので、クイズの空白も 1 日で済む。
 
      引けなければ（原稿なし・壊れ）何も足さない。本編は届く ──
-     運勢（fortuneSection）と同じ態度。 */
+     付属のものでレッスンを止めない、という一貫した態度。 */
   if (reviewMorning && !quizTail) {
     const quiz = await learning.pickReviewQuiz(conn, u.track, next);
     if (quiz) messages = [...messages, renderReviewQuiz(quiz)];
@@ -626,28 +513,15 @@ export async function deliverOne(conn, u,
     }
   }
 
-  /* ---- きょうの부적（지시서⑪）── 운세 바로 뒤에 끼운다 --------------
-     운세가 붙은 아침에만（부적의 cat 이 운세 본문의 「いちばん低い」
-     그 자체라, 본문 없이 오면 맥락이 없다）。LINE 의 한 push 는
-     5 통까지 ── 예고와 절목이 겹친 드문 아침(이미 5통)은 부적이
-     쉰다。전체가 400 으로 떨어져 아무것도 안 가는 것보다 낫다。
-     quickReply 를 쓰지 않는 것도 같은 이유의 이웃 ── 뒤 메시지가
-     지우기 때문（⑨ 와 같은 판단으로 Flex・uri 버튼）。 */
-  /* 꼬리통（아직 배열 밖）도 통수에 넣어 센다 ── 지금의 조합에서는
-     상한에 닿지 않지만, 뺀 채로 세는 버릇이 남으면 통을 하나 더
-     붙이는 미래의 변경이 6통（push 전체 400）을 만든다. */
-  if (fortune && messages.length + (quizTail ? 1 : 0) < 5) {
-    /* 조립이 던져도 아침은 그대로（§4-5）── amuletSection 내부에도
-       try 가 있지만, 불변식은 부르는 쪽이 진다。 */
-    let am = null;
-    try { am = amulet(u); } catch (e) {
-      console.error(`  ! お守りカードを組めません（今日は付けません）: ${e.message}`);
-    }
-    if (am) {
-      const at = messages.indexOf(fortune) + 1;
-      messages = [...messages.slice(0, at), am, ...messages.slice(at)];
-    }
-  }
+  /* ---- 通数の上限について（부적 폐지 후에도 남는 약속）----------------
+     LINE の 1 push は 5 通まで。超えると全体が 400 で落ち、その朝は
+     **何も届かない**。ここに 부적 を差し込む分岐が在ったが、
+     2026-08-16 に운세・부적ごと廃止した。
+
+     今の組み合わせ（레슨 ＋ 예고 ＋ 복습か절목 ＋ 꼬리통）では上限に
+     届かない。将来ここに 1 通足すときは、**꼬리통（まだ配列の外）も
+     数に入れて**数えること ── 外したまま数える癖が付くと、
+     次の 1 通が 6 通目になって全部が落ちる。 */
 
   /* 꼬리통을 묶음 맨 끝에 되돌린다 ── quickReply 는 마지막 1통에서만
      열린다. 이 뒤로는 아무것도 더 붙이지 않을 것. */
@@ -712,13 +586,13 @@ export async function deliverOne(conn, u,
 
    listDeliverable と同じ形の行が要る。1 人ぶんだけ引き直す
    （findDeliverable。一覧を引いて絞ると 501 人目から見つからない）。 */
-export async function deliverNow(conn, userId, { send = pushMessage, load = loadLines } = {}) {
+export async function deliverNow(conn, userId, { send = pushMessage } = {}) {
   const u = await users.findDeliverable(conn, userId);
   /* ここに居ないなら、買ったのに配信の条件が揃っていない ──
      active_track が入っていないか、進みの器が無いか、status が
      trial / active でない。呼ぶ側がログに残せるように言葉で返す。 */
   if (!u) return "対象外";
-  return deliverOne(conn, u, { send, load });
+  return deliverOne(conn, u, { send });
 }
 
 /* ---- 全員 --------------------------------------------------------- */
@@ -741,7 +615,7 @@ async function main() {
     const inspect = (messages, next) => {
       console.log(`  ${next} 日目として組んだ ${messages.length} 通:`);
       for (const m of messages) {
-        /* Flex（부적 등）は text が無い ── altText で見せる。 */
+        /* Flex は text が無い ── altText で見せる。 */
         console.log(`  ── ${String(m.text || m.altText || m.type).split("\n")[0]}`);
         for (const item of m.quickReply?.items ?? []) {
           console.log(`       [${item.action.label}] data=${item.action.data}`);

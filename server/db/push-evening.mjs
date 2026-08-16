@@ -35,7 +35,7 @@ import { jstDate, jstDateTime, tooEarly } from "../lib/jst.mjs";
 import { makeRetryKey } from "../lib/pushkey.mjs";
 import { renderReview, renderReviewQuestion } from "../lib/render.mjs";
 import { trialUpsellNotice } from "../lib/handlers/checkout.mjs";
-import { TRIAL_UPSELL_DAY } from "../lib/repo/billing.mjs";
+import { TRIAL_UPSELL_DAY, DELIVERY_UNLIMITED } from "../lib/repo/billing.mjs";
 
 /* ---- 引数 --------------------------------------------------------- */
 const argv = process.argv.slice(2);
@@ -107,8 +107,15 @@ export const retryKey = makeRetryKey(DATE);
    【2026-08-10】買える/買えないの分岐（canBuy）は無くなった。体験の
    7 日が終わるまで決済へ進ませない（checkout.mjs の inTrialNow）ので、
    ここは誰に対しても**予告**になる ── 判定が 1 本になったぶん、
-   salesAllowedFor と sellablePackages をここで見る理由も消えた。 */
+   salesAllowedFor と sellablePackages をここで見る理由も消えた。
+
+   【2026-08-16】DELIVERY_UNLIMITED のあいだは出さない。出すと
+   6 日目の夕方に「明日で体験が終わります」と言った翌朝に 8 日目が
+   届く ── 言ったことと起きることが食い違い、しかも受け取った側からは
+   どちらが本当か確かめようがない。制限を戻す日にここも一緒に戻る
+   （読んでいるのは定数 1 つ・repo/billing.mjs）。 */
 async function trialUpsellSection(conn, u) {
+  if (DELIVERY_UNLIMITED) return null;
   const full = await users.findDeliverable(conn, u.id);
   if (!full || full.status !== "trial"
       || Number(full.current_day) !== TRIAL_UPSELL_DAY) return null;

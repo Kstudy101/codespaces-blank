@@ -4,7 +4,7 @@
    ここだけは JSON ではなく HTML を返す。ブラウザが直接開くため。
 
    【エスケープ】
-   出すのは利用者が入れた名前。占いページで入れた文字がそのまま
+   出すのは利用者が入れた名前。サイトで入れた文字がそのまま
    ここまで来るので、必ずエスケープする。しないと、自分の名前に
    <script> を入れた本人の画面で動く（self-XSS）── 直接の被害は
    小さいが、「名前を貼ってください」と言われて貼る手口が成り立つ。
@@ -42,7 +42,7 @@ const SHELL = (title, body) => `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>${escapeHtml(title)} | 名前で学ぶ韓国語</title>
+<title>${escapeHtml(title)} | LINEで学ぶ 1日1分 簡単韓国語</title>
 <style>
   :root { --ink:#2b2118; --sub:#6b5b4a; --bg:#fdfaf5; --line:#e6dccd;
           --accent:#b8342f; --gold:#c8a15a; }
@@ -115,8 +115,8 @@ export function resultPage(r) {
       <div class="card">
         <div class="mark">–</div>
         <h1>連携を中止しました</h1>
-        <p>診断結果は引き継がれていません。もう一度試すときは、
-           占いのページからやり直してください。</p>
+        <p>登録は引き継がれていません。もう一度試すときは、
+           トップページからやり直してください。</p>
       </div>`);
   }
 
@@ -127,9 +127,9 @@ export function resultPage(r) {
       <div class="mark">×</div>
       <h1>${expired ? "有効期限が切れました" : "うまくいきませんでした"}</h1>
       <p>${expired
-          ? "連携用のリンクは 30 分で切れます。お手数ですが、占いのページからもう一度お試しください。"
-          : "しばらく時間をおいて、占いのページからもう一度お試しください。"}</p>
-      <p>診断結果はまだ引き継がれていません。</p>
+          ? "連携用のリンクは 30 分で切れます。お手数ですが、もう一度お試しください。"
+          : "しばらく時間をおいて、もう一度お試しください。"}</p>
+      <p>登録はまだ引き継がれていません。</p>
     </div>`);
 }
 
@@ -139,7 +139,7 @@ export function profileFormPage({
   nameReading, nameKr, siteUrl, error = null
 }) {
   /* 性別・生年月日・出生地は集めない（指示書⑱・登録情報は名前だけ）。
-     四柱は既存値のまま。直す道は LINE オンボーディング側。 */
+     2026-08-16 以降はそれらを読む機能も無い。 */
   const errLine = error ? `<p class="err">${escapeHtml(error)}</p>` : "";
   const krHint = nameKr
     ? `<p class="hint">現在の韓国語表記: ${escapeHtml(nameKr)}</p>` : "";

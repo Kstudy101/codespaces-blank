@@ -50,14 +50,16 @@ deployment:
     # find 側だけだが、入った日に静かに目を覚ます種類の食い違いになる。
     - if [ -n "$RSYNC" ]; then "$RSYNC" -a --delete --exclude=node_modules --exclude=.env --exclude=.env.local --exclude=content --exclude=tmp --exclude=public --exclude=stderr.log "$SRC/" "$APP/"; else find "$APP" -mindepth 1 -maxdepth 1 ! -name node_modules ! -name .env ! -name .env.local ! -name content ! -name tmp ! -name public ! -name stderr.log -exec rm -rf {} + && cp -a "$SRC/." "$APP/"; fi
 
-    # --- 運勢エンジンを写す -------------------------------------
-    # saju.js / fortune.js / solar-terms.json はサイト本体のもので、
-    # リポジトリに 1 部しか無い。server/ に複製を置くと、直したつもりが
-    # 片方だけになり、ウェブと LINE で違う運勢が出る ── どちらも
-    # それらしい数字を出すので、並べて見るまで気づけない。
-    # 配置のたびに、その 1 部から写す。
-    - /bin/mkdir -p "$APP/engine"
-    - /bin/cp -f "$PWD/saju.js" "$PWD/fortune.js" "$PWD/solar-terms.json" "$APP/engine/"
+    # --- 運勢エンジンの写しは廃止（2026-08-16）-------------------
+    # ここで saju.js / fortune.js / solar-terms.json を毎回 $APP/engine/
+    # へ写していた。サーバーが node:vm でサイト本体の計算をそのまま
+    # 動かすためだったが、2026-08-16 の事業転換で機能ごと廃止した
+    # （docs/plan-fortune-removal.md）。
+    #
+    # 既に本番へ写っている $APP/engine/ は、この上の配置が消す ──
+    # 守る対象（node_modules / .env / content / tmp / public /
+    # stderr.log）に engine は入っていないので、rsync 分岐でも
+    # find 分岐でも同じように消える。ここに rm を足す必要は無い。
 
     # --- 依存を入れる -------------------------------------------
     # activate の場所は Node の版でディレクトリ名が変わる。決め打ちに

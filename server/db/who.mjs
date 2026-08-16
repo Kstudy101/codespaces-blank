@@ -29,8 +29,9 @@ for (const u of rows) {
     `left=${remaining}`,
     `name=${u.name_kr ? "あり" : "なし"}`,
     `namesrc=${u.name_source || "未回答"}`,
+    /* 旧サイト診断から引き継いだ値。2026-08-16 以降どの配信もこれを
+       読まないが、残っている人を数えられるように表示は残す。 */
     `saju=${u.birth_date ? "あり" : "なし"}`,
-    /* 確認済みかどうかで運勢が付くかが変わるので、有無とは別に出す。 */
     `birthok=${u.birth_confirmed ? "はい" : "いいえ"}`,
     `ohaeng=${u.ohaeng_main || "-"}`,
     `zodiac=${raw.zodiac || "-"}`,

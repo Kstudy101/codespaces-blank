@@ -25,13 +25,12 @@ on:
   push:
     branches: [main]
     paths:
-      # server/ 본체와, .cpanel.yml 이 server 로 복사하는 운세엔진 3파일.
+      # server/ 본체만. 예전에는 .cpanel.yml 이 server 로 복사하던
+      # 운세엔진 3파일(saju/fortune/solar-terms)도 여기 있었지만,
+      # 2026-08-16 사업 전환으로 그 복사 자체가 없어졌다.
       # 문서·사이트만 바뀐 push 에 본번 배신 서버를 재기동하지 않는다.
       - "server/**"
       - ".cpanel.yml"
-      - "saju.js"
-      - "fortune.js"
-      - "solar-terms.json"
       - ".github/workflows/deploy-server.yml"
   # 수동 버튼. cPanel 화면의 Deploy 버튼 대체품 — 화면이 말을 안 들어도
   # Actions 탭에서 누르면 같은 일이 된다.
@@ -48,14 +47,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # --- 관문 19종. 하나라도 실패하면 배포 없음 ---------------------
+      # --- 관문 12종. 하나라도 실패하면 배포 없음 ---------------------
       - name: Verify all gates
         run: |
           set -e
           fail=0
-          for f in saju fortune study name omikuji gilbang amulet birth pages \
-                   server webhook onboarding render push fortune-server evening \
-                   billing quiz kana; do
+          # 2026-08-16 の事業転換で 8 種を廃止し、no-fortune を新設した。
+          # ここを直し忘れると、存在しない関門を呼んで配置が必ず止まる。
+          for f in no-fortune name pages server webhook onboarding render push \
+                   evening billing quiz kana; do
             if node tools/verify-$f.mjs >/dev/null 2>&1; then
               echo "PASS $f"
             else

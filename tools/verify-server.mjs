@@ -795,12 +795,16 @@ await acheck("gender の ENUM は 4 種（005）── コードの白リスト�
   const schemaEnum = SCHEMA.match(/gender\s+ENUM\(([^)]*)\)/)[1];
   assert(!schemaEnum.includes("'N'"),
     "schema.sql を直接書き換えています（既にデータのある表には効きません）");
-  /* ⑱ 이후 postback 은 gender 를 아예 저장하지 않는다（verify-onboarding
-     이 감시）── 화이트리스트 대조는 남은 유일한 쓰기 인접부인 link 만。
-     005 는 본번 기왕력（이미 적용된 ENUM 확장）으로서 남는다。 */
-  const link = read("server/lib/handlers/link.mjs");
-  assert(link.includes(`["M", "F", "U", "N"]`), "link の白リストが ENUM と揃っていません");
-  return "005（기왕력）= link 白リスト";
+  /* ⑱ 이후 postback 은 gender 를 저장하지 않고（verify-onboarding 이 감시),
+     2026-08-16 에는 마지막 쓰기 인접부였던 startLink 도 폐지했다
+     ── 이제 gender 를 **바깥에서 받는 경로가 하나도 없다**.
+     화이트리스트가 남아 있으면 「받는 곳이 있다」로 읽히므로,
+     대조 대신 「입구가 없다」를 본다. 005 는 본번 기왕력으로서 남는다. */
+  const link = stripComments(read("server/lib/handlers/link.mjs"));
+  assert(!link.includes(`["M", "F", "U", "N"]`),
+    "link に gender の白リストが戻っています（外から受け取る口が復活した合図）");
+  assert(!/normalizeProfile/.test(link), "normalizeProfile が戻っています");
+  return "005（기왕력）· 외부 입구 0";
 });
 
 await acheck("users.setStatus も ENUM の外を拒む", async () => {

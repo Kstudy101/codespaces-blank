@@ -23,22 +23,9 @@ PUBLIC=(
   contact.html
   tokushoho.html
   tips.html
-  words.html
-  omikuji.html
-  gilbang.html
-  amulet.html
   404.html
   page.css
   kanji.json
-  saju.js
-  fortune.js
-  study.js
-  omikuji.js
-  gilbang.js
-  amulet.js
-  birth.js
-  new-moons.json
-  solar-terms.json
   ogp.png
   ads.txt
   robots.txt
@@ -83,7 +70,7 @@ for html in "$OUT"/*.html; do
 done
 
 # 2) canonical が全ページにあるか
-for html in "$OUT"/index.html "$OUT"/privacy.html "$OUT"/contact.html "$OUT"/tokushoho.html "$OUT"/tips.html "$OUT"/words.html "$OUT"/omikuji.html "$OUT"/gilbang.html "$OUT"/amulet.html; do
+for html in "$OUT"/index.html "$OUT"/privacy.html "$OUT"/contact.html "$OUT"/tokushoho.html "$OUT"/tips.html; do
   grep -q 'rel="canonical"' "$html" || { echo "✗ $(basename "$html"): canonical がありません" >&2; fail=1; }
 done
 
@@ -129,9 +116,8 @@ fi
 #    ページが sitemap に残っているとクローラーに 404 を出し続ける。
 #
 #    載せないページは意図して載せていないので、ここに理由つきで並べる:
-#      words … 端末ごとの一覧で、クローラーには常に空に見える（noindex）
 #      404   … エラーページ
-SITEMAP_SKIP=" words 404 "
+SITEMAP_SKIP=" 404 "
 
 for html in "$OUT"/*.html; do
   name=$(basename "$html" .html)

@@ -1,10 +1,4 @@
 User-agent: *
 Allow: /
-# 端末ローカルの単語帳（noindex）。クロールしても空に見えるだけなので除外。
-Disallow: /words
-
-# AdSense のクローラー — /words も広告審査のため到達させる
-User-agent: Mediapartners-Google
-Allow: /
 
 Sitemap: https://www.kstudy101.jp/sitemap.xml

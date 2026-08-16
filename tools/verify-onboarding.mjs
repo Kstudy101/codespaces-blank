@@ -50,8 +50,8 @@ const stripComments = (src) => src
   .replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 const { newState, hashState, looksLikeState } = await import("../server/lib/token.mjs");
-const { normalizeProfile, startLink, completeLink } =
-  await import("../server/lib/handlers/link.mjs");
+const LINK_MOD = await import("../server/lib/handlers/link.mjs");
+const { completeLink } = LINK_MOD;
 const { resultPage, escapeHtml } = await import("../server/lib/pages.mjs");
 const { TRIAL_DAYS } = await import("../server/lib/repo/billing.mjs");
 const links = await import("../server/lib/repo/links.mjs");
@@ -198,110 +198,61 @@ await acheck("期限切れ・使用済みは同じ返し方（どこで弾いた
 
 
 /* ================================================================== */
-head("[入力]  ウェブから来る唯一の口。中身は利用者が作れる");
+head("[廃止]  ウェブから生年月日を受け取る口は閉じた（2026-08-16）");
 
-check("生年月日は 1930〜2030 の YYYY-MM-DD だけ", () => {
-  assert(normalizeProfile({ birthDate: "1995-04-12" }).birthDate === "1995-04-12", "正常な値を弾きました");
-  for (const bad of ["1929-12-31", "2031-01-01", "1995-13-01", "1995-02-30",
-                     "95-04-12", "1995/04/12", "", null, "abc"]) {
-    assert(normalizeProfile({ birthDate: bad }).birthDate === null,
-      `${JSON.stringify(bad)} が通りました`);
-  }
-  return "9 通り拒否 / 範囲は birth.js と同じ";
+/* 事業転換（docs/plan-fortune-removal.md D7-2）で POST /line/link/start を
+   廃止した。ここに在った検査 ── 生年月日の範囲・日時つき文字列・2 月 30 日・
+   名前の列幅・gender の白リスト・時刻の 2 形式・預かりの 3 通り ── は、
+   見張る対象そのものが無くなったので消してある。
+
+   代わりに「戻ってきていないこと」を見る。口が復活すると
+   privacy.html の「生年月日・出生時刻・出生地を取得しません」が
+   その日から嘘になる ── しかも動作は正常に見えるので、
+   誰も気づかないまま審査の対象になる。 */
+
+check("app.mjs に /line/link/start の経路が無い", () => {
+  assert(!/line\/link\/start/.test(APP), "経路が戻っています");
+  assert(!/LINE_LINK_START_PATH/.test(APP), "PATH_START が戻っています");
+  assert(!/onLinkStart/.test(APP), "ハンドラが戻っています");
+  return "経路・env・ハンドラの 3 つとも無し";
 });
 
-/* 切り詰めてから形を見ると通ってしまう組。UTC の夜は JST では翌日なので、
-   黙って受けると日柱が 1 日ずれた四柱を保存する。値は「それらしい日付」の
-   ままなので、あとから見比べても気づけない。 */
-check("日時つきの文字列を、日付として受け取らない", () => {
-  for (const bad of ["1995-04-12T00:00:00Z", "1995-04-12T23:00:00Z",
-                     "1995-04-12 09:30", "1995-04-12Z"]) {
-    assert(normalizeProfile({ birthDate: bad }).birthDate === null,
-      `${bad} が ${normalizeProfile({ birthDate: bad }).birthDate} として通りました`);
-  }
-  for (const bad of ["09:30:15+09:00", "09:30:15.123"]) {
-    assert(normalizeProfile({ birthTime: bad }).birthTime === null,
-      `${bad} が ${normalizeProfile({ birthTime: bad }).birthTime} として通りました`);
-  }
-  return "日付 4 通り / 時刻 2 通りを拒否";
+check("link.mjs が公開するのは completeLink だけ", () => {
+  const names = Object.keys(LINK_MOD).sort();
+  assert(names.join(",") === "completeLink",
+    `公開しているもの: ${names.join(" ")}（startLink・normalizeProfile は廃止）`);
+  return "completeLink のみ";
 });
 
-check("存在しない日付を弾く（2 月 30 日）", () => {
-  assert(normalizeProfile({ birthDate: "2026-02-30" }).birthDate === null, "2/30 が通りました");
-  assert(normalizeProfile({ birthDate: "2028-02-29" }).birthDate === "2028-02-29", "閏日を弾きました");
-  return "2/30 拒否 / 閏日は通す";
-});
-
-check("名前は列幅で切る（DB まで届かせない）", () => {
-  const p = normalizeProfile({ nameKanji: "あ".repeat(200), nameKr: "가".repeat(200) });
-  assert(p.nameKanji.length === 50, `${p.nameKanji.length} 文字`);
-  assert(p.nameKr.length === 50, `${p.nameKr.length} 文字`);
-  return "50 文字";
-});
-
-check("gender は 4 種以外を受けない（'N' = 答えないと答えた・migrations/005）", () => {
-  assert(normalizeProfile({ gender: "F" }).gender === "F", "F を弾きました");
-  assert(normalizeProfile({ gender: "N" }).gender === "N",
-    "'N' を弾きました ── ENUM より狭い白リストは、来た日に黙って 'U' に化けます");
-  for (const bad of ["X", "male", "", null, 1]) {
-    assert(normalizeProfile({ gender: bad }).gender === "U", `${JSON.stringify(bad)} が通りました`);
+check("生年月日の正規化がソースに残っていない", () => {
+  const src = stripComments(read("server/lib/handlers/link.mjs"));
+  for (const gone of ["normalizeProfile", "birthDate(", "birthTime(", "MAX_RAW_JSON"]) {
+    assert(!src.includes(gone), `${gone} が残っています`);
   }
-  return "M / F / U / N 以外は U";
+  return "normalizeProfile / birthDate / birthTime / MAX_RAW_JSON = 0";
+});
+
+check("CORS の許可リストが残っていない（叩く相手が居ない）", () => {
+  /* 使われない許可リストを残すと、次に口を足す人が「もう許可済みだ」と
+     読む。ブラウザから直接叩かれる経路はこれ 1 つだった。 */
+  assert(!/ALLOWED_ORIGINS/.test(APP), "ALLOWED_ORIGINS が残っています");
+  assert(!/Access-Control-Allow-Origin/.test(APP), "CORS ヘッダが残っています");
+  return "ALLOWED_ORIGINS / Access-Control-* = 0";
+});
+
+check("privacy.html が「生年月日を取得しない」と書いている", () => {
+  /* コードとポリシーが食い違った前科が 4 回ある。口を閉じた側と
+     書いた側を、同じ関門で突き合わせる。 */
+  const pv = read("privacy.html");
+  assert(/生年月日・出生時刻・出生地を取得しません/.test(pv),
+    "privacy.html に「取得しません」の記載がありません");
+  return "第2項に記載あり";
 });
 
 check("サイトは gender を送らない（지시서⑱で⑩の『U を送る』検査を反転）", () => {
   const html = read("index.html");
   assert(!/key:'gender'/.test(html), "index.html が gender を送っています");
   return "전송 항목에서 소멸";
-});
-
-check("時刻は HH:MM も HH:MM:SS も受け、それ以外は捨てる", () => {
-  assert(normalizeProfile({ birthTime: "09:30" }).birthTime === "09:30:00", "HH:MM を弾きました");
-  assert(normalizeProfile({ birthTime: "09:30:15" }).birthTime === "09:30:15", "HH:MM:SS を弾きました");
-  for (const bad of ["9:30", "25時", "abc", ""]) {
-    assert(normalizeProfile({ birthTime: bad }).birthTime === null, `${bad} が通りました`);
-  }
-  return "2 形式のみ";
-});
-
-await acheck("大きすぎる rawResult は預からない（保管庫にしない）", async () => {
-  const conn = fakeConn();
-  const r = await startLink(conn, {
-    birthDate: "1995-04-12",
-    rawResult: { pad: "x".repeat(20000) }
-  });
-  assert(r.ok === false && /大きすぎ/.test(r.reason), JSON.stringify(r));
-  assert(conn.calls.length === 0, "却下したのに DB へ書きました");
-  return "8KB 上限";
-});
-
-await acheck("生年月日が無ければ預からない", async () => {
-  const conn = fakeConn();
-  const r = await startLink(conn, { nameKr: "다나카" });
-  assert(r.ok === false, JSON.stringify(r));
-  assert(conn.calls.length === 0, "却下したのに DB へ書きました");
-  return "却下";
-});
-
-await acheck("正常なら state と認証 URL を返す", async () => {
-  const conn = fakeConn();
-  const r = await startLink(conn, {
-    nameKanji: "武田 花子", nameKr: "다케다 하나코",
-    birthDate: "1995-04-12", birthTime: "09:30", gender: "F", ohaengMain: "목"
-  });
-  assert(r.ok === true, JSON.stringify(r));
-  assert(looksLikeState(r.state), r.state);
-  const u = new URL(r.authorizeUrl);
-  assert(u.host === "access.line.me", u.host);
-  assert(u.searchParams.get("state") === r.state, "state が URL に載っていません");
-  assert(u.searchParams.get("response_type") === "code", "response_type が code ではありません");
-  assert(u.searchParams.get("client_id") === "1234567890", "client_id が違います");
-  /* DB に入るのはハッシュ。生の state が SQL のパラメータに現れてはいけない。 */
-  const ins = conn.calls.find((c) => /INSERT INTO pending_links/.test(c.sql));
-  assert(ins, "預かっていません");
-  assert(!ins.params.includes(r.state), "生の state を DB へ書いています");
-  assert(ins.params.includes(hashState(r.state)), "ハッシュを書いていません");
-  return "state / authorizeUrl / ハッシュのみ保存";
 });
 
 check("scope は profile だけ（要らない同意を求めない）", () => {
@@ -400,41 +351,23 @@ check("外部リソースを読まない（別ホストなので page.css は無
 
 
 /* ================================================================== */
-head("[CORS]  生年月日を受ける口を、どのサイトにも開けない");
+head("[CORS]  ブラウザから直接叩かれる経路が無いこと");
 
-check("* で許可していない", () => {
-  assert(!/Allow-Origin["']?\s*[:=]\s*["']\*/.test(APP),
-    "Access-Control-Allow-Origin を * にしています");
-  return "オリジンを列挙";
-});
+/* 2026-08-16 まで、ここは /line/link/start（生年月日を受ける口）を
+   「どのサイトにも開けない」ために 6 項目を見ていた ── * 禁止・
+   許可リスト・Vary・preflight・403・credentials。
 
-check("許可オリジンは環境変数から。既定はサイト本体だけ", () => {
-  assert(/ALLOWED_ORIGINS/.test(APP), "環境変数で分けていません");
-  assert(/www\.kstudy101\.jp/.test(APP), "既定にサイトのオリジンがありません");
-  return "ALLOWED_ORIGINS";
-});
+   その口を廃止したので、守るべき対象は「口がある」ではなく
+   「口が無い」に変わった。列挙した許可リストを残したまま口を消すと、
+   次に何かを足す人が「もう許可済みだ」と読む。 */
 
-check("Vary: Origin を返す（間に立つキャッシュ対策）", () => {
-  assert(/"Vary":\s*"Origin"/.test(APP),
-    "Vary がありません。1 人ぶんの応答が別オリジンの人へ配られえます");
-  return "Vary: Origin";
-});
-
-check("preflight（OPTIONS）に応える", () => {
-  assert(/OPTIONS/.test(APP), "OPTIONS を扱っていません。JSON の POST は preflight が飛びます");
-  assert(/send\(res, 204/.test(APP), "204 を返していません");
-  return "204";
-});
-
-check("許可外のオリジンからの POST は 403", () => {
-  assert(/ALLOWED_ORIGINS\.includes\(origin\)[\s\S]{0,200}?403/.test(APP),
-    "許可外オリジンを断っていません");
-  return "403";
-});
-
-check("Cookie を使わない（credentials を許可しない）", () => {
-  assert(!/Allow-Credentials/.test(APP), "credentials を許可しています");
-  return "Cookie 無し";
+check("CORS ヘッダを 1 つも返さない", () => {
+  for (const gone of ["Access-Control-Allow-Origin", "Access-Control-Allow-Methods",
+                      "Access-Control-Allow-Headers", "Access-Control-Max-Age",
+                      "Allow-Credentials", "ALLOWED_ORIGINS"]) {
+    assert(!APP.includes(gone), `${gone} が残っています`);
+  }
+  return "Access-Control-* / ALLOWED_ORIGINS = 0";
 });
 
 
@@ -564,7 +497,6 @@ check("LINE の項は、保存するものを 1 つずつ挙げている", () =>
   if (!LINE_SECTION.test(PRIVACY)) return "第2項なし";
   for (const [what, re] of [
     ["名前",       /お名前・ふりがな・韓国語表記/],
-    ["生年月日",   /生年月日・生まれた時刻/],
     ["LINE の ID", /LINE の利用者 ID・表示名/],
     ["学習の進み", /学習の進み/],
     ["配信の記録", /お届けの記録/],
@@ -572,7 +504,11 @@ check("LINE の項は、保存するものを 1 つずつ挙げている", () =>
   ]) assert(re.test(PRIVACY), `${what} が挙がっていません`);
   assert(!/性別/.test(PRIVACY), "性別の記載が残っています（もう集めていません）");
   assert(!/大運/.test(PRIVACY), "大運の説明が残っています");
-  return "7 種を名指し・性別の記載 0";
+  /* 2026-08-16 ── 生年月日は取得しなくなった。保存物の表に載っていたら、
+     「取得しません」と書いた同じ文書の中で食い違う。 */
+  assert(!/生年月日・生まれた時刻/.test(PRIVACY),
+    "保存するものの表に生年月日が残っています（取得しないと書いた項と矛盾します）");
+  return "5 種を名指し・性別・生年月日の記載 0";
 });
 
 

@@ -53,14 +53,20 @@ LLM 일반 행동 지침(가정 금지 / 단순하게 / 최소 변경 / 검증 �
 - **잔여 일수는 `days_entitled - days_used`.** `current_day` 로 세면 「1일차부터 다시」에서
   받은 일수가 공짜가 된다
 - **`advanceDay` 는 일자 확보와 일수 소비를 한 문장에서** 한다. 나누면 그 사이에 죽었을 때 하루가 공짜
-- **운세 엔진의 사본을 `server/` 에 두지 않는다.** `node:vm` 으로 사이트의 1부를 실행한다 —
-  사본을 두면 웹과 LINE의 운세가 갈라지고, 양쪽 다 그럴듯해서 대조 전엔 모른다
-  (유일한 예외: `server/lib/kana2hangul.mjs` — 허가된 사본. `verify-kana` 가
-  정본과 전수 대조하므로, 한쪽을 고치면 관문이 다른쪽을 강제한다.
+- **운세는 사업에서 빠졌다(2026-08-16).** 사주·운세·부적·오미쿠지·길방을 전부 폐지했다
+  (Stripe 심사 = 점술은 제한 업종). 되돌아오는 것이 곧 결제 정지이므로,
+  **`verify-no-fortune` 이 문면·파일·CI 배선 3층에서 막는다.**
+  「좋은 콘텐츠니까」로 되돌리지 않는다. 경위는 `docs/plan-fortune-removal.md`
+  （남는 예외 2개는 정당하다: `content_templates.fortune_bridge` 열 이름과
+  `content-check.mjs` 의 `FORTUNE_ASSERT` — 후자는 원고에 운세 단정이 섞이는 것을
+  **막고 있는 당사자**라, 사라지면 원고 쪽으로 되돌아오는 길이 열린다)
+- **사본을 두려면 관문이 전수 대조해야 한다.** 지금 허가된 사본은
+  `server/lib/kana2hangul.mjs` 하나다 — `verify-kana` 가 정본과 대조하므로,
+  한쪽을 고치면 관문이 다른쪽을 강제한다.
   정본은 `js/name-learn-data.js` 다 — 2026-08-10 LP 전환으로 index.html 에서
-  진단 기능이 빠지면서 옮겼고, 공개 페이지에서는 읽지 않는다(`build-site.sh` PUBLIC 밖))
+  진단 기능이 빠지면서 옮겼고, 공개 페이지에서는 읽지 않는다(`build-site.sh` PUBLIC 밖)
 - **`repo/` 는 `mysql2` 도 `node:` 내장도 읽지 않는다.** 넘겨받은 `conn.execute()` 만.
-  그 덕에 관문 19종이 `npm install` 없이 돈다
+  그 덕에 관문 12종이 `npm install` 없이 돈다
 - **의존은 `mysql2` 하나뿐.** Stripe SDK 도 LINE SDK 도 넣지 않았다
 - **폴리시와 코드가 어긋난 적이 4번 있다.** 저장 항목을 늘리면 `privacy.html` 제2항도 같은 커밋에서
 - **페이지를 추가하면 4곳을 고친다** — `build-site.sh` 의 `PUBLIC` / `set-site-url.py` 의
@@ -68,11 +74,16 @@ LLM 일반 행동 지침(가정 금지 / 단순하게 / 최소 변경 / 검증 �
 
 ## 검증
 
-관문 19종. DB도 `npm install` 도 필요 없다.
+관문 12종. DB도 `npm install` 도 필요 없다.
 
 ```bash
-for f in saju fortune study name omikuji gilbang amulet birth pages \
-         server webhook onboarding render push fortune-server evening billing quiz kana; do
+for f in no-fortune name pages server webhook onboarding render push \
+         evening billing quiz kana; do
   node tools/verify-$f.mjs >/dev/null && echo "PASS $f" || echo "FAIL $f"
 done
 ```
+
+> 19종에서 12종으로 준 것은 **2026-08-16 에 운세 관문 8종을 폐지하고 1종을 신설**했기
+> 때문이다(`saju` `fortune` `study` `omikuji` `gilbang` `amulet` `birth`
+> `fortune-server` → `no-fortune`). 대상이 없는 관문은 항상 PASS 라서,
+> 남겨 두면 「검사가 있으니 지켜지고 있다」는 거짓 안전만 남는다.

@@ -10,7 +10,7 @@
      かな → ハングル   KANA1 / KANA2 + kanaToHangul()
      漢字 → 韓国漢字音 HANJA（手書き 222 字）
      漢数詞           sino()（1995 → 천구백구십오）
-     十二支・五行     ZODIAC / OHAENG（saju.js 側にも同じものがある）
+     十二支・五行     ZODIAC / OHAENG（2026-08-16 まで saju.js にも同じ表があった）
 
    かなの変換関数は DOM に触らない純関数なので、正本から
    その範囲だけ切り出して動かす。切り出す目印は「1. ハングル 組み立て」の
@@ -84,12 +84,12 @@ vm.runInContext(slice("  const NUM = ['','일'", "  $('d-birth')") +
                 "\n;globalThis.OHAENG=OHAENG;globalThis.ZODIAC=ZODIAC;globalThis.sino=sino;globalThis.MONTH=MONTH;",
                 box, { filename: "index.html<num>" });
 
-/* study.js は同じパッチム判定をもう 1 つ持っている（words.html から
-   index.html のインライン関数を呼べないため）。二重に持つと必ず片方だけ
-   直るので、突き合わせる相手として読み込む。 */
-const S = {};
-vm.createContext(S);
-vm.runInContext(fs.readFileSync("study.js", "utf8"), S, { filename: "study.js" });
+/* パッチム判定の写しは 1 つ減った。2026-08-16 の事業転換で
+   words.html／study.js を廃止したので、いま hasJong / 助詞の判定を
+   持っているのは js/name-learn-data.js だけ。写しどうしを突き合わせて
+   いた ［パッチム］ の 2 項も一緒に消した ── 相手の居ない照合は
+   必ず通るので、残すと「二重化を見張っている」という誤解になる。
+   （写しの照合が要る例は server/lib/kana2hangul.mjs と verify-kana） */
 
 /* ---- 1. かな → ハングル ---------------------------------------------- */
 
@@ -244,27 +244,21 @@ check("月名の不規則は 6 月と 10 月だけ", () => {
   return "6=유 / 10=시 / 他は漢数詞どおり";
 });
 
-head("[十二支・五行]  saju.js 側にも同じものがある");
+head("[十二支・五行]  学習データの中で辻褄が合っているか");
 
-check("十二支の並びが saju.js と一致する", () => {
-  // ここがずれると、同じ人にトップとおみくじで違う띠が出る。
-  const idx = box.ZODIAC.map(z => z.ko);
-  assert(Array.isArray(idx) && idx.length === 12, `index.html 側が ${idx.length} 件`);
-  // saju.js は ZODIAC を公開していない（pillars() の結果に載せるだけ）ので、
-  // ソースの表そのものを読む。公開させるために saju.js を変えるより、
-  // 見る側で完結させるほうが波及が無い。
-  const m = /var ZODIAC = \[([^\]]+)\]/.exec(fs.readFileSync("saju.js", "utf8"));
-  assert(m, "saju.js に ZODIAC が見つかりません");
-  const list = m[1].split(",").map(t => t.trim().replace(/^"|"$/g, ""));
-  assert(idx.join(",") === list.join(","), `index=${idx.join("")} / saju=${list.join("")}`);
-  return `12 支一致（${idx.slice(0, 3).join(" ")}…）`;
-});
+/* ここには「十二支の並びが saju.js と一致する」が在った。写しどうしを
+   突き合わせる項で、ずれると同じ人にトップとおみくじで違う띠が出た。
+   2026-08-16 の事業転換で saju.js ごと廃止したので、突き合わせる相手が
+   いない ── 相手の居ない照合は必ず通るため、項ごと消した。
+   ZODIAC / OHAENG は name-learn-data.js の中だけの表になったので、
+   以下は「その表が自分の中で完結しているか」を見る。 */
 
-check("五行の韓国語表記が他のファイルと同じ 5 つ", () => {
-  // saju.js / fortune.js / gilbang.js / amulet.js は 목화토금수 で通している。
-  // index.html だけ別の綴りになると、同じ五行が別物として並ぶ。
+check("五行の韓国語表記が 목화토금수 の 5 つ", () => {
+  // かつて saju.js / gilbang.js / amulet.js と綴りを揃える項だった。
+  // それらは 2026-08-16 に廃止したが、綴りそのものは学習データの中で
+  // 초성→오행 の対応が立つ前提なので、5 つであることは見続ける。
   const ko = Object.values(box.OHAENG).map(o => o.ko).sort().join("");
-  assert(ko === "\uae08\ubaa9\uc218\ud1a0\ud654", `index.html の五行が ${ko}`);
+  assert(ko === "\uae08\ubaa9\uc218\ud1a0\ud654", `五行が ${ko}`);
   return Object.values(box.OHAENG).map(o => o.ko).join(" ");
 });
 
@@ -279,35 +273,6 @@ check("初声 19 個すべてに五行が割り当たっている", () => {
   }
   assert(Object.keys(seen).length === 5, `${Object.keys(seen).length} 種類しか出ません`);
   return Object.entries(seen).map(([e, n]) => `${e}${n}`).join(" ");
-});
-
-head("[パッチム]  同じ判定が index.html と study.js の 2 か所にある");
-
-check("2 つの実装がハングルで同じ答えを出す", () => {
-  // words.html から index.html のインライン関数を呼べないので二重に持って
-  // いる。二重に持つと必ず片方だけ直るので、機械に見張らせる。
-  const bad = [];
-  let n = 0;
-  for (let c = 0xac00; c <= 0xd7a3; c += 7) {      // 全 11,172 音節を 7 つおきに
-    const ch = String.fromCharCode(c);
-    if (box.hasJong(ch) !== S.Study.hasJong(ch)) bad.push(ch);
-    n++;
-  }
-  assert(!bad.length, `${bad.length} 字で食い違い: ${bad.slice(0, 5).join(" ")}`);
-  return `${n} 音節で一致`;
-});
-
-check("助詞の選び方が 2 つの実装で一致する", () => {
-  const bad = [];
-  for (const w of ["\ubc15", "\ud558\ub098", "\uac74", "\uc544\uc774", "\uc57c", "\uc11c\uc6b8", "\ub3c4\ucfc4"]) {
-    const a = box.ega(w), b = S.Study.josa(w, "\uc774", "\uac00");
-    if (a !== b) bad.push(`${w}: index=${a} study=${b}`);
-    const c = box.ieyo(w);
-    const want = S.Study.hasJong(w) ? "\uc774\uc5d0\uc694" : "\uc608\uc694";
-    if (c !== want) bad.push(`${w}: ieyo=${c}（${want} のはず）`);
-  }
-  assert(!bad.length, bad.join(" / "));
-  return "이/가・이에요/예요 とも一致";
 });
 
 head("[場面会話]  助詞は「直前の文字」に従う。離すと別の語で決まってしまう");

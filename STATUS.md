@@ -1,6 +1,6 @@
 # STATUS.md — 지금 어디까지 왔고, 다음에 뭘 해야 하는가
 
-最終 갱신: 2026-08-10 (LINE 온보딩에서 생년월일·출생지 질문 제거)
+最終 갱신: 2026-08-16 (운세 전면 폐지 — 사업 전환)
 
 > **다른 컴퓨터에서 이어받을 때 이 파일부터 읽으십시오.**
 > 그 다음 [instruction.txt](instruction.txt) → [CLAUDE.md](CLAUDE.md) 순서입니다.
@@ -8,6 +8,44 @@
 ---
 
 ## 0. 30초 요약
+
+### §0-■■■ 운세 전면 폐지 — **P1·P2·P3 구현 완료 · 배포 대기**（2026-08-16）
+
+**Stripe 심사 기준상 점술은 제한 업종**이라 결제를 열 수 없다. 그래서 사업을
+「LINE으로 배우는 한국어」 하나로 좁혔다. 계획·결정 7건: [plan-fortune-removal](docs/plan-fortune-removal.md)
+
+| | |
+|---|---|
+| 사이트 | `/omikuji` `/gilbang` `/amulet` `/words` **삭제 → 410 Gone**. `saju.js` 등 JS 7개·데이터 2개 삭제 |
+| 서버 | 아침 편에서 **운세 1통·부적 1통 소멸**. `fortune.mjs`/`fortune-text.mjs` 삭제. `.cpanel.yml` engine 복사 제거 |
+| 개인정보 | `POST /line/link/start` **폐지**（생년월일 입구）. privacy 「生年月日は取得しません」. **DB 열은 존치**（drop 은 별건 010） |
+| 관문 | **19종 → 12종**（운세 8종 폐지 + `verify-no-fortune` 신설） |
+| 배포 순서 | **P2(서버) 먼저 → 확인 → P1(사이트)**. 거꾸로 하면 `.cpanel.yml` 의 `cp saju.js` 가 `set -e` 로 배포를 통째로 멈춘다 |
+| 다음 | §0-■ 표 참조 |
+
+### §0-■ 이번 전환의 배포 순서 (지키십시오)
+
+| ■ | 할 일 | 담당 |
+|---|---|---|
+| **■-1** | `server/**` 커밋을 먼저 push → ChemiCloud 배포 확인 | 대표 |
+| **■-2** | 다음 아침 편에 **운세·부적이 없는 것** 확인（또는 `accel-day` 로 즉시） | 대표 |
+| **■-3** | 사이트 커밋 push → `/omikuji` `/gilbang` `/amulet` `/words` 가 **410** 인지 확인 | 대표 |
+| **■-4** | ChemiCloud `server/content/fortune-lines.json` **삭제**（저장소에 없어 배포로는 안 사라진다） | 대표 |
+| **■-5** | Stripe 콘솔 — 상품명·설명에서 운세 표현 제거, 업종 재확인 → **재심사 신청** | 대표 |
+| **■-6** | Search Console — `/omikuji` `/gilbang` `/amulet` 색인 삭제 요청 | 대표 |
+| **■-7** | 기존 이용자 공지 1통（문면 초안은 계획서 §8. **「日数は変わりません」를 반드시 넣을 것**） | 대표 |
+
+### §0-■■ 일수 제한 일시 해제 — **구현 완료 · 배포 대기**（2026-08-16）
+
+체험 7일을 다 쓴 사람에게 **살 방법이 없다**（Stripe 심사 대기）. 그동안은 계속 배신한다.
+[plan-delivery-unlimited](docs/plan-delivery-unlimited.md)
+
+| | |
+|---|---|
+| 스위치 | `server/lib/repo/billing.mjs` 의 `DELIVERY_UNLIMITED = true`（코드가 정본. env 아님） |
+| 읽는 곳 | `push-daily` 의 `remaining <= 0` / `push-evening` 의 체험 종료 예고 **2곳뿐** |
+| 일수 소비 | **계속한다**（잔여가 마이너스로 내려간다 = 정확한 기록） |
+| 되돌릴 때 | `false` 로 바꾸는 순간 마이너스인 사람이 **전원 그 아침부터 정지**. **먼저 `SALES_MODE=open` 인지 확인** |
 
 ### §0-◆◆◆ 온보딩 축소 — **이름 → 코스만**（2026-08-10）
 
@@ -71,7 +109,7 @@
   001부터 재실행되던 폭탄(2회차에 errno 1054 로 배포 정지)은 `8b12063` 로 종식
 - 결제(선불 횟수권) — **A3·C2·C3 완료** (2026-08-08). **C4 실판매(`SALES_MODE=open`)는 보류**
   (2026-08-08 — 체험 3일·무결제 시 4일차 미진행 확인 후). `SALES_MODE=test` 유지
-- 관문(자동 검증) **19종 전부 통과** + smoke 29항목 (migrate 2회 연속 검사 포함).
+- 관문(자동 검증) **12종 전부 통과**（2026-08-16 이전은 19종）+ smoke 29항목 (migrate 2회 연속 검사 포함).
   2026-08-09 에 `verify-pages` 16→21 · `verify-webhook` 56→58 로 늘었다
 - **유입이 2개가 되었다** (2026-08-09) — ①사이트 진단→연동 ②사이트 배너→LINE 직행.
   양쪽이 **문자 단위로 같은** 웰컴을 받는다. 친구추가 1통째는 **서버 `welcomeBoard`**
@@ -296,7 +334,7 @@ migration `002` 가 `total_days_entitled` 를 `course_entitlements` 로 옮겼�
 | 연동 직후 서비스 안내 | 동작 |
 | 이름 선택 (사이트 이름 / LINE 표시명) | 동작 |
 | 생년월일 진위 확인 (가짜면 사이트로 되돌림) | 동작 |
-| 아침 7시 — 한국식 운세 + 그날 문법 + 회화 + 단어 | 동작 |
+| 아침 7시 — 그날 문법 + 회화 + 단어（운세는 2026-08-16 폐지） | 동작 |
 | 저녁 6시 — 같은 문법 복습 (일수 소비 안 함) | 동작 |
 | 코스별 선불 횟수권 · 결제 · 만료예고 · 재개 · 수료 | **코드 완성 / 잠김** |
 
@@ -343,9 +381,9 @@ node tools/setup-richmenu.mjs --list              # 지금 뭐가 걸려 있나
 git clone https://github.com/Kstudy101/codespaces-blank.git
 cd codespaces-blank
 
-# 관문 19종. DB도 npm install 도 필요 없습니다 (의존은 mysql2 하나뿐)
-for f in saju fortune study name omikuji gilbang amulet birth pages \
-         server webhook onboarding render push fortune-server evening billing quiz kana; do
+# 관문 12종. DB도 npm install 도 필요 없습니다 (의존은 mysql2 하나뿐)
+for f in no-fortune name pages server webhook onboarding render push \
+         evening billing quiz kana; do
   node tools/verify-$f.mjs >/dev/null && echo "PASS $f" || echo "FAIL $f"
 done
 ```
@@ -376,7 +414,7 @@ ALTER TABLE subscriptions DROP COLUMN total_days_entitled;
 배포 경로는 세 가지 (2026-08-05 부터 자동이 기본):
 
 ```bash
-# (0) 자동 — server/** 가 바뀐 push 를 GitHub Actions 가 관문 19종 통과 후
+# (0) 자동 — server/** 가 바뀐 push 를 GitHub Actions 가 관문 12종 통과 후
 #     cPanel UAPI 로 배포합니다 (.github/workflows/deploy-server.yml).
 #     Secrets 3개가 등록돼 있어야 하며, 미설정이면 조용히 건너뜁니다.
 #     ★ 되돌릴 수 없는 migration 을 쓸 때는 push 전에 DB 백업 —
@@ -482,6 +520,9 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
 | [docs/research-audit.md](docs/research-audit.md) | 전수 점검 결과 (2026-08-04) |
 | [docs/research-line-flow.md](docs/research-line-flow.md) | LINE 연동 요구사항별 실기 검증 |
 | [docs/plan-billing.md](docs/plan-billing.md) | 선불 횟수권 설계·구현 결과 |
+| [docs/plan-fortune-removal.md](docs/plan-fortune-removal.md) | **운세 전면 폐지 — 구현 완료·배포 대기 (§0-■)** |
+| [docs/research-fortune-removal.md](docs/research-fortune-removal.md) | 그 사전 조사（어디에 무엇이 있었는가） |
+| [docs/plan-delivery-unlimited.md](docs/plan-delivery-unlimited.md) | 일수 제한 일시 해제 — 구현 완료·배포 대기 (§0-■■) |
 | [docs/plan-trial-7days.md](docs/plan-trial-7days.md) | 무료 체험 3일→7일 — 구현 완료·배포 대기 (§0-◆) |
 | [docs/plan-accel-day.md](docs/plan-accel-day.md) | 가속 시험 `accel-day.mjs` — 7일·30일 절목까지 (§0-◇) |
 | [docs/plan-quiz-review-on-multiple.md](docs/plan-quiz-review-on-multiple.md) | 3의 배수 아침은 🔁만（A안） |
@@ -523,13 +564,15 @@ node db/with-env.mjs db/lapsed.mjs        # 이탈 장부
    「1일차부터 다시」로 `current_day` 가 0이 되므로, 받은 일수가 공짜가 됩니다
 2. **`advanceDay` 는 일자 확보와 일수 소비를 한 문장에서** 합니다. 나누면 그 사이에
    죽었을 때 하루가 공짜가 됩니다
-3. **운세 엔진(`saju.js`/`fortune.js`)의 사본을 `server/` 에 두지 마십시오.**
-   `node:vm` 으로 사이트의 1부를 그대로 실행합니다. 사본을 두면 웹과 LINE의
-   운세가 갈라지고, 양쪽 다 그럴듯한 숫자라 대조 전엔 아무도 모릅니다.
-   유일한 예외가 `server/lib/kana2hangul.mjs`(가나→한글) — **허가된 사본**이며,
-   `verify-kana` 가 index.html 실물과 전수 대조합니다(2026-08-05, Phase 1)
+3. **운세는 2026-08-16 에 사업에서 빠졌습니다.** 사주·운세·부적·오미쿠지·길방을
+   전부 폐지했습니다(Stripe 심사 = 점술은 제한 업종). **되돌아오는 것이 곧
+   결제 정지**이므로 `verify-no-fortune` 이 문면·파일·CI 배선 3층에서 막습니다.
+   「좋은 콘텐츠니까」로 되돌리지 마십시오 — 경위는 [plan-fortune-removal](docs/plan-fortune-removal.md).
+   사본에 관한 규칙은 그대로입니다: 사본을 두려면 **관문이 전수 대조**해야 합니다.
+   지금 허가된 사본은 `server/lib/kana2hangul.mjs`(가나→한글) 하나이며,
+   `verify-kana` 가 정본 `js/name-learn-data.js` 와 전수 대조합니다
 4. **`repo/` 는 `mysql2` 도 `node:` 내장도 읽지 않습니다.** 넘겨받은 `conn.execute()` 만.
-   그 덕에 관문 19종이 `npm install` 없이 돕니다
+   그 덕에 관문 12종이 `npm install` 없이 돕니다
 5. **의존은 `mysql2` 하나뿐입니다.** Stripe SDK 도 LINE SDK 도 넣지 않았습니다
 6. **폴리시(privacy.html)와 코드가 어긋난 적이 4번 있습니다**(GA4·Clarity·LINE·성별).
    저장하는 항목을 늘리면 반드시 제2항도 같은 커밋에서 고치십시오

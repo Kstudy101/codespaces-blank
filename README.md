@@ -1,90 +1,98 @@
-# 名前で学ぶ韓国語 (이름으로 배우는 한국어)
+# LINEで学ぶ 1日1分 簡単韓国語 (Kstudy101)
 
-> 당신의 이름이 첫 번째 한국어 교재입니다.
+> LINE で毎朝 1 分。101 日で韓国語が身につく。
 
-일본인 사용자가 **자기 이름**을 입력하면, 그 이름을 재료로 한국어를 배우는 웹 서비스.
-"운세"가 입구가 되고 **한국어 교육이 본 서비스**가 되는 구조입니다.
+**2026-08-16 — 사업 전환.** 운세(사주·오미쿠지·길방·부적)를 **전부 폐지**했습니다.
+Stripe 심사 기준상 점술은 제한 업종이라 결제를 열 수 없기 때문입니다.
+남는 상품은 하나 — **LINE 으로 매일 도착하는 한국어 레슨**.
+경위·범위·되돌리는 법은 [docs/plan-fortune-removal.md](docs/plan-fortune-removal.md).
 
-진단 로직은 전부 브라우저 안에서 끝납니다. 서버·빌드·API 키가 필요 없습니다.
+> **이 문서의 아래 절반은 「그때 왜 그렇게 만들었는가」의 기록입니다.**
+> 운세·진단·단어장을 전제로 쓴 절이 남아 있고, 그 파일들은 **이미 없습니다**
+> (`saju.js` `fortune.js` `study.js` `omikuji*` `gilbang*` `amulet*` `birth.js`
+> `words.html` `solar-terms.json` `new-moons.json`).
+> 지우지 않는 이유는 의사결정 기록이기 때문입니다 — **지금 무엇이 있는지**는
+> 바로 아래 「파일 구성」과 `STATUS.md` 가 정본입니다.
+> 되돌아오지 못하게 막는 것은 관문 `tools/verify-no-fortune.mjs` 입니다.
+
+사이트는 LP(랜딩 페이지)와 읽을거리뿐입니다. 입력 폼은 문의 페이지 하나.
 (외부 요청은 Google AdSense·애널리틱스뿐입니다 — 아래 [개인정보와 광고](#개인정보와-광고) 참고.)
 
 ## 파일 구성
 
-**페이지**
+**페이지** — 5 장 + 404
 
 | 파일 | URL | 역할 |
 |---|---|---|
-| `index.html` | `/` | 진단 앱 본체. 이름 입력으로 시작 → STEP 1〜5 → 공유 → 占い |
+| `index.html` | `/` | LP. LINE 강좌 안내（아침 레슨·저녁 복습 목업·요금표） |
 | `privacy.html` | `/privacy` | プライバシーポリシー (AdSense 필수) |
+| `tokushoho.html` | `/tokushoho` | 特定商取引法に基づく表記. 체험 일수는 `billing.mjs` 와 대조 |
 | `contact.html` | `/contact` | お問い合わせ. Formspree 연동 + FAQ |
-| `tips.html` | `/tips` | 韓国語の豆知識（깨알 지식）. 항목 5개 |
-| `omikuji.html` | `/omikuji` | おみくじ × 토정비결. 하루 1회 추첨 |
-| `gilbang.html` | `/gilbang` | 恵方 × 길방. 방위·손없는 날 |
-| `amulet.html` | `/amulet` | 부적メーカー. 오행 부적 제작·다운로드 |
-| `words.html` | `/words` | 단어장 목록·삭제. **`noindex`·sitemap 제외** |
+| `tips.html` | `/tips` | 韓国語の豆知識（깨알 지식） |
 | `404.html` | — | Cloudflare 가 대신해 주던 것. Apache 는 실제 파일이 필요 |
 
-**공용 스크립트** — 브라우저와 Node 양쪽에서 돌아갑니다(검증이 그대로 읽어서 실행)
+`/omikuji` `/gilbang` `/amulet` `/words` 는 **410 Gone**（`.htaccess`）.
+404 가 아니라 410 인 것은 「의도적 폐지」의 신호라 크롤러가 재시도를 멈추기 때문입니다.
 
-| 파일 | 역할 | 의존 |
-|---|---|---|
-| `saju.js` | 사주 4주. 절기·진태양시·서머타임·조자시 | `solar-terms.json` |
-| `fortune.js` | 운세 6항목 점수 + 전회 비교 | `saju.js` |
-| `study.js` | 단어장·출석·발음(SpeechSynthesis)·받침 판정 | — |
-| `omikuji.js` | 추첨 + 하루 1회 제한 | — |
-| `gilbang.js` | 恵方·손없는 날·오행 방위 | `saju.js`, `new-moons.json` |
-| `amulet.js` | 부적 6종·오방색·발원문 | `gilbang.js` |
-| `birth.js` | 생년월일을 같은 탭 안에서만 들고 다님 (`sessionStorage`) | — |
+**공용 스크립트** — 없습니다.
+2026-08-16 이전에는 `saju.js` `fortune.js` `study.js` `omikuji.js` `gilbang.js`
+`amulet.js` `birth.js` 7개가 있었고, 브라우저와 Node 양쪽에서 돌았습니다.
+지금 배포되는 `.js` 는 **0개**입니다(`.htaccess` 의 no-cache 규칙은 남겨 두었습니다 —
+다음에 추가하는 1개가 기본 1주 캐시를 잡지 않도록).
+
+가나→한글 학습 데이터는 `js/name-learn-data.js` 에 있고, **공개하지 않습니다**
+(`build-site.sh` 의 `PUBLIC` 밖). 정본이며 `verify-name`·`verify-kana` 가 읽습니다.
 
 **데이터·스타일**
 
 | 파일 | 역할 |
 |---|---|
-| `page.css` | 문서·콘텐츠 페이지 8장이 공유하는 스타일 + `.tip` 컴포넌트 |
-| `kanji.json` | 상용한자 2,136자 참조 데이터 (지연 로딩) |
-| `solar-terms.json` | 절기 시각 1930〜2030 (2,424행) |
-| `new-moons.json` | 삭(朔) 2000〜2040 (507건, 1.6KB) |
+| `page.css` | 문서·콘텐츠 페이지가 공유하는 스타일 + `.tip` 컴포넌트 |
+| `kanji.json` | 상용한자 2,136자 참조 데이터. **공개 소비자는 0**（`verify-name` 이 저장소에서 읽음） |
 | `ads.txt` | AdSense 판매자 선언. 루트에서 서빙 확인 완료 |
 | `robots.txt` | 크롤러 허용 + sitemap 선언 |
-| `sitemap.xml` | 7페이지, 절대 URL (`/words` 는 의도적으로 제외) |
+| `sitemap.xml` | 5페이지, 절대 URL |
 | `ogp.png` | 1200×630 OGP 이미지 (node-canvas 로 생성) |
-| `.htaccess` | **Apache 설정.** 확장자 없는 URL·리다이렉트·캐시·보안헤더 |
+| `.htaccess` | **Apache 설정.** 확장자 없는 URL·410·리다이렉트·캐시·보안헤더 |
 | `data/kanji_platform.db` | 원본 SQLite. 런타임에는 쓰이지 않음 |
-| `data/naoj-reference.json` | 국립천문대 공표값. 검증의 기준 (통신 없이 대조) |
 
 **도구** — 전부 로컬 실행 → 결과를 커밋하는 방식입니다
 
 | 파일 | 역할 |
 |---|---|
 | `tools/build-kanji-json.py` | `.db` → `kanji.json` 재생성 |
-| `tools/build-solar-terms.py` | 절기 시각 계산 → `solar-terms.json` |
-| `tools/build-new-moons.py` | 삭 계산 → `new-moons.json` |
-| `tools/fetch-naoj-reference.py` | 국립천문대에서 기준값 취득 → `data/naoj-reference.json` |
-| `tools/verify-*.mjs` | 배포 관문 19종 (아래 「검증」) |
+| `tools/verify-*.mjs` | 배포 관문 12종 (아래 「검증」) |
+| `tools/verify-no-fortune.mjs` | **운세가 돌아오지 않았는지.** 폐지 관문 8종을 지운 자리 |
 | `tools/build-site.sh` | 공개 파일만 `dist/` 로 모음 + 6종 점검 (내부 링크·canonical·구 호스트·sitemap 망라·**CSS 토큰**) |
 | `tools/set-site-url.py` | 절대 URL 일괄 교체 (도메인 이전용) |
-| `.github/workflows/deploy.yml` | push → 검증 16종 → Xserver rsync 배포 |
+| `tools/publish-content.sh` | 원고 검사→업로드→seed 일괄 |
+| `.github/workflows/deploy.yml` | push → 관문 → Xserver rsync 배포 |
+| `.github/workflows/deploy-server.yml` | `server/**` push → 관문 → ChemiCloud 배포 |
 
 **`server/`** — LINE 발송 시스템. **이 사이트와 같은 서버에서 돌지 않습니다**
 
 | 파일 | 역할 |
 |---|---|
-| `server/app.js` → `app.mjs` | HTTP 수신부. 경로 3개(`/line/webhook`·`/health`·`/line/callback`) |
+| `server/app.js` → `app.mjs` | HTTP 수신부. 경로 7개(webhook·callback·profile 3·stripe·health) |
 | `server/lib/signature.mjs` | **LINE 서명 검증.** 시스템 전체의 경계 |
 | `server/lib/webhook.mjs` | 이벤트 4종 분배 |
-| `server/lib/handlers/*.mjs` | `follow` / `message` / `postback` / `link` |
+| `server/lib/handlers/*.mjs` | `follow` / `message` / `postback` / `link` / `profile` / `checkout` |
 | `server/lib/linelogin.mjs` | LINE Login (OAuth). **Messaging API 와 다른 채널** |
 | `server/lib/token.mjs` | `state` 생성·해시 |
-| `server/lib/pages.mjs` | 연동 결과 화면 (HTML) |
+| `server/lib/pages.mjs` | 연동 결과·프로필 편집 화면 (HTML) |
 | `server/lib/line.mjs` | Messaging API 클라이언트 (fetch, SDK 없음) |
-| `server/db/schema.sql` | 테이블 9개. 계획서에서 고친 6곳을 그 자리에 적어 둠 |
-| `server/db/migrate.mjs` | 스키마 적용 + 「있어야 할 9개가 정말 있는지」 확인 |
-| `server/db/smoke.mjs` | **진짜 DB 에 리포지토리를 한 바퀴 돌림** (25항목). 본번에 돌려도 안전 |
+| `server/lib/render.mjs` | 레슨 1통을 조립. 신·구 양식 |
+| `server/lib/content-check.mjs` | 원고 입고 검사. **운세 단정을 금지하는 곳**(`FORTUNE_ASSERT`) |
+| `server/db/schema.sql` | 테이블. 계획서에서 고친 6곳을 그 자리에 적어 둠 |
+| `server/db/migrate.mjs` | 스키마 적용 + 적용 이력(`schema_migrations`) |
+| `server/db/smoke.mjs` | **진짜 DB 에 리포지토리를 한 바퀴 돌림.** 본번에 돌려도 안전 |
+| `server/db/push-daily.mjs` | 아침 7시 배치 |
+| `server/db/push-evening.mjs` | 저녁 6시 복습 배치 |
 | `server/lib/db.mjs` | MySQL 접속. **외부 패키지를 읽는 유일한 파일** |
 | `server/lib/jst.mjs` | 일본 시간의 벽시계. 서버 시계가 UTC 여도 어긋나지 않음 |
 | `server/lib/env.mjs` | `.env` 읽기. 빠진 값을 **이름으로 전부 나열**하고 멈춤 |
-| `server/lib/sqlfile.mjs` | `.sql` 을 문장 단위로 자름 (`ENUM('7days',…)` 중간에서 안 끊음) |
-| `server/lib/repo/*.mjs` | 리포지토리 5개 — `users` / `billing` / `learning` / `pushlogs` / `links` |
+| `server/lib/sqlfile.mjs` | `.sql` 을 문장 단위로 자름 |
+| `server/lib/repo/*.mjs` | 리포지토리 — `users` / `billing` / `learning` / `pushlogs` / `links` / `entitlements` / `lapses` / `oauth-states` |
 
 자세한 것은 아래 [LINE 발송 시스템 (`server/`)](#line-발송-시스템-server) 참고.
 
@@ -1060,7 +1068,7 @@ node db/smoke.mjs
 
 ### 1. 배포 관문 — 저장소에 있고, push 할 때마다 돌아갑니다
 
-`tools/verify-*.mjs` 19종 **678항목**. `.github/workflows/deploy.yml` 이 rsync 앞에
+`tools/verify-*.mjs` 12종（2026-08-16 에 운세 8종 폐지·`no-fortune` 신설）. `.github/workflows/deploy.yml` 이 rsync 앞에
 세워 두었으므로, 하나라도 실패하면 배포가 멈춥니다. 루트에 `package.json` 이 없으므로
 의존 패키지도 없습니다 — 각 스크립트가 `vm` 으로 대상 `.js` 를 그대로 읽어 실행합니다.
 `server/` 만 `mysql2` 를 쓰지만 `lib/db.mjs` 한 곳에 갇혀 있어, `verify-server.mjs`
@@ -1178,7 +1186,7 @@ bash tools/build-site.sh    # dist/ 를 만들고 링크·canonical·구 호스�
   ([docs/plan-quiz-checkpoint.md](docs/plan-quiz-checkpoint.md) §4 (가), 2026-08-05)
 - **배신 서버 배포를 손배포에서 자동으로 전환 (2026-08-05, 대표 지시).** 원래는
   「누른 사람이 결과를 지켜본다」로 의도적 손배포였다([tools/deploy-server.sh](tools/deploy-server.sh)
-  머리말). 이제 `server/**` 가 바뀐 push 는 관문 19종 통과 후
+  머리말). 이제 `server/**` 가 바뀐 push 는 관문 12종 통과 후
   [deploy-server.yml](.github/workflows/deploy-server.yml) 이 cPanel UAPI 로 배포한다 —
   지켜보는 눈의 대체는 Actions 의 실패 표시 + 배포 로그 말미 인양 + `/health` 확인.
   수동 2경로(cPanel 화면·deploy-server.sh)는 대체 수단으로 남긴다.

@@ -16,12 +16,13 @@
    約束なので、偽物を渡して SQL を読む。LINE も偽物を渡し、
    呼ばれた瞬間に DB が何をされていたかを覗く。
    ================================================================== */
-import { deliverOne, retryKey, tooEarly, tooLate, fortuneSection } from "../server/db/push-daily.mjs";
+import { deliverOne, retryKey, tooEarly, tooLate } from "../server/db/push-daily.mjs";
 import { LineApiError } from "../server/lib/line.mjs";
 /* 読みを訊く文面は実物と突き合わせる ── 「読み方」という語を探す形だと、
    文言を練り直すたびに関門が赤くなる。守りたいのは語ではなく
    「askReading そのものが送られたか」（verify-kana も同じ）。 */
 import { askReading } from "../server/lib/onboarding.mjs";
+import { DELIVERY_UNLIMITED } from "../server/lib/repo/billing.mjs";
 
 let pass = 0;
 const fails = [];
@@ -140,12 +141,31 @@ await check("今日ぶんを既に送っていれば、何もしない", async (
   return "確保もしない";
 });
 
-await check("保有日数を超えたら本編は送らない。再購入の案内だけ 1 回（§3）", async () => {
-  /* 台帳が新しく開く朝 ── 案内が 1 通、レッスンは 0 通。 */
+/* ---- 残り 0 の朝 ── DELIVERY_UNLIMITED で挙動が入れ替わる ------------
+   解除中（2026-08-16〜）は配り続ける。決済が開けないので、止まった人に
+   買う手段が無いため（repo/billing.mjs）。
+
+   検査は定数を読んで**両方の道を書いたまま**にする。解除中の分だけ
+   書いて元を消すと、制限を戻す日にこの朝の約束（本編 0 通・案内 1 回・
+   日数は減らない）を誰も見張らなくなる ── そこは金銭に直結する。 */
+await check("保有日数を超えた朝の扱い（§3）", async () => {
   const conn = fakeConn(READY);
   let msgs = null;
   const r = await deliverOne(conn, { ...USER, days_entitled: 3, days_used: 3 },
     { send: async (_to, m) => { msgs = m; return {}; } });
+
+  if (DELIVERY_UNLIMITED) {
+    assert(/^送信:/.test(r), `解除中なのに止まりました: ${r}`);
+    assert(msgs && msgs.length >= 1, "レッスンが送られていません");
+    assert(!msgs.some((m) => /続きから/.test(m.text || "")), "再購入の案内が出ています");
+    assert(!conn.calls.some((c) => /INSERT INTO lapse_log/i.test(c.sql)),
+      "解除中に離脱台帳が開いています");
+    assert(conn.sql().some((s) => /UPDATE learning_progress/i.test(s)),
+      "日を進めていません（解除中も消費は続ける ── 帳簿に残す）");
+    return "解除中: 本編を配る・案内なし・台帳も開かない";
+  }
+
+  /* 台帳が新しく開く朝 ── 案内が 1 通、レッスンは 0 通。 */
   assert(r === "日数切れ", r);
   assert(msgs && msgs.length === 1, `送った数が ${msgs?.length}（案内 1 通のはず）`);
   assert(/日数/.test(msgs[0].text) && /続きから/.test(msgs[0].text),
@@ -156,7 +176,20 @@ await check("保有日数を超えたら本編は送らない。再購入の案�
     "日を消費しています（この分岐は advanceDay の手前のはず）");
   assert(conn.calls.some((c) => /INSERT INTO push_logs/i.test(c.sql) && c.params.includes("upsell")),
     "upsell の記録がありません");
-  return "本編 0 / 案内 1・日数は減らない";
+  return "制限中: 本編 0 / 案内 1・日数は減らない";
+});
+
+await check("解除中は残りがマイナスでも配る（何日ぶん超えても止まらない）", async () => {
+  const conn = fakeConn(READY);
+  let sent = false;
+  const r = await deliverOne(conn, { ...USER, days_entitled: 7, days_used: 40 },
+    { send: async () => { sent = true; return {}; } });
+  if (DELIVERY_UNLIMITED) {
+    assert(sent && /^送信:/.test(r), `残り -33 で止まりました: ${r}`);
+    return "残り -33 でも配る";
+  }
+  assert(!sent && r === "日数切れ", `${r} / 送信=${sent}`);
+  return "制限中: 止まる";
 });
 
 /* everSent / everFailed だけに当てる形。sentToday も
@@ -230,10 +263,15 @@ await check("台帳が既に開いていれば、案内は二度と出ない（�
   /* findOpen が行を返す ── openIfAbsent は created=false。 */
   const conn = fakeConn({ ...READY,
     "FROM lapse_log": [{ id: 5, user_id: 7, track: "beginner" }] });
-  let sent = false;
+  let msgs = null;
   const r = await deliverOne(conn, { ...USER, days_entitled: 3, days_used: 3 },
-    { send: async () => { sent = true; return {}; } });
-  assert(!sent && r === "日数切れ", `${r} / 送信=${sent}`);
+    { send: async (_to, m) => { msgs = m; return {}; } });
+  if (DELIVERY_UNLIMITED) {
+    /* 解除中はそもそもこの分岐へ来ない。案内が出ないことは同じ。 */
+    assert(!(msgs || []).some((m) => /続きから/.test(m.text || "")), "案内が出ています");
+    return "解除中: 分岐に来ない（案内 0）";
+  }
+  assert(!msgs && r === "日数切れ", `${r} / 送信=${!!msgs}`);
   return "エピソードにつき 1 回";
 });
 
@@ -606,14 +644,15 @@ await check("名前をどちらにするかは、選べる人にだけ訊く", a
 });
 
 await check("生年月日の未確認では、レッスンを止めない", async () => {
-  /* 止まるのは運勢だけ。ここで止めると、確かめていないというだけで
-     レッスンが 1 日も届かなくなる。 */
+  /* 昔はここで運勢だけが落ちていた。2026-08-16 に運勢そのものを
+     廃止したので、今は birth_* を誰も読まない ── それでも列は
+     残っているので、居座った値がレッスンを止めないことを見る。 */
   const conn = fakeConn(READY);
   let sent = false;
   await deliverOne(conn, { ...USER, birth_date: "1995-04-12", birth_confirmed: false },
     { send: async () => { sent = true; return {}; } });
   assert(sent, "レッスンまで止まりました");
-  return "運勢だけ落ちる";
+  return "birth_* は何にも効かない";
 });
 
 /* 生年月日は配信を止めない段なので、そこが返ってきたからといって
@@ -671,92 +710,69 @@ await check("読み仮名を待つ人には、読み方の質問を送り直す"
   return "askReading を送り直す / 3 回で黙る";
 });
 
-console.log("\n[運勢]  3 通目。付かない日があっても、レッスンは止めない");
+console.log("\n[廃止の見張り]  朝の便はレッスンだけ（2026-08-16 の事業転換）");
 
-/* 生年月日まで確かめ終わっている人。 */
-const WITH_SAJU = {
+/* かつてここには 3 通目に運勢、4 通目に부적が付いていた。Stripe の
+   審査基準（占い・鑑定は扱えない）で両方とも廃止した ──
+   docs/plan-fortune-removal.md。
+
+   列（birth_date ほか）は残したままなので、「値がある人にはまた
+   付く」形で戻ってくるのが一番あり得る再発。この節はそれを見る。 */
+const WITH_BIRTH = {
   ...USER,
   birth_date: "1995-04-12", birth_time: "09:30:00", birth_confirmed: true,
   raw_result_json: { zodiac: "돼지", city: "tokyo" }
 };
 
-/* 30 マス + 十神 10 の代わり。実物は server/content/ にあり
-   公開リポジトリには無いので、形だけ同じものを渡す。 */
-const CATS = ["total", "money", "love", "work", "health", "study"];
-const GRADES = ["대길", "길", "중길", "소길", "말길"];
-const SIPSIN = ["비견", "겁재", "식신", "상관", "편재", "정재", "편관", "정관", "편인", "정인"];
-const FAKE_LINES = {
-  cats: Object.fromEntries(CATS.map((c) => [c,
-    Object.fromEntries(GRADES.map((g) => [g, { kr: `${c}-${g}-kr`, ja: `${c}-${g}-ja` }]))])),
-  sipsin: Object.fromEntries(SIPSIN.map((s) => [s, { kr: `${s}-kr`, ja: `${s}-ja` }]))
-};
-
-console.log("\n[きょうの부적]  ボタンを押すまで作られない（지시서⑪）");
-
-const { amuletSection, amuletInvite } = await import("../server/db/push-daily.mjs");
-const { fortuneFor } = await import("../server/lib/fortune.mjs");
-const { rankCats } = await import("../server/lib/fortune-text.mjs");
-const { jstDate } = await import("../server/lib/jst.mjs");
-
-await check("運勢の後ろに부적 Flex ── 願いはその日いちばん低い項目", async () => {
+await check("生年月日が入っていても、届くのはレッスン 2 通だけ", async () => {
   const conn = fakeConn(READY);
   let msgs = null;
-  const r = await deliverOne(conn, WITH_SAJU,
-    { send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES });
+  const r = await deliverOne(conn, WITH_BIRTH,
+    { send: async (_t, m) => { msgs = m; return {}; } });
   assert(/送信:4日目/.test(r), r);
-  const fi = msgs.findIndex((m) => m.type === "text" && /오늘의 운세/.test(m.text));
-  assert(fi >= 0, "運勢がありません");
-  const am = msgs[fi + 1];
-  assert(am && am.type === "flex", `運勢の次が부적ではありません: ${am && am.type}`);
-  assert(am.altText === "🔮 きょうの特別なお守り", am.altText);
-  /* altText に内容（どの項目か）を出さない（§4-4）。 */
-  assert(!/金運|恋愛|仕事|健康|学習|money|love|work|health|study/.test(am.altText),
-    `altText に내용이 새고 있습니다: ${am.altText}`);
-  /* 願いは rankCats.bottom そのもの ── 本文の「いちばん低い」と同じ関数。 */
-  const expected = rankCats(fortuneFor(WITH_SAJU, jstDate()).scores).bottom;
-  const uri = am.contents.footer.contents[0].action.uri;
-  assert(uri.endsWith(`/amulet?cat=${expected}`), `${uri}（bottom=${expected}）`);
-  assert(am.contents.footer.contents[0].action.type === "uri", "1 タップで開く uri ではありません");
-  return `cat=${expected}（bottom）・4 通目`;
+  assert(msgs.length === 2, `${msgs.length} 通でした（本文 2 通のはず）`);
+  assert(/^📘 Day \d+ :/.test(msgs[0].text), `1 通目が本文ではありません: ${msgs[0].text.slice(0, 30)}`);
+  return "本文 2 通";
 });
 
-await check("부적 URL には cat 以外を乗せない（생년월일・이름・id 금지）", async () => {
-  const m = amuletInvite("money");
-  const uri = m.contents.footer.contents[0].action.uri;
-  assert(/\/amulet\?cat=money$/.test(uri), uri);
+await check("Flex（부적カード）は 1 通も出ない・運勢の文面も出ない", async () => {
+  const conn = fakeConn(READY);
+  let msgs = null;
+  await deliverOne(conn, WITH_BIRTH, { send: async (_t, m) => { msgs = m; return {}; } });
+  assert(!msgs.some((m) => m.type === "flex"), "Flex が出ました");
+  const all = msgs.map((m) => m.text || m.altText || "").join("\n");
+  assert(!/오늘의 운세|총운|運勢|お守り/.test(all),
+    `운세 문면이 남아 있습니다: ${all.slice(0, 80)}`);
+  return "flex 0 通・문면 0 곳";
+});
+
+await check("push-daily に運勢・부적の識別子が残っていない", async () => {
+  /* export を消しただけだと、内部に関数が残って「呼ぶ 1 行を足せば
+     戻る」状態になる。差し替え口（load / amulet）ごと消えたことを
+     ソースで見る ── コメントの履歴は除いて数える。 */
+  const mod = await import("../server/db/push-daily.mjs");
+  for (const name of ["fortuneSection", "amuletSection", "amuletInvite"]) {
+    assert(!(name in mod), `${name} が export に残っています`);
+  }
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../server/db/push-daily.mjs", import.meta.url), "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "");
-  const fn = src.match(/export function amuletInvite[\s\S]*?\n}\n/)[0];
-  assert(/\/amulet\?cat=\$\{cat\}/.test(fn), "uri の組み立てが cat だけではありません");
-  assert(!/birth|name|u\.id|line_user_id/.test(fn), "부적 URL 에 개인정보가 실립니다");
-  return "cat だけ ── privacy 改定不要の根拠";
+    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert(!/fortune|amulet/i.test(src), "コードに fortune / amulet の識別子が残っています");
+  return "export 0・識別子 0";
 });
 
-await check("운세가 없는 아침엔 부적도 없다（맥락 없는 카드 금지）", async () => {
-  /* USER 는 birth_date 없음 → fortuneSection null → 부적도 없음。 */
-  const conn = fakeConn(READY);
-  let msgs = null;
-  await deliverOne(conn, USER, { send: async (_t, m) => { msgs = m; return {}; } });
-  assert(!msgs.some((m) => m.type === "flex"), "運勢なしで부적만 갔습니다");
-  return "運勢が前提";
+await check("運勢エンジンを読むモジュールが消えている", async () => {
+  const { existsSync } = await import("node:fs");
+  for (const f of ["../server/lib/fortune.mjs", "../server/lib/fortune-text.mjs"]) {
+    assert(!existsSync(new URL(f, import.meta.url)), `${f} が戻っています`);
+  }
+  return "fortune.mjs / fortune-text.mjs 無し";
 });
 
-await check("부적 조립이 던져도 아침은 그대로 나간다（§4-5 폴백）", async () => {
-  const conn = fakeConn(READY);
-  let msgs = null;
-  const r = await deliverOne(conn, WITH_SAJU, {
-    send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES,
-    amulet: () => { throw new Error("わざと壊す"); }
-  });
-  assert(/送信:4日目/.test(r), r);
-  assert(msgs.some((m) => /오늘의 운세/.test(m.text || "")), "運勢まで消えました");
-  assert(!msgs.some((m) => m.type === "flex"), "壊れた부적이 실렸습니다");
-  return "운세・본문 정상、부적만 조용히 빠짐";
-});
-
-await check("예고와 절목이 겹친 아침(5통)은 부적이 쉰다 ── LINE 상한", async () => {
-  /* 본문2+운세1+예고1+절목1 = 5。부적을 더하면 6 → push 전체가 400。 */
+await check("予告と節目が重なる朝でも 4 通 ── LINE の上限 5 を超えない", async () => {
+  /* 本文2+予告1+節目1 = 4。かつてはここに運勢と부적が入って丁度 5 通で、
+     1 通足すと push 全体が 400 で落ちる境目だった。今は 1 通ぶん余裕が
+     あるが、上限そのものは変わらないのでここで数え続ける。 */
   const conn = fakeConn({ ...READY,
     "FROM content_templates": [{ ...TPL[0], day_number: 30,
       quiz: JSON.stringify({ question: "?", choices: ["a", "b", "c"], answer: 1 }) }],
@@ -764,94 +780,32 @@ await check("예고와 절목이 겹친 아침(5통)은 부적이 쉰다 ── 
     "FROM purchases": [{ id: 1 }]
   });
   const { EXPIRING_AT } = await import("../server/lib/handlers/checkout.mjs");
-  const u = { ...WITH_SAJU, current_day: 29, days_used: 29,
+  const u = { ...WITH_BIRTH, current_day: 29, days_used: 29,
               days_entitled: 29 + EXPIRING_AT + 1 };
   let msgs = null;
   const r = await deliverOne(conn, u,
-    { send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES });
+    { send: async (_t, m) => { msgs = m; return {}; } });
   assert(/送信:30日目/.test(r), r);
-  assert(msgs.length === 5, `${msgs.length} 通（上限 5 のはず）`);
-  assert(!msgs.some((m) => m.type === "flex"), "6 通目の부적이 실렸습니다");
-  return "5 通のまま ── 부적은 그 아침만 쉼";
+  assert(msgs.length === 4, `${msgs.length} 通（本文2+予告+節目=4 のはず）`);
+  assert(msgs.length <= 5, "LINE の 1 push 上限 5 を超えました");
+  assert(!msgs.some((m) => m.type === "flex"), "Flex が混ざりました");
+  return "4 通 ── 上限まで 1 通の余裕";
 });
 
-await check("確かめた生年月日の人には、運勢が付く", async () => {
-  const m = fortuneSection(WITH_SAJU, { load: () => FAKE_LINES });
-  assert(m && m.type === "text", JSON.stringify(m));
-  assert(/총운/.test(m.text), m.text);
-  assert(SIPSIN.some((s) => m.text.includes(`${s}-kr`)), `十神の一言がありません: ${m.text}`);
-  return "総合運 + 十神";
-});
+console.log("\n[🍀 今日のひとこと]  레슨 최하단에 1회만 ── 이중 출력 금지");
 
-await check("生年月日があれば運勢が付く（birth_confirmed は不要）", async () => {
-  /* ウェブ連携で birth_date だけ入っている人にも運勢を付ける。
-     LINE では生年月日を訊かないので、confirmed フラグは見ない。 */
-  const m = fortuneSection({ ...WITH_SAJU, birth_confirmed: false },
-    { load: () => FAKE_LINES });
-  assert(m && m.type === "text", JSON.stringify(m));
-  assert(/총운/.test(m.text), m.text);
-  return "birth_date だけで付く";
-});
-
-await check("四柱が無い人にも付けない（既定の運勢を作らない）", async () => {
-  const m = fortuneSection({ ...USER, birth_date: null }, { load: () => FAKE_LINES });
-  assert(m === null, JSON.stringify(m));
-  return "null";
-});
-
-await check("文面が未入稿なら、黙って落とす（レッスンは送る）", async () => {
-  const m = fortuneSection(WITH_SAJU, { load: () => null });
-  assert(m === null, JSON.stringify(m));
-
-  const conn = fakeConn(READY);
-  let msgs = null;
-  await deliverOne(conn, WITH_SAJU,
-    { send: async (_t, mm) => { msgs = mm; return {}; }, load: () => null });
-  assert(msgs && msgs.length === 2, `${msgs ? msgs.length : 0} 通でした（運勢が付いています）`);
-  return "レッスン 2 通だけ";
-});
-
-await check("運勢の読み込みが落ちても、レッスンは送る", async () => {
-  const m = fortuneSection(WITH_SAJU,
-    { load: () => { throw new Error("欠番があります"); } });
-  assert(m === null, "例外が外へ出ました");
-  return "例外を外へ出さない";
-});
-
-await check("運勢は 3 通目（レッスンの後ろ）", async () => {
-  /* 文面は server/content/ にあり、公開リポジトリには無い。
-     既定の読み込みに任せると、手元では 3 通・CI では 2 通になる
-     ── 実際そうなって CI だけが落ちた。渡して固定する。 */
-  const conn = fakeConn(READY);
-  let msgs = null;
-  await deliverOne(conn, WITH_SAJU,
-    { send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES });
-  assert(msgs.length === 4, `${msgs.length} 通でした（本文 2 + 運勢 + 부적）`);
-  assert(/^📘 Day \d+ :/.test(msgs[0].text), `1 通目が本文ではありません: ${msgs[0].text.slice(0, 30)}`);
-  assert(/총운/.test(msgs[2].text), `3 通目が運勢ではありません: ${msgs[2].text.slice(0, 30)}`);
-  assert(msgs[3].type === "flex", `4 通目が부적ではありません（지시서⑪）: ${msgs[3].type}`);
-  return "文法・単語・運勢・부적";
-});
-
-console.log("\n[bridge 이동（지시서㉑ §1-3）]  운세에서 빼고 레슨 최하단으로 ── 이중 출력 금지");
-
-await check("bridge 는 운세 메시지에 더 이상 없다（fortuneSection 은 원고를 받지 않는다）", async () => {
-  /* 시그니처 자체가 template 를 받지 않게 됐다 ── 어느 호출이 남아
-     있어도 두 번째 인자는 옵션으로 읽혀 bridge 가 실릴 길이 없다.
-     출력에서도 옛 구분선（──────────）이 사라졌는지 본다. */
-  const m = fortuneSection(WITH_SAJU, { load: () => FAKE_LINES });
-  assert(m && /총운/.test(m.text), "운세 자체가 사라졌습니다");
-  assert(!/──────────/.test(m.text), "bridge 구분선이 남아 있습니다");
-  return "운세는 운세만";
-});
-
-await check("bridge 가 있는 아침 ── 레슨 말미（🍀）에 1회만, 운세와 이중 출력 없음", async () => {
+/* 원래 이 절은 「운세에서 빼고 레슨으로 옮겼다（지시서㉑ §1-3）」를
+   지키는 자리였다. 2026-08-16 에 운세 쪽이 통째로 없어졌으므로,
+   지금 남는 약속은 **레슨 말미에 정확히 1회** 하나다.
+   열 이름 fortune_bridge 는 그대로 두었다（D5 ── 실체는 그날 문법으로
+   말하는 한마디이고, 개명은 원고 303일·렌더러·관문을 같이 흔든다）. */
+await check("bridge 가 있는 아침 ── 레슨 말미（🍀）에 1회만", async () => {
   const withBridge = [{ ...TPL[0],
     fortune_bridge: JSON.stringify({ kr: "오늘은 「예요」로 부드럽게.", ja: "今日は「예요」でやわらかく。" }) }];
   const conn = fakeConn({ ...READY, "FROM content_templates": withBridge });
   let msgs = null;
-  const r = await deliverOne(conn, WITH_SAJU,
-    { send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES });
+  const r = await deliverOne(conn, WITH_BIRTH,
+    { send: async (_t, m) => { msgs = m; return {}; } });
   assert(/送信:4日目/.test(r), r);
 
   const all = msgs.map((m) => m.text || "").join("\n====\n");
@@ -860,16 +814,13 @@ await check("bridge 가 있는 아침 ── 레슨 말미（🍀）에 1회만,
   assert(all.includes("🍀 今日のひとこと"), "🍀 라벨이 없습니다");
   assert(!all.includes("오늘은 「예요」로 부드럽게"), "bridge.kr 이 화면에 나왔습니다");
 
-  const fi = msgs.findIndex((m) => /오늘의 운세/.test(m.text || ""));
-  assert(fi >= 0, "운세가 없습니다");
-  assert(!/ひとこと|예요」でやわらかく/.test(msgs[fi].text), "운세 메시지에 bridge 가 실렸습니다");
-  /* 구양식（pos 없음）이므로 🍀는 레슨 2통째 말미 ── 운세보다 앞. */
+  /* 구양식（pos 없음）이므로 🍀는 레슨 2통째 말미 ── 그것이 마지막 통. */
   const bi = msgs.findIndex((m) => (m.text || "").includes("🍀"));
-  assert(bi >= 0 && bi < fi, `🍀 위치가 레슨이 아닙니다（msgs[${bi}]・운세 ${fi}）`);
-  return "레슨에 1회・운세에 0회";
+  assert(bi === msgs.length - 1, `🍀 가 마지막 통에 없습니다（msgs[${bi}] / ${msgs.length}통）`);
+  return "레슨에 1회만";
 });
 
-await check("신양식 평일 ── ❓ 꼬리통이 묶음 맨 끝（부적 뒤）에서 버튼을 연다", async () => {
+await check("신양식 평일 ── ❓ 꼬리통이 묶음 맨 끝에서 버튼을 연다", async () => {
   /* pos 있는 6어 + quiz + bridge. 4일째（3의 배수 아님）── ❓만.
      복습 뽑기는 돌지 않는다. */
   const NEWTPL = [{
@@ -892,21 +843,20 @@ await check("신양식 평일 ── ❓ 꼬리통이 묶음 맨 끝（부적 �
   }];
   const conn = fakeConn({ ...READY, "FROM content_templates": NEWTPL });
   let msgs = null;
-  const r = await deliverOne(conn, { ...WITH_SAJU, current_day: 3, days_used: 3 },
-    { send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES });
+  const r = await deliverOne(conn, { ...WITH_BIRTH, current_day: 3, days_used: 3 },
+    { send: async (_t, m) => { msgs = m; return {}; } });
   assert(/送信:4日目/.test(r), r);
 
-  assert(msgs.length === 5, `${msgs.length} 통（1·2통+운세+부적+❓ = 5）`);
+  assert(msgs.length === 3, `${msgs.length} 통（1·2통+❓ = 3）`);
   const last = msgs[msgs.length - 1];
   assert(last.quickReply?.items?.every((i) => /^action=review&day=4&choice=\d$/.test(i.action.data)),
     `말미가 ❓ 꼬리통이 아닙니다: ${JSON.stringify(last.quickReply?.items?.[0]?.action || last.type)}`);
   assert(/❓ 今日のクイズ/.test(last.text), "❓ 헤더가 없습니다");
   assert(/🍀 今日のひとこと\n「私も」と言ってみましょう。$/.test(last.text), "🍀 가 꼬리통 말미에 없습니다");
-  assert(msgs.findIndex((m) => /오늘의 운세/.test(m.text || "")) < msgs.length - 1, "운세가 꼬리통 뒤에 있습니다");
-  assert(msgs.some((m) => m.type === "flex"), "부적이 빠졌습니다（5통 이내인데）");
+  assert(!msgs.some((m) => m.type === "flex"), "Flex 가 섞였습니다");
   assert(!conn.sql().some((s) => /quiz IS NOT NULL/i.test(s)),
     "평일 신양식에 복습 뽑기가 돌았습니다");
-  return "5통・❓ 말미・복습 쉼";
+  return "3통・❓ 말미・복습 쉼";
 });
 
 await check("신양식 3의 배수 ── ❓를 접고 🔁 복습만（A안）", async () => {
@@ -933,11 +883,11 @@ await check("신양식 3의 배수 ── ❓를 접고 🔁 복습만（A안）
     "FROM content_templates": NEWTPL
   });
   let msgs = null;
-  const r = await deliverOne(conn, { ...WITH_SAJU, current_day: 5, days_used: 5 },
-    { send: async (_t, m) => { msgs = m; return {}; }, load: () => FAKE_LINES });
+  const r = await deliverOne(conn, { ...WITH_BIRTH, current_day: 5, days_used: 5 },
+    { send: async (_t, m) => { msgs = m; return {}; } });
   assert(/送信:6日目/.test(r), r);
 
-  assert(msgs.length === 5, `${msgs.length} 통（1·2통+운세+부적+🔁 = 5）`);
+  assert(msgs.length === 3, `${msgs.length} 통（1·2통+🔁 = 3）`);
   const last = msgs[msgs.length - 1];
   assert(/🔁 復習クイズ/.test(last.text), `말미가 🔁 이 아닙니다: ${String(last.text || "").split("\n")[0]}`);
   assert(!/❓ 今日のクイズ/.test(msgs.map((m) => m.text || "").join("\n")),
@@ -947,7 +897,7 @@ await check("신양식 3의 배수 ── ❓를 접고 🔁 복습만（A안）
   assert(last.quickReply?.items?.length >= 2, "복습 버튼이 없습니다");
   /* 🍀 는 레슨 쪽（❓ 꼬리통이 없으므로 2통 말미）. */
   assert(msgs.some((m) => /🍀 今日のひとこと/.test(m.text || "")), "🍀 가 빠졌습니다");
-  return "5통・🔁 말미・❓ 접힘";
+  return "3통・🔁 말미・❓ 접힘";
 });
 
 console.log(`\n${fails.length ? "✗" : "✓"} ${pass + fails.length} 項目中 ${pass} 件成功`);

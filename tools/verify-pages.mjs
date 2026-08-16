@@ -9,12 +9,16 @@
    正規表現で見る。HTML の完全な解析はしないが、ここで見たいのは
    「書き忘れ」と「片方だけ直した」であって構文解析ではない。
 
-   他の 6 つの関門が「計算が合っているか」を見るのに対し、こちらは
-   9 ページを横に並べて食い違いを探す。ページが増えるほど、増えた 1 枚
+   ほかの関門が「計算が合っているか」を見るのに対し、こちらは残った
+   ページを横に並べて食い違いを探す。ページが増えるほど、増えた 1 枚
    だけ何かが抜ける確率が上がる ── 実際に見つかったもの:
 
      ・index.html の <label> 7 個に for が無く、読み上げに繋がっていなかった
-       （後から作った gilbang / amulet では付いていた）
+       （後から作った下層ページでは付いていた）
+
+   2026-08-16 の事業転換で omikuji / gilbang / amulet / words の 4 枚を
+   廃止した。EXPECT から消してあるので、戻ってきたら 1 行目の
+   「リポジトリの .html が EXPECT と一致する」で赤くなる。
 
    ページを足したら EXPECT に 1 行足すこと。足し忘れると
    「知らないページがある」で落ちる ── 黙って検査対象から漏れるより良い。
@@ -34,11 +38,6 @@ const EXPECT = {
   "contact.html": { url: "/contact",  index: true,  ads: true  },
   "tokushoho.html": { url: "/tokushoho", index: true, ads: true },
   "tips.html":    { url: "/tips",     index: true,  ads: true  },
-  "omikuji.html": { url: "/omikuji",  index: true,  ads: true  },
-  "gilbang.html": { url: "/gilbang",  index: true,  ads: true  },
-  "amulet.html":  { url: "/amulet",   index: true,  ads: true  },
-  // 端末ごとの一覧なので、クローラーには常に空に見える。載せない。
-  "words.html":   { url: "/words",    index: false, ads: true  },
   // エラーページ。canonical も広告も持たせない。
   "404.html":     { url: null,        index: false, ads: false }
 };
@@ -83,7 +82,7 @@ check("リポジトリの .html が EXPECT と一致する", () => {
 
 /* ---- 2. メタ -------------------------------------------------------- */
 
-head("[メタ]  9 ページを横に並べて、1 枚だけ抜けているものを探す");
+head("[メタ]  残ったページを横に並べて、1 枚だけ抜けているものを探す");
 
 check("title・description・lang・viewport がすべてある", () => {
   const bad = [];
@@ -173,7 +172,7 @@ check("noindex が意図どおりのページにだけ付いている", () => {
       bad.push(`${p}: robots="${robots}"（${EXPECT[p].index ? "索引させたい" : "noindex のはず"}）`);
   }
   assert(!bad.length, bad.join(" / "));
-  return "words・404 のみ noindex";
+  return "404 のみ noindex";
 });
 
 check("広告と計測が意図どおりのページに入っている", () => {
@@ -343,22 +342,6 @@ check("登録情報フォームは名前だけ（性別・生年月日・出生�
     "profile 保存が四柱を書き換えています（名前だけにする）");
   assert(!/normalizeProfile/.test(handler), "profile が生年月日正規化を呼んでいます");
   return "お名前のみ";
-});
-
-check("amulet.html の ?cat= は KINDS で照合してから使う（지시서⑪）", () => {
-  /* LINE の부적 버튼이 실어 오는 유일한 파라미터。知らない値を
-     Amulet.of へ渡すと throw ── 照合に落ちたら「無かったこと」にして
-     従来の画面。パラメータ無しの既定（total）は変えない ──
-     サイトから直接来る人のほうがずっと多い。 */
-  const a = src["amulet.html"];
-  assert(/URLSearchParams\(location\.search\)\.get\('cat'\)/.test(a), "?cat の受け口がありません");
-  assert(/Amulet\.KINDS\.some\(k => k\.cat === urlCat\)/.test(a),
-    "KINDS で照合していません ── 知らない値が Amulet.of へ行くと throw します");
-  assert(/let cat  = 'total'/.test(a), "パラメータ無しの既定（total）が変わっています");
-  const guard = a.indexOf("Amulet.KINDS.some");
-  const firstRender = a.indexOf("\nrender();");
-  assert(guard > 0 && firstRender > guard, "照合より先に描いています");
-  return "照合 → 既定 total → render の順";
 });
 
 /* ---- 体験日数は配信サーバーが正（plan-trial-7days §7）---------------

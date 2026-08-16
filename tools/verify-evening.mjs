@@ -21,7 +21,8 @@ import { deliverOne, retryKey, tooEarly } from "../server/db/push-evening.mjs";
 import { retryKey as morningKey } from "../server/db/push-daily.mjs";
 import { listReviewTargets } from "../server/lib/repo/pushlogs.mjs";
 import { LineApiError } from "../server/lib/line.mjs";
-import { TRIAL_DAYS, TRIAL_UPSELL_DAY } from "../server/lib/repo/billing.mjs";
+import { TRIAL_DAYS, TRIAL_UPSELL_DAY, DELIVERY_UNLIMITED } from "../server/lib/repo/billing.mjs";
+import { trialUpsellNotice } from "../server/lib/handlers/checkout.mjs";
 
 let pass = 0;
 const fails = [];
@@ -343,11 +344,27 @@ function withSales(mode, fn) {
    体験の 7 日が終わるまで決済へ進ませない（checkout.mjs の inTrialNow）
    ので、ここは誰に対しても同じ**予告**になる。買える/買えないで文面が
    分かれていた 3 検査を、下の 2 つに置き換えた。 */
-await check("予告は 1 通・押す所を置かない ── 日数は消費しない", () =>
+/* 【2026-08-16 ── 日数制限の一時解除】
+   DELIVERY_UNLIMITED のあいだ、この予告は出さない。出すと 6 日目の
+   夕方に「明日で体験が終わります」と言った翌朝に 8 日目が届く。
+
+   検査は定数を読んで**両方の道を書いたまま**にする ── 解除中の分
+   だけ書いて元を消すと、制限を戻す日に予告の約束（1 通・ボタン無し・
+   日数不変・trial_end の記録）を誰も見張らなくなる。 */
+await check("予告の有無は DELIVERY_UNLIMITED に従う", () =>
   withSales("open", async () => {
     const conn = fakeConn(upsellReady());
     let msgs = null;
     const r = await deliverOne(conn, DAY_UPSELL, { send: async (_t, m) => { msgs = m; return {}; } });
+
+    if (DELIVERY_UNLIMITED) {
+      assert(r === SENT_ONLY, `解除中なのに予告が出ました: ${r}`);
+      assert(msgs.length === 1, `${msgs.length} 通でした（問いだけのはず）`);
+      assert(!conn.calls.some((c) => /INSERT INTO push_logs/i.test(c.sql) && c.params.includes("trial_end")),
+        "出していないのに trial_end を記録しました ── 戻した日に 1 回きりが消費済みになります");
+      return "解除中: 予告 0 通・記録も残さない";
+    }
+
     assert(r === SENT_UPSELL, r);
     assert(msgs.length === 2, `${msgs.length} 通でした（問い 1 + 予告 1 のはず）`);
     const t = msgs[1].text;
@@ -361,19 +378,23 @@ await check("予告は 1 通・押す所を置かない ── 日数は消費�
       "予告で日数が動きました ── ボーナスの不変式が崩れています");
     assert(conn.calls.some((c) => /INSERT INTO push_logs/i.test(c.sql) && c.params.includes("trial_end")),
       "trial_end の記録がありません（通算 1 回の判定が壊れます）");
-    return "予告 1 通 / days_used 不変";
+    return "制限中: 予告 1 通 / days_used 不変";
   }));
 
 await check("販売の開閉・原稿の量で文面が変わらない（判定が 1 本であること）", async () => {
   /* 以前は salesAllowedFor と sellablePackages で 2 分岐していた。
      体験中は誰も買えないので、その 2 つを見る理由が消えた ── 分岐が
-     戻ってくると、通らない側が腐ったまま残る。 */
+     戻ってくると、通らない側が腐ったまま残る。
+
+     2026-08-16 から、文面そのもの（trialUpsellNotice）を直に呼んで
+     比べる。配信経路ごしに取っていたが、解除中は予告が出ないので
+     経路からは取れない ── 見たいのは「文面が env で分かれないこと」
+     なので、そもそも経路を挟む必要が無かった。 */
   const textOf = async (mode, tplN) => withSales(mode, async () => {
     const conn = fakeConn(upsellReady({
       "SELECT COUNT\\(\\*\\) AS n FROM content_templates": [{ n: tplN }] }));
-    let msgs = null;
-    await deliverOne(conn, DAY_UPSELL, { send: async (_t, m) => { msgs = m; return {}; } });
-    return msgs[1].text;
+    await deliverOne(conn, DAY_UPSELL, { send: async () => ({}) });
+    return trialUpsellNotice("beginner", { currentDay: TRIAL_UPSELL_DAY }).text;
   });
   const [open101, closed101, open3] =
     [await textOf("open", 50), await textOf("closed", 50), await textOf("open", 3)];
@@ -408,6 +429,13 @@ await check("残り 0 の勧誘（upsell）とは数を分ける ── 互い�
         (_sql, params) => [{ n: params.includes("trial_end") ? 0 : 5 }] }));
     let msgs = null;
     const r = await deliverOne(conn, DAY_UPSELL, { send: async (_t, m) => { msgs = m; return {}; } });
+    if (DELIVERY_UNLIMITED) {
+      /* 解除中は予告そのものが出ないので、干渉のしようが無い。
+         種別を分けてある（upsell / trial_end）ことは検査の設定側で
+         保っている ── 戻した日にこの下の行がまた効く。 */
+      assert(r === SENT_ONLY, r);
+      return "解除中: 予告が出ないので干渉なし";
+    }
     assert(r === SENT_UPSELL, r);
     assert(msgs.length === 2, `${msgs.length} 通でした`);
     return "upsell=5 でも trial_end=0 なら出る";

@@ -15,7 +15,6 @@ canonical / og:url / og:image / twitter:image / sitemap.xml / robots.txt、
 import re, sys, os, pathlib
 
 TARGETS = ["index.html", "privacy.html", "contact.html", "tokushoho.html", "tips.html",
-           "words.html", "omikuji.html", "gilbang.html", "amulet.html",
            "404.html", "sitemap.xml", "robots.txt"]
 
 def main():
